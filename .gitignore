@@ -1,0 +1,11 @@
+# Planning notes contain personal email addresses; a redacted copy goes in docs/
+PLAN.md
+
+# Local tooling / secrets
+.claude/
+node_modules/
+.clasprc.json
+.clasp.json
+.env
+*.log
+.DS_Store
