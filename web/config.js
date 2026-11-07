@@ -2,7 +2,7 @@
 // GitHub Actions deploy workflow with the real commit and build time.
 window.FLEET_CONFIG = {
   // Apps Script web app URL (public; every call is still authorised server-side).
-  apiUrl: '',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbxbuQjdH0mp_gvXY8-u1-Xtu1dpKnLRHqbB8O0SPcX6KD0eko6XD7TiBIx0Pe8-mGV0tQ/exec',
   // Must match API_VERSION in backend/Code.js.
   apiVersion: 1,
   commit: '__COMMIT__',
