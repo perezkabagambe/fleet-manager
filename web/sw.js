@@ -20,7 +20,11 @@ const SHELL = [
 
 self.addEventListener('install', (event) => {
   // No skipWaiting here: the page asks for it when the user taps "Update now".
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
+  // cache: 'reload' bypasses the browser's HTTP cache, so a new release never
+  // fills its cache with stale copies of the previous release's files.
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll(SHELL.map((url) => new Request(url, { cache: 'reload' }))))
+  );
 });
 
 self.addEventListener('activate', (event) => {
