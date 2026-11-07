@@ -35,14 +35,14 @@
       });
 
       var google = el('div', { class: 'google-box' });
-      card.replaceChildren(
+      card.replaceChildren.apply(card, [
         el('h1', { text: 'Sign in' }),
         el('p', { class: 'muted', text: 'No password needed. We email you a one-time link.' }),
         msg, form,
         cfg.googleClientId ? el('div', { class: 'or', text: 'or' }) : null,
-        google,
-        el('p', { class: 'center' }, [el('span', { class: 'muted', text: 'New here? ' }), el('a', { href: '#/request', text: 'Request an account' })])
-      );
+        cfg.googleClientId ? google : null,
+        el('p', { class: 'center' }, [el('span', { class: 'muted', text: 'New here? ' }), el('a', { href: '#/request', text: 'Request an account' })]),
+      ].filter(Boolean));
       if (cfg.googleClientId) renderGoogle(google, msg, next);
     }
 
