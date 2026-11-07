@@ -207,3 +207,9 @@ a { color: var(--accent); }
 .badge.revoked, .badge.rejected { color: var(--bad); border-color: var(--bad); }
 .badge.admin { color: var(--accent); border-color: var(--accent); }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+/* ---------- plain text pages ---------- */
+.prose h2 { font-size: 1.1rem; margin: 20px 0 6px; }
+.prose ul { padding-left: 20px; }
+.prose li { margin: 6px 0; }
+.footer a { text-decoration: underline; }
