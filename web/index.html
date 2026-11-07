@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Fleet Manager</title>
+  <meta name="description" content="Track your cars: issues, repairs, maintenance, parts, costs and reminders.">
+  <meta name="theme-color" content="#0f3d5e">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; base-uri 'self'; form-action 'self'">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Fleet">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/">Fleet Manager</a>
+    <nav class="topnav" aria-label="Main">
+      <a href="#/">Home</a>
+      <a href="#/diag">Diagnostics</a>
+    </nav>
+  </header>
+
+  <div id="update-banner" class="banner" hidden>
+    <span>A new version is available.</span>
+    <button type="button" id="update-btn">Update now</button>
+  </div>
+
+  <main id="app" tabindex="-1" aria-live="polite"></main>
+
+  <footer class="footer">
+    <span id="rev-front">rev …</span>
+    <span id="rev-back" class="muted"></span>
+    <span id="rev-warn" class="warn" hidden></span>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

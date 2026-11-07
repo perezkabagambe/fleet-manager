@@ -9,3 +9,7 @@ node_modules/
 .env
 *.log
 .DS_Store
+
+# Private backend config and deployment id
+backend/Local.js
+.deployment-id
