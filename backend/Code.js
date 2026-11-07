@@ -4,19 +4,39 @@
  * Entry points: doGet / doPost. The browser app sends JSON as text/plain POST
  * (a "simple" request, so no CORS pre-flight is needed).
  *
- * Request:  { "action": "ping", ...params, "token": "<session token>" }
+ * Request:  { "action": "...", ...params, "token": "<session token>" }
  * Response: { "ok": true, "data": ... } or { "ok": false, "error": "<code>" }
  *
- * Every action except the public ones must verify the session token on the
+ * Every action except the public ones verifies the session token on the
  * server. The front end is never trusted.
  */
 
 // Bump when the request/response contract changes in a way the front end must know about.
 const API_VERSION = 1;
 
-function doGet(e) {
-  const action = (e && e.parameter && e.parameter.action) || 'ping';
-  return handle_({ action: action });
+// auth: 'none' (public), 'user' (any approved user) or 'admin'.
+// lock: true serialises the action with LockService so sheet writes never interleave.
+// Built on demand: top-level code in one Apps Script file cannot rely on functions
+// declared in other files having been loaded yet.
+function actions_() {
+  return {
+    ping: { auth: 'none', fn: ping_ },
+    requestAccount: { auth: 'none', lock: true, fn: requestAccount_ },
+    requestLogin: { auth: 'none', lock: true, fn: requestLogin_ },
+    verifyLink: { auth: 'none', lock: true, fn: verifyLink_ },
+    verifyCode: { auth: 'none', lock: true, fn: verifyCode_ },
+    googleLogin: { auth: 'none', lock: true, fn: googleLogin_ },
+    me: { auth: 'user', fn: me_ },
+    logout: { auth: 'user', lock: true, fn: logout_ },
+    listUsers: { auth: 'admin', fn: listUsers_ },
+    setUserStatus: { auth: 'admin', lock: true, fn: setUserStatus_ },
+    setUserRole: { auth: 'admin', lock: true, fn: setUserRole_ },
+  };
+}
+
+/** GET is limited to the harmless ping, so nothing sensitive ever appears in a URL. */
+function doGet() {
+  return handle_({ action: 'ping' });
 }
 
 function doPost(e) {
@@ -30,16 +50,39 @@ function doPost(e) {
 }
 
 function handle_(req) {
+  let lock = null;
   try {
-    switch (req && req.action) {
-      case 'ping':
-        return json_({ ok: true, data: ping_() });
-      default:
-        return json_({ ok: false, error: 'unknown_action' });
+    const actions = actions_();
+    const def = req && typeof req.action === 'string' && Object.prototype.hasOwnProperty.call(actions, req.action)
+      ? actions[req.action] : null;
+    if (!def) return json_({ ok: false, error: 'unknown_action' });
+
+    const ctx = {};
+    if (def.auth !== 'none') {
+      const a = authenticate_(req.token);
+      if (!a) return json_({ ok: false, error: 'unauthorized' });
+      if (def.auth === 'admin' && a.user.role !== 'admin') return json_({ ok: false, error: 'forbidden' });
+      ctx.user = a.user;
+      ctx.sessionHash = a.sessionHash;
+      ctx.expiresAt = a.expiresAt;
     }
+
+    if (def.lock) {
+      lock = LockService.getScriptLock();
+      try {
+        lock.waitLock(25000);
+      } catch (e) {
+        lock = null;
+        return json_({ ok: false, error: 'busy' });
+      }
+    }
+    return json_({ ok: true, data: def.fn(req, ctx) });
   } catch (err) {
+    if (err && err.apiError) return json_({ ok: false, error: err.apiError });
     console.error(err && err.stack ? err.stack : err);
     return json_({ ok: false, error: 'server_error' });
+  } finally {
+    if (lock) lock.releaseLock();
   }
 }
 

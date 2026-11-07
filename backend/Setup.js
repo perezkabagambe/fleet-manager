@@ -88,6 +88,10 @@ function setup() {
   const share = props.getProperty('BACKUP_SHARE_EMAIL');
   if (share) backups.addViewer(share);
 
+  // 6. Secret salt for hashing tokens, and the trigger that writes the text event log
+  salt_();
+  ensureTrigger_('flushTextLog', 10);
+
   Logger.log('Setup complete.\nDB: ' + ss.getUrl() + '\nRoot folder: ' + root.getUrl());
 }
 
@@ -114,6 +118,14 @@ function ensureTab_(ss, name, def) {
   }
   sheet.setFrozenRows(1);
   sheet.getRange(1, 1, 1, Math.max(existing.length + missing.length, 1)).setFontWeight('bold');
+  // Keep every cell as plain text so dates, IDs and long numbers are never auto-converted.
+  sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).setNumberFormat('@');
+}
+
+/** Create a repeating time trigger for `fn` if one doesn't exist yet. */
+function ensureTrigger_(fn, everyMinutes) {
+  const exists = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === fn; });
+  if (!exists) ScriptApp.newTrigger(fn).timeBased().everyMinutes(everyMinutes).create();
 }
 
 function seedSettings_(ss) {

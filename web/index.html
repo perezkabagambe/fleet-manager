@@ -6,7 +6,7 @@
   <title>Fleet Manager</title>
   <meta name="description" content="Track your cars: issues, repairs, maintenance, parts, costs and reminders.">
   <meta name="theme-color" content="#0f3d5e">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' https://accounts.google.com/gsi/style; img-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; manifest-src 'self'; base-uri 'self'; form-action 'self'">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -19,10 +19,7 @@
 <body>
   <header class="topbar">
     <a class="brand" href="#/">Fleet Manager</a>
-    <nav class="topnav" aria-label="Main">
-      <a href="#/">Home</a>
-      <a href="#/diag">Diagnostics</a>
-    </nav>
+    <nav class="topnav" id="topnav" aria-label="Main menu"></nav>
   </header>
 
   <div id="update-banner" class="banner" hidden>
@@ -39,7 +36,11 @@
   </footer>
 
   <script src="config.js"></script>
+  <script src="ui.js"></script>
+  <script src="auth.js"></script>
   <script src="api.js"></script>
+  <script src="views-auth.js"></script>
+  <script src="views-admin.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

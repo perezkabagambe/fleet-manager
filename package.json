@@ -4,7 +4,8 @@
   "private": true,
   "description": "Fleet Manager: static web app + Google Apps Script backend",
   "scripts": {
-    "clasp": "clasp"
+    "clasp": "clasp",
+    "test": "node --test tests/"
   },
   "devDependencies": {
     "@google/clasp": "^3.4.1"
