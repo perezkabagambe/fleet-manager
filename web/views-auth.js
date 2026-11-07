@@ -62,8 +62,8 @@
 
       card.replaceChildren(
         el('h1', { text: 'Check your email' }),
-        el('p', { text: 'If ' + emailAddr + ' has an approved account, we have sent a sign-in link and a 6-digit code. They work for 15 minutes and only once.' }),
-        el('p', { class: 'muted', text: 'Tap the link in the email, or type the code here. If nothing arrives within a minute, check your junk or spam folder and mark the email as "not junk" so future ones arrive normally.' }),
+        el('p', { text: 'If ' + emailAddr + ' has an account, we have sent a link and a code. They expire in 15 minutes.' }),
+        el('p', { class: 'muted', text: 'Nothing yet? Check your junk folder and mark the email as "not junk".' }),
         msg, form,
         el('p', { class: 'center' }, [el('button', { type: 'button', class: 'linklike', text: 'Use a different email', onclick: function () { stepEmail(emailAddr); } })])
       );
