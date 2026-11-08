@@ -139,5 +139,31 @@
     return box;
   }
 
-  window.Photos = { prepare: prepare, upload: upload, get: get, element: element };
+  /**
+   * Two buttons: "Take photo" (opens the camera straight away on a phone) and "Choose photo"
+   * (opens the gallery or files). Calls onFile(file) with whatever was picked.
+   */
+  function picker(onFile) {
+    function button(label, camera) {
+      var input = el('input', Object.assign({ type: 'file', accept: 'image/*', class: 'file-input' }, camera ? { capture: 'environment' } : {}));
+      input.addEventListener('change', function () {
+        var file = input.files && input.files[0];
+        input.value = ''; // so picking the same photo again still fires
+        if (file) onFile(file);
+      });
+      return el('label', { class: 'btn small secondary file-btn' }, [el('span', { text: label }), input]);
+    }
+    var take = button('Take photo', true);
+    var choose = button('Choose photo', false);
+    return {
+      take: take,
+      choose: choose,
+      setBusy: function (busy) {
+        take.classList.toggle('disabled', busy);
+        choose.classList.toggle('disabled', busy);
+      },
+    };
+  }
+
+  window.Photos = { prepare: prepare, upload: upload, get: get, element: element, picker: picker };
 })();

@@ -50,7 +50,12 @@
         el('h1', { text: self ? 'My cars' : 'Cars for ' + r.data.user.name }),
         el('p', { class: 'muted', text: 'Tick the cars ' + (self ? 'you own or look after' : 'they own or look after') + '. Leave a car unticked if it is not ' + (self ? 'yours' : 'theirs') + '.' }),
         rows.length ? el('div', { class: 'stack' }, rows.map(function (x) { return x.node; })) : el('p', { class: 'muted', text: 'There are no cars in the fleet yet.' }),
-        rows.length ? saveBtn : null
+        rows.length ? saveBtn : null,
+        // Not in the list yet? Add it here. It will be ticked as yours automatically.
+        self ? el('div', { class: 'add-car' }, [
+          el('p', { class: 'muted', text: 'Is your car not listed?' }),
+          el('a', { class: 'btn secondary', href: '#/car/new?mine=1', text: 'Add a new car' }),
+        ]) : null
       );
     }).catch(function (e) {
       body.replaceChildren();

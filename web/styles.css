@@ -310,3 +310,9 @@ input[type="file"] { width: 100%; font: inherit; font-size: 16px; padding: 10px 
 .mine { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 
 .catalogue { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+
+.add-car { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); text-align: center; }
+.add-car p { margin: 0 0 8px; }
+
+.field .field-label { font-weight: 600; margin-bottom: 6px; }
+.field .btn-row { margin-top: 0; }

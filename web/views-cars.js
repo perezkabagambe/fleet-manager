@@ -133,9 +133,11 @@
       var skip = el('button', { type: 'button', class: 'btn small secondary', text: 'Not now' });
       var box = el('div', { class: 'prompt' }, [
         el('strong', { text: 'Do you own or look after any of these cars?' }),
-        el('p', { class: 'muted small-text', text: 'Tell us which ones you own or are the custodian of.' }),
+        el('p', { class: 'muted small-text', text: 'Tell us which ones you own or are the custodian of, or add a car that is not here yet.' }),
         el('div', { class: 'btn-row' }, [
-          el('a', { class: 'btn small', href: '#/profile/cars', text: 'Choose my cars' }), skip,
+          el('a', { class: 'btn small', href: '#/profile/cars', text: 'Choose my cars' }),
+          el('a', { class: 'btn small secondary', href: '#/car/new?mine=1', text: 'Add a new car' }),
+          skip,
         ]),
       ]);
       skip.addEventListener('click', function () { Views.skipCarPrompt(me.id); box.remove(); });
@@ -150,7 +152,7 @@
         ? data.cars.map(function (c) { return card(c, (data.mine || {})[c.id]); })
         : [el('div', { class: 'empty' }, [
           el('p', { text: 'No cars yet.' }),
-          el('a', { class: 'btn', href: '#/car/new', text: 'Add your first car' }),
+          el('a', { class: 'btn', href: '#/car/new?mine=1', text: 'Add your first car' }),
         ])]);
       deletedBox.replaceChildren();
       if (data.deleted && data.deleted.length) {
@@ -223,17 +225,11 @@
       var flash = FleetApp.takeFlash();
       if (flash) msg.append(UI.notice(flash.kind, flash.text));
 
-      // photo: add / change / remove
+      // photo: take with the camera, choose from the gallery, or remove
       var photoStatus = el('div', { class: 'muted small-text', role: 'status' });
-      var fileInput = el('input', { type: 'file', accept: 'image/*', class: 'file-input' });
-      var pickLabel = el('label', { class: 'btn small secondary file-btn' }, [
-        el('span', { text: car.photoThumbId ? 'Change photo' : 'Add photo' }), fileInput,
-      ]);
-      fileInput.addEventListener('change', function () {
-        var file = fileInput.files && fileInput.files[0];
-        if (!file) return;
+      var photoPicker = Photos.picker(function (file) {
         msg.replaceChildren();
-        pickLabel.classList.add('disabled');
+        photoPicker.setBusy(true);
         photoStatus.textContent = 'Preparing photo…';
         Photos.prepare(file).then(function (p) {
           photoStatus.textContent = 'Uploading…';
@@ -243,8 +239,7 @@
           Views.car(ctx, root);
         }).catch(function (e) {
           photoStatus.textContent = '';
-          pickLabel.classList.remove('disabled');
-          fileInput.value = '';
+          photoPicker.setBusy(false);
           msg.replaceChildren(UI.notice('error', UI.errorText(e)));
         });
       });
@@ -333,7 +328,7 @@
           ]),
           msg,
           photo(car, 'big', 'full'),
-          el('div', { class: 'btn-row' }, [pickLabel, removePhotoBtn]),
+          el('div', { class: 'btn-row' }, [photoPicker.take, photoPicker.choose, removePhotoBtn]),
           photoStatus,
           el('div', { class: 'btn-row' }, [
             el('a', { class: 'btn small', href: '#/car/' + car.id + '/edit', text: 'Edit' }),
@@ -452,11 +447,35 @@
       // For an owner/custodian who is not a user of this app. Users are linked on the car page.
       fields.push(UI.field('Other owner/custodian', text('ownerOther', v.ownerOther, { maxlength: '80' }), 'Optional. If the owner/custodian is not a user of this app, e.g. a company or a relative.'));
 
-      // New cars can take a photo straight away; existing cars manage it on the car page.
-      var photoInput = null;
+      // New cars: say straight away if it is yours (ticked when you arrive from "Add a new car" on the first-time prompt).
+      var iOwn = null;
       if (!car) {
-        photoInput = el('input', { type: 'file', accept: 'image/*', name: 'photo' });
-        fields.push(UI.field('Photo', photoInput, 'Optional. Take a photo or choose one from your gallery. You can also add it later.'));
+        iOwn = el('input', { type: 'checkbox' });
+        iOwn.checked = ctx.query.mine === '1';
+        fields.push(el('label', { class: 'check' }, [iOwn, el('span', { text: 'I own or look after this car' })]));
+      }
+
+      // New cars can take a photo straight away; existing cars manage it on the car page.
+      var chosenPhoto = null;
+      if (!car) {
+        var photoName = el('div', { class: 'muted small-text', role: 'status' });
+        var clearPhoto = el('button', { type: 'button', class: 'linklike', text: 'Remove photo', hidden: true });
+        var formPicker = Photos.picker(function (file) {
+          chosenPhoto = file;
+          photoName.textContent = 'Photo ready: ' + file.name;
+          clearPhoto.hidden = false;
+        });
+        clearPhoto.addEventListener('click', function () {
+          chosenPhoto = null;
+          photoName.textContent = '';
+          clearPhoto.hidden = true;
+        });
+        fields.push(el('div', { class: 'field' }, [
+          el('div', { class: 'field-label', text: 'Photo' }),
+          el('div', { class: 'btn-row' }, [formPicker.take, formPicker.choose]),
+          photoName, clearPhoto,
+          el('div', { class: 'hint', text: 'Optional. Take a photo now or choose one from your gallery. You can also add it later.' }),
+        ]));
       }
 
       if (!car) {
@@ -490,12 +509,19 @@
           }
           carsCache = null;
           var goToCar = function () { FleetApp.go('/car/' + d.car.id); };
-          var photoFile = photoInput && photoInput.files && photoInput.files[0];
-          if (!photoFile) { goToCar(); return null; }
-          // The car is already saved; if the photo fails, say so on the next screen rather than losing the car.
-          return Photos.upload(d.car.id, photoFile).then(goToCar, function (e) {
-            FleetApp.setFlash('error', 'The car was saved, but its photo could not be added: ' + UI.errorText(e) + ' You can add it from this page.');
-            goToCar();
+          var photoFile = chosenPhoto;
+          // The car is already saved. If a follow-up step fails, say so on the next screen rather than losing the car.
+          var markMine = iOwn && iOwn.checked
+            ? FleetApi.call('setMyCarRole', { carId: d.car.id, owner: true }).catch(function () {
+              FleetApp.setFlash('error', 'The car was saved, but it could not be marked as yours. You can tick "I am an owner/custodian" on this page.');
+            })
+            : Promise.resolve();
+          return markMine.then(function () {
+            if (!photoFile) { goToCar(); return null; }
+            return Photos.upload(d.car.id, photoFile).then(goToCar, function (e) {
+              FleetApp.setFlash('error', 'The car was saved, but its photo could not be added: ' + UI.errorText(e) + ' You can add it from this page.');
+              goToCar();
+            });
           });
         }).catch(function (e) {
           if (e.code === 'odometer_lower' && FleetAuth.isAdmin() &&
