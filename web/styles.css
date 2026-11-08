@@ -429,3 +429,16 @@ details.collapsible > summary .collapse-hint { margin-left: auto; }
 details.collapsible[open] > summary { margin-bottom: 8px; }
 .delete-zone { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--border); }
 details.collapsible[open] > summary .collapse-hint { display: none; }
+
+/* Logo in the top right corner of the header.
+   On a phone it sits beside the name with the menu on its own line below; on a wide screen everything is on one line. */
+.topright { display: contents; }
+.logo-link { order: 2; margin-left: auto; display: block; flex: none; line-height: 0; border-radius: 10px; }
+.logo { display: block; width: 44px; height: 44px; border-radius: 10px; background: #fff; }
+.logo-link:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.brand { order: 1; }
+.topnav { order: 3; flex: 1 0 100%; justify-content: flex-end; }
+@media (min-width: 640px) {
+  .topnav { order: 2; flex: 0 1 auto; margin-left: auto; }
+  .logo-link { order: 3; margin-left: 0; }
+}
