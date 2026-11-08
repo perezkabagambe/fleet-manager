@@ -345,6 +345,7 @@ test('older cars are given a QR secret by the migration', () => {
   const { env, sam, car, admin } = setup();
   const col = env.sheets.Cars._rows[0].indexOf('guest_secret');
   env.sheets.Cars._rows.forEach((r, i) => { if (i > 0) r[col] = ''; });
+  env.invalidate();
   env.props.SCHEMA_VERSION = '9';
   const got = env.call('getCar', { token: sam, id: car.id }).data.car;
   assert.ok(got.guestSecret.length >= 32);
@@ -355,6 +356,7 @@ test('the migration switches guest access on for existing cars once, and later s
   const { env, sam, admin, car, other } = setup();
   const col = env.sheets.Cars._rows[0].indexOf('guest_enabled');
   env.sheets.Cars._rows.forEach((r, i) => { if (i > 0) r[col] = 'FALSE'; }); // how cars looked before: off
+  env.invalidate();
   env.props.SCHEMA_VERSION = '10';
   assert.equal(env.call('getCar', { token: sam, id: car.id }).data.car.guestEnabled, true);
   assert.equal(env.call('getCar', { token: sam, id: other.id }).data.car.guestEnabled, true);
@@ -373,6 +375,7 @@ test('a guest sees the maintenance history in the same order as signed-in users'
   env.advance(1000);
   add('Same day, third', '2025-03-05');
   const g = join('Bob').data.guestToken;
+  env.advance(1000);
   as('guestSaveEntry', g, { type: 'Maintenance', fields: { title: 'Guest job, same day', date: '2025-03-05' } });
   const staff = env.call('listEntries', { token: sam, carId: car.id }).data.entries.map((e) => e.title);
   const guest = as('guestListEntries', g).data.entries.map((e) => e.title);

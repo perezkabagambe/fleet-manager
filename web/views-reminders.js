@@ -19,7 +19,8 @@
   }
 
   // ---------- Reminders card (on the car page) ----------
-  function card(car) {
+  // `preloaded` (the car page's reminders) saves a request; after a change the card fetches its own.
+  function card(car, preloaded) {
     var list = el('div', { class: 'history' }, [fmt.loading()]);
     var msg = el('div');
     var body = el('div');
@@ -35,12 +36,13 @@
       ]);
     }
 
+    function draw(tasks) {
+      list.replaceChildren.apply(list, tasks.length ? tasks.map(row)
+        : [el('p', { class: 'muted', text: 'No reminders yet. Add the standard set to start, or add your own.' })]);
+    }
     function load() {
-      return FleetApi.call('listTasks', { carId: car.id }).then(function (r) {
-        var tasks = r.data.tasks;
-        list.replaceChildren.apply(list, tasks.length ? tasks.map(row)
-          : [el('p', { class: 'muted', text: 'No reminders yet. Add the standard set to start, or add your own.' })]);
-      }).catch(function (e) { list.replaceChildren(UI.notice('error', UI.errorText(e))); });
+      return FleetApi.call('listTasks', { carId: car.id }).then(function (r) { draw(r.data.tasks); })
+        .catch(function (e) { list.replaceChildren(UI.notice('error', UI.errorText(e))); });
     }
 
     var stdBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add standard reminders' });
@@ -65,7 +67,7 @@
       el('div', { class: 'btn-row' }, [el('a', { class: 'btn small', href: '#/car/' + car.id + '/reminder/new', text: 'Add reminder' }), stdBtn, mailBtn]),
       msg, list
     );
-    load();
+    if (preloaded) draw(preloaded); else load();
     return el('section', { class: 'card' }, [
       el('h2', { text: 'Reminders' }),
       el('p', { class: 'muted small-text', text: 'Emailed to the car\'s owners/custodians every Monday while something is due.' }),

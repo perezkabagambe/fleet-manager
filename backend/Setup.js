@@ -68,6 +68,7 @@ function migrateIfNeeded_() {
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 9) mergeRepairIntoMaintenance_();
     giveCarsGuestSecrets_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 11) switchOnGuestAccessEverywhere_();
+    Db.invalidateAll(); // the sheets were changed directly: nothing remembered about them can be trusted
     props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   } finally {
     lock.releaseLock();
@@ -125,6 +126,7 @@ function setup() {
   salt_();
   ensureTrigger_('flushTextLog', 10);
   ensureReminderTrigger_();
+  Db.invalidateAll();
 
   Logger.log('Setup complete.\nDB: ' + ss.getUrl() + '\nRoot folder: ' + root.getUrl());
 }

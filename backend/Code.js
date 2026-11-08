@@ -34,6 +34,7 @@ function actions_() {
     updateMyName: { auth: 'user', lock: true, fn: updateMyName_ },
     listCars: { auth: 'user', fn: listCars_ },
     getCar: { auth: 'user', fn: getCar_ },
+    getCarPage: { auth: 'user', fn: getCarPage_ },
     saveCar: { auth: 'user', lock: true, fn: saveCar_ },
     updateOdometer: { auth: 'user', lock: true, fn: updateOdometer_ },
     deleteCar: { auth: 'admin', lock: true, fn: deleteCar_ },
@@ -97,6 +98,8 @@ function doPost(e) {
 
 function handle_(req) {
   let lock = null;
+  const started = Date.now();
+  Db.resetRequest();
   try {
     const actions = actions_();
     const def = req && typeof req.action === 'string' && Object.prototype.hasOwnProperty.call(actions, req.action)
@@ -129,7 +132,12 @@ function handle_(req) {
         return json_({ ok: false, error: 'busy' });
       }
     }
-    return json_({ ok: true, data: def.fn(req, ctx) });
+    const data = def.fn(req, ctx);
+    const out = { ok: true, data: data };
+    // Server time is shown in Diagnostics. It is left out of the sign-in style (public) actions on purpose: those
+    // are made to take the same time and give the same reply whether or not an email is known.
+    if (def.auth !== 'none' || req.action === 'ping') out.ms = Date.now() - started;
+    return json_(out);
   } catch (err) {
     if (err && err.apiError) return json_({ ok: false, error: err.apiError });
     console.error(err && err.stack ? err.stack : err);

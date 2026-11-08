@@ -242,6 +242,19 @@ function getCar_(p, ctx) {
 }
 
 /**
+ * Everything the car page shows, in one request (instead of one request each for the car, its history, its
+ * reminders and its costs). Each part is exactly what its own action returns.
+ */
+function getCarPage_(p, ctx) {
+  const page = getCar_(p, ctx);
+  const q = { carId: page.car.id };
+  page.entries = listEntries_(q, ctx).entries;
+  page.tasks = listTasks_(q, ctx).tasks;
+  page.costs = getCarCosts_(q, ctx);
+  return page;
+}
+
+/**
  * Create (no id) or update (id + version) a car. If the registration or VIN already
  * exists, nothing is saved and the warnings are returned; resend with force: true to save anyway.
  */

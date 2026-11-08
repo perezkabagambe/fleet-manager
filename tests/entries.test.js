@@ -180,6 +180,7 @@ test('the old "Repair" type is now Maintenance: a stale app is accepted, and sto
   const old = add('Maintenance', repair({ title: 'Old brake job', linkedIssueId: i.id }), { parts: [{ name: 'Pads', quantity: '1', unitCost: '40' }] }).data.entry;
   const col = env.sheets.Entries._rows[0].indexOf('type');
   env.sheets.Entries._rows.forEach((r, n) => { if (n > 0 && r[0] === old.id) r[col] = 'Repair'; });
+  env.invalidate();
   env.props.SCHEMA_VERSION = '8';
   assert.equal(list().filter((e) => e.type === 'Repair').length, 0, 'migration ran on the first request');
   const back = get(old.id).data;

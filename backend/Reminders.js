@@ -106,6 +106,7 @@ function capitalise_(s) {
 
 /** The weekly time-based trigger target. */
 function sendWeeklyReminders() {
+  Db.resetRequest();
   const digests = collectDigests_('');
   const ids = Object.keys(digests);
   let sent = 0;

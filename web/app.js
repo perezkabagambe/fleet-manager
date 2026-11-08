@@ -194,12 +194,25 @@
       row('Signed in', FleetAuth.getUser() ? FleetAuth.getUser().email : 'no');
     }
 
+    // The car page is the busiest screen: time it, and say how much of the wait was the server itself.
+    function carTest() {
+      if (!FleetAuth.getUser()) return null;
+      return FleetApi.call('listCars').then(function (r) {
+        var first = r.data.cars[0];
+        if (!first) return null;
+        return FleetApi.call('getCarPage', { id: first.id }).then(function (res) {
+          row('Car page (one request)', res.ms + ' ms in all, server ' + (res.serverMs === null ? 'unknown' : res.serverMs + ' ms'));
+        });
+      }).catch(function () { row('Car page', 'could not be tested', 'bad'); });
+    }
+
     function run() {
       renderStatic();
       out.replaceChildren();
       runBtn.disabled = true;
       runBtn.textContent = 'Testing…';
       var times = [];
+      var serverTimes = [];
       var chain = Promise.resolve();
       var info = null;
       var failure = null;
@@ -209,6 +222,7 @@
           if (failure) return;
           return FleetApi.call('ping').then(function (res) {
             times.push(res.ms);
+            serverTimes.push(res.serverMs);
             info = res.data;
           }).catch(function (e) { failure = e; });
         });
@@ -227,9 +241,13 @@
           row('First call (cold)', times[0] + ' ms');
           row('Next calls', times.slice(1).join(', ') + ' ms');
           row('Average', Math.round(sum / times.length) + ' ms');
+          var onServer = serverTimes.filter(function (t) { return typeof t === 'number'; });
+          if (onServer.length) row('Of which on the server', Math.round(onServer.reduce(function (x, y) { return x + y; }, 0) / onServer.length) + ' ms');
           row('Server time', info.serverTime);
           row('Result', 'Connected', 'ok');
         }
+        return failure ? null : carTest();
+      }).then(function () {
         runBtn.disabled = false;
         runBtn.textContent = 'Run connection test again';
       });

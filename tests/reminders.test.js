@@ -497,6 +497,7 @@ test('a due date that Sheets has turned into a Date still reads as yyyy-mm-dd (n
   const col = sheet._rows[0].indexOf('due_date');
   const dueIso = day(200);
   sheet._rows[1][col] = vm.runInContext('new Date("' + dueIso + 'T00:00:00Z")', env.ctx); // (built inside the backend's own realm) // what Sheets hands back for an auto-converted date cell
+  env.invalidate(); // the sheet was edited by hand, outside the app
   const got = tasks().filter((x) => x.id === t.id)[0];
   assert.equal(got.dueDate, dueIso);
   assert.ok(!/NaN/.test(got.text), got.text);

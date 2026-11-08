@@ -26,6 +26,7 @@
   function clear() {
     memory = null;
     user = null;
+    if (window.FleetApi && window.FleetApi.clearSaved) window.FleetApi.clearSaved(); // saved screens belong to the person who left
     try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
   }
 

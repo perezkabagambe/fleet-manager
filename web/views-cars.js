@@ -189,29 +189,35 @@
       }
     }
 
-    if (carsCache) render(carsCache); else grid.append(loading());
-    FleetApi.call('listCars').then(function (r) {
-      carsCache = r.data;
-      render(r.data);
+    grid.append(loading());
+    // the copy saved last time appears at once; the fresh list replaces it if anything changed
+    FleetApi.seen('listCars', {}, function (data) {
+      carsCache = data;
+      render(data);
     }).catch(function (e) {
-      if (e.code !== 'unauthorized') msg.replaceChildren(UI.notice('error', UI.errorText(e)));
-      if (!carsCache) grid.replaceChildren();
+      if (e.code === 'unauthorized') return;
+      msg.replaceChildren(UI.notice('error', e.hadSaved ? 'Could not refresh the list, so this is the copy saved on this phone. ' + UI.errorText(e) : UI.errorText(e)));
+      if (!e.hadSaved) grid.replaceChildren();
     });
   };
 
   // ---------- car page ----------
   Views.car = function (ctx, root) {
     var id = ctx.params.id;
+    var flash = FleetApp.takeFlash(); // taken once: the page may be drawn twice (saved copy, then fresh)
     root.replaceChildren(el('section', { class: 'card' }, [loading()]));
 
-    FleetApi.call('getCar', { id: id }).then(function (r) {
-      render(r.data.car, r.data.fluids, r.data.people || { owners: [] });
+    // One request brings the car, its history, reminders and costs. The copy saved last time is shown at once,
+    // and the page is redrawn only if the fresh answer is different.
+    FleetApi.seen('getCarPage', { id: id }, function (page) {
+      render(page.car, page.fluids, page.people || { owners: [] }, page);
     }).catch(function (e) {
       if (e.code === 'not_found') notFound(root);
+      else if (e.hadSaved && e.code !== 'unauthorized') root.prepend(UI.notice('error', 'Could not refresh, so this is the copy saved on this phone. ' + UI.errorText(e)));
       else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e)), backLink('#/', 'Fleet')]));
     });
 
-    function render(car, fluids, people) {
+    function render(car, fluids, people, page) {
       var msg = el('div');
 
       // odometer
@@ -240,7 +246,6 @@
         });
       });
 
-      var flash = FleetApp.takeFlash();
       if (flash) msg.append(UI.notice(flash.kind, flash.text));
 
       // delete (admin)
@@ -306,8 +311,8 @@
           car.odometerUpdatedAt ? el('div', { class: 'muted small-text', text: 'Updated ' + fmtDate(car.odometerUpdatedAt) }) : null,
           odoForm,
         ]),
-        EntryUI.historyCard(car),
-        RemindersUI.card(car),
+        EntryUI.historyCard(car, page && page.entries),
+        RemindersUI.card(car, page && page.tasks),
         el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids and specs' }),
           fluids.length ? el('ul', { class: 'fluids' }, fluidRows) : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' }),
@@ -323,7 +328,7 @@
         ]),
         GuestUI.card(car),
         el('p', { class: 'muted small-text center', text: 'Car details last changed ' + fmtDate(car.updatedAt) }),
-        EntryUI.costsCard(car),
+        EntryUI.costsCard(car, page && page.costs),
         editBottom
       );
     }

@@ -24,6 +24,7 @@ function audit_(actor, action, recordType, recordId, summary, before, after) {
 
 /** Trigger target: append Audit rows not yet written to the monthly text log. */
 function flushTextLog() {
+  Db.resetRequest();
   const props = props_();
   const done = Number(props.getProperty('LOG_FLUSHED_ROW') || 1);
   const rows = Db.all('Audit').filter(function (r) { return r._row > done; });

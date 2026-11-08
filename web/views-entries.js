@@ -70,7 +70,8 @@
   }
 
   // ---------- History card (on the car page) ----------
-  function historyCard(car) {
+  // `preloaded` (the car page's entries) saves a request; without it the card fetches its own.
+  function historyCard(car, preloaded) {
     var chips = el('div', { class: 'filters', role: 'group', 'aria-label': 'Filter the history' });
     var list = el('div', { class: 'history' }, [fmt.loading()]);
     var filter = 'All';
@@ -118,13 +119,17 @@
         : [el('p', { class: 'muted', text: data.length ? 'Nothing of that kind yet.' : 'Nothing recorded yet. Add the first entry above.' })]);
     }
 
-    FleetApi.call('listEntries', { carId: car.id }).then(function (r) {
-      data = r.data.entries;
+    function show(entries) {
+      data = entries;
       Views.rememberCurrency(car.id, data);
       render();
-    }).catch(function (e) {
-      list.replaceChildren(UI.notice('error', UI.errorText(e)));
-    });
+    }
+    if (preloaded) show(preloaded);
+    else {
+      FleetApi.call('listEntries', { carId: car.id }).then(function (r) { show(r.data.entries); }).catch(function (e) {
+        list.replaceChildren(UI.notice('error', UI.errorText(e)));
+      });
+    }
 
     return el('section', { class: 'card' }, [
       el('h2', { text: 'Service History' }),
@@ -134,10 +139,10 @@
   }
 
   // ---------- Costs card (on the car page) ----------
-  function costsCard(car) {
+  function costsCard(car, preloaded) {
     var body = el('div', {}, [fmt.loading()]);
-    FleetApi.call('getCarCosts', { carId: car.id }).then(function (r) {
-      var blocks = r.data.currencies;
+    function show(costs) {
+      var blocks = costs.currencies;
       if (!blocks.length) { body.replaceChildren(el('p', { class: 'muted', text: 'No costs recorded yet.' })); return; }
       body.replaceChildren.apply(body, blocks.map(function (b) {
         var cats = Object.keys(b.categories).map(function (k) {
@@ -153,7 +158,9 @@
           el('details', { class: 'cost-years' }, [el('summary', { text: 'By year' }), el('ul', { class: 'cost-list' }, years)]),
         ]);
       }));
-    }).catch(function (e) { body.replaceChildren(UI.notice('error', UI.errorText(e))); });
+    }
+    if (preloaded) show(preloaded);
+    else FleetApi.call('getCarCosts', { carId: car.id }).then(function (r) { show(r.data); }).catch(function (e) { body.replaceChildren(UI.notice('error', UI.errorText(e))); });
     return el('section', { class: 'card' }, [el('h2', { text: 'Costs' }), body]);
   }
 

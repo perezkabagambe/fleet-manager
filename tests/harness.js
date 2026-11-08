@@ -12,7 +12,8 @@ const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.j
 
 function makeSheet(header) {
   const rows = [header.slice()];
-  return {
+  const self = { reads: 0 }; // how many times the sheet's cells were read (to prove the cache saves reads)
+  return Object.assign(self, {
     getLastRow: () => rows.length,
     getLastColumn: () => rows[0].length,
     getMaxRows: () => 1000,
@@ -22,6 +23,7 @@ function makeSheet(header) {
       setFontWeight() {},
       setNumberFormat() {},
       getValues: () => {
+        if (r > 1) self.reads++; // data rows only (the header row is read separately)
         const out = [];
         for (let i = 0; i < nr; i++) {
           const row = [];
@@ -37,7 +39,7 @@ function makeSheet(header) {
     appendRow: (arr) => rows.push(arr.slice()),
     deleteRow: (n) => rows.splice(n - 1, 1),
     _rows: rows,
-  };
+  });
 }
 
 function createEnv() {
@@ -111,8 +113,21 @@ function createEnv() {
           if (e.exp < FakeDate.now()) { delete cache[k]; return null; }
           return e.v;
         },
-        put: (k, v, ttl) => { cache[k] = { v: String(v), exp: FakeDate.now() + (ttl || 600) * 1000 }; },
-        remove: (k) => { delete cache[k]; },
+        put: (k, v, ttl) => { if (state.cacheBroken) throw new Error('cache unavailable'); if (Buffer.byteLength(String(v)) > 100 * 1024) throw new Error('cache value too large: ' + k); cache[k] = { v: String(v), exp: FakeDate.now() + (ttl || 600) * 1000 }; },
+        remove: (k) => { if (state.cacheBroken) throw new Error('cache unavailable'); delete cache[k]; },
+        getAll: (keys) => {
+          if (state.cacheBroken) throw new Error('cache unavailable');
+          const out = {};
+          keys.forEach((k) => { const e = cache[k]; if (e && e.exp >= FakeDate.now()) out[k] = e.v; });
+          return out;
+        },
+        putAll: (obj, ttl) => {
+          if (state.cacheBroken) throw new Error('cache unavailable');
+          Object.keys(obj).forEach((k) => {
+            if (Buffer.byteLength(String(obj[k])) > 100 * 1024) throw new Error('cache value too large: ' + k); // bytes, as the real service counts
+            cache[k] = { v: String(obj[k]), exp: FakeDate.now() + (ttl || 600) * 1000 };
+          });
+        },
       }),
     },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
@@ -190,6 +205,7 @@ function createEnv() {
   props.UPLOADS_FOLDER_ID = 'uploads';
   props.LOGS_FOLDER_ID = 'logs';
   props.HASH_SALT = 'test-salt';
+  if (process.env.FLEET_DB_CACHE === 'off') props.DB_CACHE = 'off'; // run the whole suite without the table cache, to compare
 
   function call(action, params) {
     const res = ctx.doPost({ postData: { contents: JSON.stringify(Object.assign({ action }, params || {})) } });
@@ -221,7 +237,7 @@ function createEnv() {
   }
 
   return {
-    ctx, call, seedUser, lastLoginMail, signInAs, outbox, sleeps, files, folders, props, sheets, state, triggers,
+    ctx, cache, invalidate: () => vm.runInContext('Db.invalidateAll()', ctx), call, seedUser, lastLoginMail, signInAs, outbox, sleeps, files, folders, props, sheets, state, triggers,
     advance: (ms) => { offsetMs += ms; },
   };
 }

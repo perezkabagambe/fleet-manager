@@ -5,7 +5,9 @@
   "description": "Fleet Manager: static web app + Google Apps Script backend",
   "scripts": {
     "clasp": "clasp",
-    "test": "node --test tests/"
+    "test": "node --test tests/",
+    "test:nocache": "FLEET_DB_CACHE=off node --test tests/",
+    "test:all": "npm test && npm run test:nocache"
   },
   "devDependencies": {
     "@google/clasp": "^3.4.1"

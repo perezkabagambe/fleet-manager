@@ -41,12 +41,15 @@ function randomCode_() {
 }
 
 /** Secret salt kept in Script Properties (never in the repo). Created on first use. */
+let saltMemo_ = null; // read from the properties once per request, not once per hash
 function salt_() {
+  if (saltMemo_) return saltMemo_;
   let s = props_().getProperty('HASH_SALT');
   if (!s) {
     s = randomToken_();
     props_().setProperty('HASH_SALT', s);
   }
+  saltMemo_ = s;
   return s;
 }
 

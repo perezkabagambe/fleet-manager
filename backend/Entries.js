@@ -165,8 +165,10 @@ function listEntries_(p, ctx) {
     if (a.car_id === car.id && !isTrue_(a.deleted)) attachments[a.entry_id] = (attachments[a.entry_id] || 0) + 1;
   });
   const guestNames = guestNamesById_();
+  const rowOf = {};
   const entries = c.entries.map(function (e) {
     const s = summarizeEntry_(e, guestNames);
+    rowOf[e.id] = e._row;
     s.attachmentCount = attachments[e.id] || 0;
     if (JOB_TYPES.indexOf(e.type) !== -1) {
       s.jobCost = jobCost_(e, c.usage, c.purchasesById);
@@ -181,7 +183,8 @@ function listEntries_(p, ctx) {
     }
     return s;
   }).sort(function (a, b) {
-    return (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || '');
+    // newest date first; for the same date the one added last first (and, if added in the same instant, the later row)
+    return (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || '') || (rowOf[b.id] - rowOf[a.id]);
   });
   return { entries: entries };
 }
