@@ -95,6 +95,29 @@ test('engine code and gearbox code are optional, trimmed, length-capped and can 
   assert.equal(env.call('listCars', { token: sam }).data.cars.find((x) => x.id === c.id).engineCode, '2.0 TDI');
 });
 
+test('market, drive side, import date and fuel capacity are optional and validated', () => {
+  const { env, sam } = setup();
+  const none = addCar(env, sam, { registration: 'NODET1', vin: '' }).data.car;
+  assert.deepEqual([none.market, none.driveSide, none.importDate, none.fuelCapacity], ['', '', '', null]);
+  const c = addCar(env, sam, { registration: 'DET1', vin: '', market: 'Japanese (JDM)', driveSide: 'RHD', importDate: 'Mar 2021', fuelCapacity: '87 litres' }).data.car;
+  assert.equal(c.market, 'Japanese (JDM)');
+  assert.equal(c.driveSide, 'RHD');
+  assert.equal(c.importDate, '2021-03');
+  assert.equal(c.fuelCapacity, 87);
+  assert.equal(addCar(env, sam, { registration: 'DET2', vin: '', fuelCapacity: '45.5' }).data.car.fuelCapacity, 45.5);
+  const bad = (fields, code) => assert.equal(addCar(env, sam, Object.assign({ registration: 'BADDET' + Math.random(), vin: '' }, fields)).error, code, code);
+  bad({ market: 'Martian' }, 'invalid_market');
+  bad({ driveSide: 'CHD' }, 'invalid_drive_side');
+  bad({ importDate: 'sometime' }, 'invalid_date');
+  bad({ importDate: String(new Date().getFullYear() + 1) }, 'invalid_date');
+  ['0', '-5', 'lots', '1000', '45.55'].forEach((x) => bad({ fuelCapacity: x }, 'invalid_fuel_capacity'));
+  const edited = env.call('saveCar', { token: sam, id: c.id, version: c.version, fields: Object.assign({}, CAR, { registration: 'DET1', vin: '', market: 'European', driveSide: 'LHD', importDate: '', fuelCapacity: '' }) });
+  assert.deepEqual([edited.data.car.market, edited.data.car.driveSide, edited.data.car.importDate, edited.data.car.fuelCapacity], ['European', 'LHD', '', null]);
+  const got = env.call('getCar', { token: sam, id: c.id }).data.car;
+  assert.equal(got.market, 'European');
+  assert.equal(env.call('listCars', { token: sam }).data.cars.find((x) => x.id === c.id).driveSide, 'LHD');
+});
+
 test('acquisition cost and date are optional but validated', () => {
   const { env, sam } = setup();
   const none = addCar(env, sam, { registration: 'NOCOST1', vin: '' }).data.car;

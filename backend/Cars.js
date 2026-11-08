@@ -6,6 +6,8 @@
  */
 
 const COUNTRIES = ['UK', 'UG'];
+const MARKETS = ['European', 'UK', 'Japanese (JDM)', 'North American', 'Middle East (GCC)', 'Australian', 'African', 'Asian', 'Other'];
+const DRIVE_SIDES = ['LHD', 'RHD'];
 const CURRENCIES = ['GBP', 'UGX', 'USD', 'KES', 'EUR'];
 const DISTANCE_UNITS = ['mi', 'km'];
 const CAR_STATUSES = ['Active', 'Sold', 'Scrapped', 'Off-road'];
@@ -32,6 +34,10 @@ function summarizeCar_(c) {
     engineCode: c.engine_code || '',
     gearboxCode: c.gearbox_code || '',
     country: c.country || 'UK',
+    market: c.market || '',
+    driveSide: c.drive_side || '',
+    importDate: c.import_date || '',
+    fuelCapacity: c.fuel_capacity === '' || c.fuel_capacity === undefined ? null : Number(c.fuel_capacity),
     currency: c.currency || 'GBP',
     distanceUnit: c.distance_unit || 'mi',
     partsouqUrl: c.partsouq_url,
@@ -98,6 +104,10 @@ function parseCarInput_(f, existing) {
   out.engine_code = cleanStr_(f.engineCode, 30);
   out.gearbox_code = cleanStr_(f.gearboxCode, 30);
 
+  out.market = oneOf_(f.market, MARKETS, '', 'invalid_market');
+  out.drive_side = oneOf_(f.driveSide, DRIVE_SIDES, '', 'invalid_drive_side');
+  out.import_date = parseDate_(f.importDate);
+  out.fuel_capacity = parseFuelCapacity_(f.fuelCapacity);
   out.country = oneOf_(f.country, COUNTRIES, 'UK', 'invalid_country');
   // The car has no fixed "currency for costs": every cost carries its own. This is only the
   // starting default for new costs. It is not asked for, so an edit keeps whatever the car has.
@@ -183,6 +193,14 @@ function parseDate_(raw, allowFuture) {
 }
 
 /** '' (not set) or a whole number of miles/km. */
+/** Fuel tank size in litres: optional, up to one decimal place. */
+function parseFuelCapacity_(raw) {
+  const s = String(raw === null || raw === undefined ? '' : raw).replace(/[,\s]/g, '').replace(/l(itres?)?$/i, '');
+  if (s === '') return '';
+  if (!/^\d{1,3}(\.\d)?$/.test(s) || Number(s) <= 0) fail_('invalid_fuel_capacity');
+  return String(Number(s));
+}
+
 function parseOdometer_(raw) {
   const s = String(raw === null || raw === undefined ? '' : raw).replace(/[,\s]/g, '');
   if (s === '') return '';

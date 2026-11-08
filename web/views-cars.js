@@ -3,6 +3,7 @@
   'use strict';
 
   var el = UI.el;
+  var MARKETS = ['European', 'UK', 'Japanese (JDM)', 'North American', 'Middle East (GCC)', 'Australian', 'African', 'Asian', 'Other'];
   var Views = (window.Views = window.Views || {});
   var cfg = window.FLEET_CONFIG;
 
@@ -269,7 +270,11 @@
         detail('VIN / chassis', car.vin),
         detail('Engine code', car.engineCode),
         detail('Gearbox code', car.gearboxCode),
-        detail('Country', car.country === 'UG' ? 'Uganda' : 'United Kingdom'),
+        detail('Location', car.country === 'UG' ? 'Uganda' : 'United Kingdom'),
+        detail('Market', car.market),
+        detail('Drive', car.driveSide === 'LHD' ? 'Left-hand drive (LHD)' : car.driveSide === 'RHD' ? 'Right-hand drive (RHD)' : ''),
+        detail('Fuel capacity', car.fuelCapacity === null || car.fuelCapacity === undefined ? '' : car.fuelCapacity + ' litres'),
+        detail('Imported', fmtAcquired(car.importDate)),
         detail('Acquired', fmtAcquired(car.acquisitionDate)),
         detail('Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? '' : money(car.acquisitionCost, car.acquisitionCurrency || car.currency))
       );
@@ -528,7 +533,11 @@
         UI.field('VIN / chassis number', text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 'The 17-character VIN, or the chassis number for Japanese imports.'),
         UI.field('Engine code', text('engineCode', v.engineCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. 1GR-FE. Often stamped on the engine or listed in the handbook.'),
         UI.field('Gearbox code', text('gearboxCode', v.gearboxCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. A750F. Useful when ordering gearbox parts or oil.'),
-        UI.field('Country', select('country', [['UK', 'United Kingdom'], ['UG', 'Uganda']], v.country)),
+        UI.field('Market', select('market', [['', 'Not recorded']].concat(MARKETS.map(function (m) { return [m, m]; })), v.market), 'The market the car was built and sold for, e.g. European or Japanese (JDM).'),
+        UI.field('Drive side', select('driveSide', [['', 'Not recorded'], ['LHD', 'Left-hand drive (LHD)'], ['RHD', 'Right-hand drive (RHD)']], v.driveSide)),
+        UI.field('Fuel capacity (litres)', text('fuelCapacity', v.fuelCapacity === null || v.fuelCapacity === undefined ? '' : v.fuelCapacity, { inputmode: 'decimal', maxlength: '6', placeholder: 'e.g. 87' }), 'Optional. The size of the fuel tank.'),
+        UI.field('Location', select('country', [['UK', 'United Kingdom'], ['UG', 'Uganda']], v.country), 'Where the car is based. It sets the usual currency and miles or km.'),
+        UI.field('Date imported', text('importDate', v.importDate, { maxlength: '24', placeholder: 'e.g. 2021, Mar 2021 or 12/03/2021' }), 'Optional. A full date, or just the month and year, or just the year.'),
         UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
         odometerField(),
         UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. 2021, Mar 2021 or 12/03/2021' }), 'Optional. A full date, or just the month and year, or just the year.'),
@@ -627,6 +636,7 @@
         return {
           registration: f.registration.value, make: f.make.value, model: f.model.value, year: f.year.value, colour: f.colour.value,
           nickname: f.nickname.value, vin: f.vin.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, country: f.country.value,
+          market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value, importDate: f.importDate.value,
           distanceUnit: f.distanceUnit.value, status: f.status.value, odometer: f.odometer.value,
           acquisitionCost: f.acquisitionCost.value, acquisitionCurrency: f.acquisitionCurrency.value, acquisitionDate: f.acquisitionDate.value,
           partsouqUrl: f.partsouqUrl.value, notes: f.notes.value,
