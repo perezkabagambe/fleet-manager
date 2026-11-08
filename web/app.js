@@ -59,11 +59,18 @@
     else if (r.path === '/login/verify') view = Views.verify;
     else if (r.path === '/request') view = Views.request;
     else if (r.path === '/profile') view = Views.profile;
+    else if (r.path === '/profile/cars') view = Views.userCars;
     else if (r.path === '/admin/users') view = FleetAuth.isAdmin() ? Views.adminUsers : viewForbidden;
-    else if (r.path === '/car/new') view = Views.carForm;
-    else if ((m = /^\/car\/([0-9a-f-]{8,40})(?:\/(edit|fluids|label))?$/.exec(r.path))) {
+    else if ((m = /^\/admin\/users\/([0-9a-f-]{8,40})\/cars$/.exec(r.path))) {
+      r.params.userId = m[1];
+      view = FleetAuth.isAdmin() ? Views.userCars : viewForbidden;
+    } else if (r.path === '/car/new') view = Views.carForm;
+    else if ((m = /^\/car\/([0-9a-f-]{8,40})(?:\/(edit|fluids|label|people))?$/.exec(r.path))) {
       r.params.id = m[1];
-      view = { edit: Views.carForm, fluids: Views.carFluids, label: Views.carLabel }[m[2]] || Views.car;
+      view = {
+        edit: Views.carForm, fluids: Views.carFluids, label: Views.carLabel,
+        people: FleetAuth.isAdmin() ? Views.carPeople : viewForbidden,
+      }[m[2]] || Views.car;
     } else view = viewNotFound;
     view(r, appEl);
     appEl.focus({ preventScroll: true });

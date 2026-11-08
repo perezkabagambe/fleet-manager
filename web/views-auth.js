@@ -127,6 +127,10 @@
       el('h1', { text: 'Your profile' }),
       el('p', { class: 'muted', text: user.email + (user.role === 'admin' ? ' · Administrator' : '') }),
       msg, form,
+      el('hr', { class: 'rule' }),
+      el('h2', { text: 'My cars' }),
+      el('p', { class: 'muted', text: 'Say which cars you own or are the registered keeper of.' }),
+      el('a', { class: 'btn secondary', href: '#/profile/cars', text: 'Choose my cars' }),
     ]));
   };
 

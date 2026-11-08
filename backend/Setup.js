@@ -21,8 +21,10 @@ const SCHEMA = {
   Cars: {
     base: true,
     cols: ['registration', 'nickname', 'make', 'model', 'year', 'colour', 'vin', 'country', 'currency', 'distance_unit',
-      'photo_file_id', 'photo_thumb_file_id', 'acquisition_cost', 'acquisition_currency', 'acquisition_date', 'partsouq_url', 'status', 'current_odometer', 'odometer_updated_at', 'reminder_recipients', 'notes'],
+      'photo_file_id', 'photo_thumb_file_id', 'acquisition_cost', 'acquisition_currency', 'acquisition_date', 'owner_other', 'keeper_other', 'partsouq_url', 'status', 'current_odometer', 'odometer_updated_at', 'reminder_recipients', 'notes'],
   },
+  // Which users own / are the registered keeper of which cars (one row per car, user and role).
+  CarPeople: { base: true, cols: ['car_id', 'user_id', 'role'] },
   FluidSpecs: { base: true, cols: ['car_id', 'fluid', 'specification', 'capacity', 'notes', 'source', 'verify_flag'] },
   Entries: {
     base: true,
@@ -44,7 +46,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {

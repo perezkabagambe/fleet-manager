@@ -40,6 +40,7 @@
       } else if (u.status === 'Approved') {
         if (u.role === 'admin') button('Make regular user', 'secondary', function (b) { act(b, 'Saving…', 'setUserRole', { userId: u.id, role: 'user' }, 'Remove admin rights from ' + u.name + '?'); });
         else button('Make admin', 'secondary', function (b) { act(b, 'Saving…', 'setUserRole', { userId: u.id, role: 'admin' }, 'Make ' + u.name + ' an admin? Admins can approve users and delete cars.'); });
+        actions.push(el('a', { class: 'btn small secondary', href: '#/admin/users/' + u.id + '/cars', text: 'Cars' }));
         if (!isSelf) button('Revoke access', 'danger', function (b) { act(b, 'Revoking…', 'setUserStatus', { userId: u.id, status: 'Revoked' }, 'Revoke access for ' + u.name + '? They will be signed out immediately.'); });
       } else {
         button('Approve again', '', function (b) { act(b, 'Approving…', 'setUserStatus', { userId: u.id, status: 'Approved' }); });

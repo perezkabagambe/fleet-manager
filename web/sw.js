@@ -17,6 +17,7 @@ const SHELL = [
   'views-admin.js',
   'vendor/qrcode.js',
   'views-cars.js',
+  'views-people.js',
   'app.js',
   'manifest.webmanifest',
   'icons/icon.svg',
