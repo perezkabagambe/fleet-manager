@@ -6,11 +6,32 @@
   var Views = (window.Views = window.Views || {});
   var cfg = window.FLEET_CONFIG;
 
+  // Where to go after signing in. It is also remembered on this device for half an hour, because the sign-in
+  // link in the email opens a fresh page that no longer knows where the person was heading.
+  var NEXT_KEY = 'fleet.next';
+  function rememberNext(next) {
+    try {
+      if (next) localStorage.setItem(NEXT_KEY, JSON.stringify({ next: next, at: Date.now() }));
+      else localStorage.removeItem(NEXT_KEY);
+    } catch (e) { /* not remembered: they land on the fleet */ }
+  }
+  function takeNext() {
+    try {
+      var raw = localStorage.getItem(NEXT_KEY);
+      localStorage.removeItem(NEXT_KEY);
+      var v = raw ? JSON.parse(raw) : null;
+      return v && Date.now() - v.at < 30 * 60 * 1000 ? v.next : '';
+    } catch (e) { return ''; }
+  }
+
   function signedIn(res, next) {
+    var remembered = takeNext();
+    var target = next || remembered || '/';
+    if (target.charAt(0) !== '/') target = '/'; // only ever somewhere inside the app
     FleetAuth.save(res.session);
     FleetAuth.setUser(res.user);
     window.FleetApp.refreshNav();
-    window.FleetApp.go(next || '/');
+    window.FleetApp.go(target);
   }
 
   // ---------- sign in ----------
@@ -30,7 +51,7 @@
         msg.replaceChildren();
         if (!email.value.trim()) { msg.append(UI.notice('error', UI.errorText({ code: 'invalid_email' }))); return; }
         UI.busy(btn, 'Sending…', FleetApi.call('requestLogin', { email: email.value.trim() }))
-          .then(function () { stepCode(email.value.trim()); })
+          .then(function () { rememberNext(next); stepCode(email.value.trim()); })
           .catch(function (e) { msg.append(UI.notice('error', UI.errorText(e))); });
       });
 

@@ -267,7 +267,7 @@ function saveCar_(p, ctx) {
     const row = Object.assign({
       id: Utilities.getUuid(), created_at: now, created_by: ctx.user.id, updated_at: now, updated_by: ctx.user.id,
       version: 1, deleted: false, odometer_updated_at: input.current_odometer === '' ? '' : now,
-      guest_enabled: false, guest_secret: newGuestSecret_(),
+      guest_enabled: true, guest_secret: newGuestSecret_(), // guest access is on for every new car; an admin can switch it off
     }, input);
     Db.insert('Cars', row);
     audit_(ctx.user, 'car_created', 'Car', row.id, 'Added ' + row.registration + ' ' + row.make + ' ' + row.model);

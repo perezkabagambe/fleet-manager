@@ -56,9 +56,14 @@
           el('li', { text: 'You can delete only what you add yourself.' }),
           el('li', { text: 'Your access lasts ' + DAYS + ' days on this phone.' }),
         ]),
-        msg, form, signInLink('/car/' + carId),
+        msg, form,
+        el('div', { class: 'or', text: 'or' }),
+        el('a', { class: 'btn block secondary', href: '#/login?next=' + encodeURIComponent('/car/' + carId), text: 'I have an account: sign in' }),
+        el('p', { class: 'muted small-text center', text: 'After signing in you come straight back to this car.' }),
       ]));
     }).catch(function (e) {
+      // Guest access is off for this car: the only way in is to sign in, and that leads straight back here.
+      if (e.code === 'guest_unavailable') { FleetApp.go('/login', { next: '/car/' + carId }); return; }
       root.replaceChildren(el('section', { class: 'card narrow' }, [
         el('h1', { text: 'Guest access' }),
         UI.notice('error', UI.errorText(e)),
@@ -308,8 +313,8 @@
 
     function explain() {
       return state.enabled
-        ? 'On. Anyone who scans this car\'s QR code can see its maintenance history (no costs and no purchases) and add maintenance or purchased items under a name they choose. Their access lasts ' + DAYS + ' days, they cannot edit, and they can delete only what they added. Everything they add is marked "Guest: name".'
-        : 'Off. Anyone who scans this car\'s QR code is asked to sign in.';
+        ? 'On (this is the default). Anyone who scans this car\'s QR code without being signed in opens it as a guest. They can see its maintenance history (no costs and no purchases) and add maintenance or purchased items under a name they choose. Their access lasts ' + DAYS + ' days, they cannot edit, and they can delete only what they added. Everything they add is marked "Guest: name".'
+        : 'Off. Anyone who scans this car\'s QR code is asked to sign in. Switch it on to let garages use the QR code without an account.';
     }
 
     function guestRow(g) {

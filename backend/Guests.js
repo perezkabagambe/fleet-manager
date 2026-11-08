@@ -4,7 +4,7 @@
  * How it is kept safe:
  *  - Guest actions are a separate set (auth: 'guest'). A guest token is only accepted by those actions, and
  *    a normal session token is never accepted by them. A guest can touch ONE car and nothing else.
- *  - Guest access is OFF for every car until an admin switches it on. Each car has its own secret in its QR
+ *  - Guest access is ON for every car by default; an admin can switch it off per car. Each car has its own secret in its QR
  *    code; an admin can replace it (old stickers then stop working) or switch access off at any time.
  *  - A guest must give a name. Names are unique across every guest that has ever existed (ignoring case,
  *    spaces and punctuation) and can never match a person who has an account. The name is bound to a private

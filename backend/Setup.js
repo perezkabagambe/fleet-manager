@@ -49,7 +49,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 10; // 10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 11; // 11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
@@ -67,6 +67,7 @@ function migrateIfNeeded_() {
     ensureReminderTrigger_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 9) mergeRepairIntoMaintenance_();
     giveCarsGuestSecrets_();
+    if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 11) switchOnGuestAccessEverywhere_();
     props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   } finally {
     lock.releaseLock();
@@ -164,7 +165,14 @@ function mergeRepairIntoMaintenance_() {
   if (n) audit_(null, 'entry_types_merged', 'Entries', '', n + ' Repair entr' + (n === 1 ? 'y' : 'ies') + ' changed to Maintenance');
 }
 
-/** Every car has a secret for its QR code (guest access itself stays off until an admin switches it on). */
+/** One-off (version 11): guest access starts ON for every car. Admins can switch any car off afterwards, and that choice is kept. */
+function switchOnGuestAccessEverywhere_() {
+  Db.all('Cars').forEach(function (c) {
+    if (!isTrue_(c.guest_enabled)) Db.update('Cars', c._row, { guest_enabled: true });
+  });
+}
+
+/** Every car has a secret for its QR code. */
 function giveCarsGuestSecrets_() {
   Db.all('Cars').forEach(function (c) {
     if (!c.guest_secret) Db.update('Cars', c._row, { guest_secret: newGuestSecret_() });

@@ -317,7 +317,7 @@
         ]),
         el('section', { class: 'card' }, [
           el('h2', { text: 'QR label' }),
-          el('p', { class: 'muted', text: 'Stick this on the windscreen or glovebox. Signed-in people who scan it go to this car. Guest access, if switched on below, lets a garage use it without an account.' }),
+          el('p', { class: 'muted', text: 'Stick this on the windscreen or glovebox. Scanning it opens this car: signed-in people go straight to it, and anyone else can open it as a guest or sign in (unless guest access is switched off below).' }),
           el('img', { class: 'qr', src: qrDataUrl(qrLink(car)), alt: 'QR code for ' + car.registration, width: '140', height: '140' }),
           el('p', {}, [el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/label', text: 'Print label' })]),
         ]),
@@ -734,7 +734,7 @@
         el('section', { class: 'card no-print' }, [
           backLink('#/car/' + car.id, car.registration),
           el('h1', { text: 'QR label' }),
-          el('p', { class: 'muted', text: 'Print this and stick it on the car. Signed-in people who scan it go to the car in Fleet Manager. If guest access is on for this car, a garage can use it without an account.' }),
+          el('p', { class: 'muted', text: 'Print this and stick it on the car. Scanning it opens the car: signed-in people go straight to it, and anyone else can open it as a guest or sign in (unless guest access is switched off for this car).' }),
           printBtn,
         ]),
         el('div', { class: 'label-wrap' }, [

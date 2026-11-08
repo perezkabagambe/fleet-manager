@@ -15,7 +15,7 @@ function setup(opts) {
   const other = env.call('saveCar', { token: sam, fields: { registration: 'ZZ99 ZZZ', make: 'Ford', model: 'Ka', year: '2010' } }).data.car;
   const secretOf = (c, token) => env.call('getCar', { token: token || sam, id: c.id }).data.car.guestSecret;
   const secret = secretOf(car);
-  if (!opts || opts.on !== false) env.call('setGuestAccess', { token: admin, carId: car.id, enabled: true });
+  if (opts && opts.on === false) env.call('setGuestAccess', { token: admin, carId: car.id, enabled: false });
   const join = (name, extra) => env.call('guestJoin', Object.assign({ carId: car.id, secret, name }, extra || {}));
   const as = (action, guestToken, params) => env.call(action, Object.assign({ guestToken }, params || {}));
   const staffAdd = (type, fields, extra) => env.call('saveEntry', Object.assign({ token: sam, carId: car.id, type, fields }, extra || {}));
@@ -27,14 +27,17 @@ const job = (extra) => Object.assign({ title: 'Oil and filter change', date: D, 
 
 // ---------- off by default, secrets, switching ----------
 
-test('guest access is off until an admin switches it on; every car has its own secret', () => {
-  const { env, admin, sam, car, other, secret, secretOf, join, as } = setup({ on: false });
+test('guest access is on by default for new cars; every car has its own secret; admins can switch it off and on', () => {
+  const { env, admin, sam, car, other, secret, secretOf, join, as } = setup();
   assert.ok(secret && secret.length >= 32);
   assert.notEqual(secret, secretOf(other));
+  assert.equal(env.call('getCar', { token: sam, id: car.id }).data.car.guestEnabled, true, 'on from the start');
+  assert.equal(env.call('guestInfo', { carId: car.id, secret }).ok, true, 'works without anyone switching it on');
+  assert.equal(env.call('setGuestAccess', { token: sam, carId: car.id, enabled: false }).error, 'forbidden');
+  assert.equal(env.call('setGuestAccess', { carId: car.id, enabled: false }).error, 'unauthorized');
+  assert.equal(env.call('setGuestAccess', { token: admin, carId: car.id, enabled: false }).data.enabled, false);
   assert.equal(env.call('guestInfo', { carId: car.id, secret }).error, 'guest_unavailable');
   assert.equal(join('Bob').error, 'guest_unavailable');
-  assert.equal(env.call('setGuestAccess', { token: sam, carId: car.id, enabled: true }).error, 'forbidden');
-  assert.equal(env.call('setGuestAccess', { carId: car.id, enabled: true }).error, 'unauthorized');
   assert.equal(env.call('setGuestAccess', { token: admin, carId: car.id, enabled: true }).data.enabled, true);
   const info = env.call('guestInfo', { carId: car.id, secret });
   assert.equal(info.data.car.registration, 'AB12 CDE');
@@ -325,7 +328,7 @@ test('guest tokens are stored only as hashes, and the audit trail records guests
   const rows = env.sheets.Guests._rows;
   assert.ok(!JSON.stringify(rows).includes(j.guestToken));
   const actions = env.sheets.Audit._rows.slice(1).map((r) => r[3]);
-  ['guest_access_on', 'guest_joined', 'entry_created'].forEach((a) => assert.ok(actions.includes(a), a));
+  ['guest_joined', 'entry_created'].forEach((a) => assert.ok(actions.includes(a), a));
   const created = env.sheets.Audit._rows.find((r) => r[3] === 'entry_created');
   assert.equal(created[2], 'guest: Bob');
   env.call('setGuestAccess', { token: admin, carId: env.sheets.Cars._rows[1][0], enabled: false });
@@ -338,13 +341,23 @@ test('a guest can only add so much in an hour', () => {
   assert.equal(as('guestSaveEntry', g, { type: 'Maintenance', fields: job({ title: 'Too many' }) }).error, 'try_later');
 });
 
-test('older cars are given a QR secret by the migration, with guest access still off', () => {
-  const { env, sam, car, admin } = setup({ on: false });
+test('older cars are given a QR secret by the migration', () => {
+  const { env, sam, car, admin } = setup();
   const col = env.sheets.Cars._rows[0].indexOf('guest_secret');
   env.sheets.Cars._rows.forEach((r, i) => { if (i > 0) r[col] = ''; });
   env.props.SCHEMA_VERSION = '9';
   const got = env.call('getCar', { token: sam, id: car.id }).data.car;
   assert.ok(got.guestSecret.length >= 32);
-  assert.equal(got.guestEnabled, false);
   assert.ok(admin);
+});
+
+test('the migration switches guest access on for existing cars once, and later switch-offs are kept', () => {
+  const { env, sam, admin, car, other } = setup();
+  const col = env.sheets.Cars._rows[0].indexOf('guest_enabled');
+  env.sheets.Cars._rows.forEach((r, i) => { if (i > 0) r[col] = 'FALSE'; }); // how cars looked before: off
+  env.props.SCHEMA_VERSION = '10';
+  assert.equal(env.call('getCar', { token: sam, id: car.id }).data.car.guestEnabled, true);
+  assert.equal(env.call('getCar', { token: sam, id: other.id }).data.car.guestEnabled, true);
+  env.call('setGuestAccess', { token: admin, carId: car.id, enabled: false });
+  assert.equal(env.call('getCar', { token: sam, id: car.id }).data.car.guestEnabled, false, 'an admin\'s choice sticks (the migration does not run again)');
 });
