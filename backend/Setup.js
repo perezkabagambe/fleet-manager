@@ -47,7 +47,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 8; // 8: no new columns, but the migration now also creates the weekly reminder trigger
+const SCHEMA_VERSION = 9; // 9: Repair entries become Maintenance (8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
@@ -63,6 +63,7 @@ function migrateIfNeeded_() {
     if (props.getProperty('SCHEMA_VERSION') === String(SCHEMA_VERSION)) return;
     ensureSchema_(SpreadsheetApp.openById(props.getProperty('DB_ID')));
     ensureReminderTrigger_();
+    if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 9) mergeRepairIntoMaintenance_();
     props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   } finally {
     lock.releaseLock();
@@ -149,6 +150,15 @@ function ensureTab_(ss, name, def) {
   sheet.getRange(1, 1, 1, Math.max(existing.length + missing.length, 1)).setFontWeight('bold');
   // Keep every cell as plain text so dates, IDs and long numbers are never auto-converted.
   sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).setNumberFormat('@');
+}
+
+/** One-off (version 9): the Repair entry type was merged into Maintenance. Costs, parts, photos and issue links stay as they are. */
+function mergeRepairIntoMaintenance_() {
+  let n = 0;
+  Db.all('Entries').forEach(function (e) {
+    if (e.type === 'Repair') { Db.update('Entries', e._row, { type: 'Maintenance' }); n++; }
+  });
+  if (n) audit_(null, 'entry_types_merged', 'Entries', '', n + ' Repair entr' + (n === 1 ? 'y' : 'ies') + ' changed to Maintenance');
 }
 
 /** Create a repeating time trigger for `fn` if one doesn't exist yet. */

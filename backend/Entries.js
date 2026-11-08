@@ -1,21 +1,21 @@
 /**
- * A car's history: Issues, Repairs, Maintenance, Compliance renewals and Purchases.
+ * A car's history: Issues, Maintenance (servicing, checks, repairs and fixes), Compliance renewals and Purchases.
  *
  * Costs (see PLAN section 18):
- *  - Every entry carries its own currency, and each cost on a repair/maintenance (labour, other costs, invoice
+ *  - Every entry carries its own currency, and each cost on a maintenance entry (labour, other costs, invoice
  *    total) can have its own, e.g. UK parts, Ugandan labour. Older entries without those fall back to the entry's currency.
- *  - A Purchase is bought stock (quantity x unit cost + shipping). Repairs and maintenance USE parts
+ *  - A Purchase is bought stock (quantity x unit cost + shipping). Maintenance entries USE parts
  *    from purchases (PartUsage rows), so a part is only ever entered once and its money is counted once.
- *  - Job cost of a repair/maintenance = parts used + labour + other costs, or one invoice total.
+ *  - Job cost of a maintenance entry = parts used + labour + other costs, or one invoice total.
  *  - Spend (what actually left your pocket) counts purchases on their purchase date, plus labour/other
  *    on the event date, so fitting a part later never counts it twice.
  *
  * Any approved user can add and edit entries. Only admins delete (soft delete; stock is returned).
  */
 
-const ENTRY_TYPES = ['Issue', 'Repair', 'Maintenance', 'Compliance', 'Purchase'];
+const ENTRY_TYPES = ['Issue', 'Maintenance', 'Compliance', 'Purchase'];
 const ISSUE_STATUSES = ['Not resolved', 'In-work', 'Resolved', 'Ignored'];
-const JOB_TYPES = ['Repair', 'Maintenance'];
+const JOB_TYPES = ['Maintenance'];
 const MAX_PARTS = 30;
 
 function numOr0_(v) {
@@ -76,7 +76,7 @@ function addMoney_(map, currency, amount) {
   map[currency] = round2_((map[currency] || 0) + amount);
 }
 
-/** Live usage rows whose repair/maintenance still exists. */
+/** Live usage rows whose maintenance entry still exists. */
 function liveUsage_(carEntries, usageRows) {
   const liveEvents = {};
   carEntries.forEach(function (e) { liveEvents[e.id] = true; });
@@ -93,7 +93,7 @@ function usedQuantities_(usage, excludeEventId) {
   return used;
 }
 
-/** What a repair/maintenance cost, as { currency: amount }. */
+/** What a maintenance entry cost, as { currency: amount }. */
 function jobCost_(e, usage, purchasesById) {
   const out = {};
   if (e.cost_mode === 'lump') {
@@ -211,7 +211,7 @@ function getEntry_(p, ctx) {
     }
   }
   if (e.type === 'Issue') {
-    out.repairs = c.entries.filter(function (x) { return x.type === 'Repair' && x.linked_issue_id === e.id; })
+    out.fixedBy = c.entries.filter(function (x) { return x.type === 'Maintenance' && x.linked_issue_id === e.id; })
       .map(function (x) { return { id: x.id, title: x.title, date: x.date }; });
   }
   if (e.type === 'Purchase') {
@@ -280,7 +280,7 @@ function parseEntryInput_(f, type, car) {
     out.shipping_cost = parseMoney_(f.shippingCost);
     out.product_url = parseHttpsUrl_(f.productUrl, 'invalid_url');
   } else {
-    // Repair / Maintenance
+    // Maintenance
     out.cost_mode = oneOf_(f.costMode, ['itemised', 'lump'], 'itemised', 'invalid_cost_mode');
     out.lump_sum_cost = parseMoney_(f.lumpSumCost);
     out.labour_cost = parseMoney_(f.labourCost);
@@ -293,7 +293,7 @@ function parseEntryInput_(f, type, car) {
     out.lump_currency = costCurrency(out.lump_sum_cost, f.lumpCurrency);
     out.labour_currency = costCurrency(out.labour_cost, f.labourCurrency);
     out.other_currency = costCurrency(out.other_cost, f.otherCurrency);
-    out.linked_issue_id = type === 'Repair' ? cleanStr_(f.linkedIssueId, 64) : '';
+    out.linked_issue_id = cleanStr_(f.linkedIssueId, 64);
   }
   return out;
 }
@@ -339,14 +339,15 @@ function baseColumns_(ctx) {
 // ---------- saving ----------
 
 /**
- * Create (carId + type) or update (id + version) an entry. For a repair or maintenance, `parts` is the full
+ * Create (carId + type) or update (id + version) an entry. For a maintenance entry, `parts` is the full
  * list wanted: [{purchaseId, quantity}] to use stock, or [{name, quantity, unitCost, ...}] to buy-and-use.
- * Optional flags: resolveIssue (repair linked to an issue) and updateOdometer (raise the car's odometer).
+ * Optional flags: resolveIssue (maintenance linked to an issue) and updateOdometer (raise the car's odometer).
  */
 function saveEntry_(p, ctx) {
   let existing = null;
   let carId = cleanStr_(p.carId, 64);
   let type = cleanStr_(p.type, 20);
+  if (type === 'Repair') type = 'Maintenance'; // "Repair" was merged into Maintenance; an older open copy of the app may still send it
   if (p.id) {
     existing = findEntry_(cleanStr_(p.id, 64));
     if (!existing) fail_('not_found');
@@ -405,11 +406,11 @@ function saveEntry_(p, ctx) {
   if (isJob) applyParts_(row, plan, car, ctx);
 
   const extras = {};
-  if (type === 'Repair' && p.resolveIssue === true && input.linked_issue_id) {
+  if (type === 'Maintenance' && p.resolveIssue === true && input.linked_issue_id) {
     const issue = Db.all('Entries').filter(function (e) { return e.id === input.linked_issue_id; })[0];
     if (issue && issue.status !== 'Resolved') {
       Db.update('Entries', issue._row, { status: 'Resolved', updated_at: now, updated_by: ctx.user.id, version: Number(issue.version || 1) + 1 });
-      audit_(ctx.user, 'issue_status_changed', 'Entry', issue.id, 'Issue "' + issue.title + '": ' + issue.status + ' to Resolved (repair "' + input.title + '")');
+      audit_(ctx.user, 'issue_status_changed', 'Entry', issue.id, 'Issue "' + issue.title + '": ' + issue.status + ' to Resolved (maintenance "' + input.title + '")');
       extras.issueResolved = true;
     }
   }
@@ -505,7 +506,7 @@ function deleteEntry_(p, ctx) {
 
 /**
  * What a car has cost, per currency, counting every cost once. Purchases count on their purchase date;
- * labour, other costs and invoice totals on the repair/maintenance date; issue and compliance costs on their own dates.
+ * labour, other costs and invoice totals on the maintenance date; issue and compliance costs on their own dates.
  */
 function getCarCosts_(p, ctx) {
   const car = findCar_(cleanStr_(p.carId, 64), ctx.user.role === 'admin');

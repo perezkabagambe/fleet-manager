@@ -1,5 +1,5 @@
 // A car's history: the History and Costs cards, the "what do you want to add?" chooser,
-// the entry page, and the form for issues, repairs, maintenance, purchases and compliance.
+// the entry page, and the form for issues, maintenance, purchases and compliance.
 (function () {
   'use strict';
 
@@ -13,10 +13,8 @@
   var TYPES = {
     issue: { type: 'Issue', label: 'Issue', blurb: 'Something that is wrong or needs looking at.',
       examples: 'Faulty parking sensor · Warning light on · Strange noise when braking', placeholder: 'e.g. Faulty parking sensor' },
-    repair: { type: 'Repair', label: 'Repair', blurb: 'Something that was fixed or replaced.',
-      examples: 'Replaced front brake pads · Sensor replaced · Fixed exhaust leak', placeholder: 'e.g. Replaced front brake pads' },
-    maintenance: { type: 'Maintenance', label: 'Maintenance', blurb: 'Routine servicing and checks.',
-      examples: 'Oil and filter change · Tyre rotation · Coolant flush', placeholder: 'e.g. Oil and filter change' },
+    maintenance: { type: 'Maintenance', label: 'Maintenance', blurb: 'Servicing, checks, repairs and fixes.',
+      examples: 'Oil and filter change · Replaced front brake pads · Fixed exhaust leak', placeholder: 'e.g. Oil and filter change' },
     purchase: { type: 'Purchase', label: 'Purchased item', blurb: 'Parts or items you bought for this car.',
       examples: 'Front brake pads (set) · 2 × oil filter · 5 L 5W-30 engine oil', placeholder: 'e.g. Front brake pads (set)' },
     compliance: { type: 'Compliance', label: 'Compliance', blurb: 'Renewals and tests that must be kept up to date.',
@@ -24,7 +22,7 @@
   };
   var BY_TYPE = {};
   Object.keys(TYPES).forEach(function (k) { BY_TYPE[TYPES[k].type] = Object.assign({ key: k }, TYPES[k]); });
-  var PLURAL = { Issue: 'Issues', Repair: 'Repairs', Maintenance: 'Maintenance', Purchase: 'Purchases', Compliance: 'Compliance' };
+  var PLURAL = { Issue: 'Issues', Maintenance: 'Maintenance', Purchase: 'Purchases', Compliance: 'Compliance' };
 
   var CATEGORY_LABELS = {
     parts: 'Parts', labour: 'Labour', other: 'Other costs', invoices: 'Invoice totals',
@@ -65,7 +63,7 @@
   }
 
   function costText(e) {
-    if (e.type === 'Repair' || e.type === 'Maintenance') return moneyMap(e.jobCost);
+    if (e.type === 'Maintenance') return moneyMap(e.jobCost);
     if (e.type === 'Purchase') return fmt.money(e.total, e.currency);
     if ((e.type === 'Issue' || e.type === 'Compliance') && e.cost !== null && e.cost !== undefined) return fmt.money(e.cost, e.currency);
     return '';
@@ -166,7 +164,7 @@
     root.replaceChildren(el('section', { class: 'card' }, [fmt.loading()]));
     FleetApi.call('getCar', { id: carId }).then(function (r) {
       var car = r.data.car;
-      var cards = ['issue', 'repair', 'maintenance', 'purchase', 'compliance'].map(function (k) {
+      var cards = ['issue', 'maintenance', 'purchase', 'compliance'].map(function (k) {
         var t = TYPES[k];
         return el('a', { class: 'type-card', href: '#/car/' + carId + '/add/' + k }, [
           el('div', { class: 'type-name', text: t.label }),
@@ -237,7 +235,7 @@
       }
       if (e.type === 'Purchase' && d.stock) statusArea.append(el('span', { class: 'chip ' + (d.stock.status === 'In stock' ? 'active' : d.stock.status === 'Fitted' ? 'sold' : 'pending'), text: d.stock.status }));
 
-      var cards = [el('div', { class: 'copy-row' }, [UI.copyLinkButton(fmt.entryUrl(carId, e.id), { label: 'Copy link to this ' + BY_TYPE[e.type].label.toLowerCase() })]),
+      var cards = [el('div', { class: 'copy-row' }, [UI.copyLinkButton(fmt.entryUrl(carId, e.id), { label: 'Copy link to this entry' })]),
         el('section', { class: 'card' }, [
         fmt.backLink('#/car/' + carId, car.registration),
         el('div', { class: 'page-head' }, [el('div', {}, [el('h1', { text: e.title }), el('div', { class: 'muted', text: meta.join(' · ') })]), typeChip(e.type)]),
@@ -248,7 +246,7 @@
       ])];
 
       // type-specific details
-      if (e.type === 'Repair' || e.type === 'Maintenance') {
+      if (e.type === 'Maintenance') {
         var rows = [];
         if (d.linkedIssue) rows.push(el('p', {}, [el('span', { class: 'muted', text: 'Fixes issue: ' }), el('a', { href: '#/car/' + carId + '/entry/' + d.linkedIssue.id, text: d.linkedIssue.title + ' (' + d.linkedIssue.status + ')' })]));
         if (e.costMode === 'lump') {
@@ -276,11 +274,11 @@
         cards.push(el('section', { class: 'card' }, [
           el('h2', { text: 'Details' }),
           issueRows.length ? el('dl', { class: 'details' }, issueRows) : null,
-          d.repairs && d.repairs.length
-            ? el('div', {}, [el('div', { class: 'field-label', text: 'Repairs for this issue' })].concat(d.repairs.map(function (r) {
+          d.fixedBy && d.fixedBy.length
+            ? el('div', {}, [el('div', { class: 'field-label', text: 'Maintenance for this issue' })].concat(d.fixedBy.map(function (r) {
               return el('div', {}, [el('a', { href: '#/car/' + carId + '/entry/' + r.id, text: r.title + ' · ' + dateText(r.date) })]);
             })))
-            : el('p', { class: 'muted', text: 'No repairs linked to this issue yet.' }),
+            : el('p', { class: 'muted', text: 'No maintenance linked to this issue yet.' }),
         ]));
       } else if (e.type === 'Compliance') {
         cards.push(el('section', { class: 'card' }, [el('h2', { text: 'Details' }), el('dl', { class: 'details' }, [].concat(
@@ -358,6 +356,7 @@
     var carId = ctx.params.id;
     var eid = ctx.params.eid || '';
     var typeKey = (ctx.params.type || '').toLowerCase();
+    if (typeKey === 'repair') typeKey = 'maintenance'; // old links and bookmarks
     root.replaceChildren(el('section', { class: 'card' }, [fmt.loading()]));
     if (!eid && !TYPES[typeKey]) { fmt.notFound(root); return; }
 
@@ -374,7 +373,7 @@
       var existing = existingData ? existingData.entry : null;
       var type = existing ? existing.type : TYPES[typeKey].type;
       var meta = BY_TYPE[type];
-      var isJob = type === 'Repair' || type === 'Maintenance';
+      var isJob = type === 'Maintenance';
       var v = existing || {};
       var f = {};
       var msg = el('div');
@@ -520,13 +519,13 @@
         body = jobFields();
       }
 
-      // ----- repair / maintenance: parts, labour, other costs -----
+      // ----- maintenance: parts, labour, other costs -----
       function jobFields() {
         var out = [UI.field('Garage or who did the work', text('vendor', v.vendor, { maxlength: '80' }), 'Optional.'), mileageField()];
 
         var issueSelect = null;
         var resolveCheck = null;
-        if (type === 'Repair') {
+        {
           issueSelect = el('select', { name: 'linkedIssueId' }, [el('option', { value: '', text: 'Not linked to an issue' })].concat(
             lists.issues.map(function (i) { return el('option', { value: i.id, text: i.title + ' (' + i.status + ')', selected: i.id === v.linkedIssueId }); })));
           f.linkedIssueId = issueSelect;
@@ -734,7 +733,7 @@
           'mileageUnit', 'labourCurrency', 'otherCurrency', 'lumpCurrency'].forEach(function (k) {
           if (f[k]) fields[k] = f[k].value;
         });
-        // the entry's main currency: for a repair/maintenance it follows the labour (or the invoice total)
+        // the entry's main currency: for maintenance it follows the labour (or the invoice total)
         fields.currency = isJob ? (f.modeLump.checked ? f.lumpCurrency.value : f.labourCurrency.value) : currencySelect.value;
         if (isJob) fields.costMode = f.modeLump.checked ? 'lump' : 'itemised';
         return fields;
@@ -768,7 +767,7 @@
               ? { purchaseId: r.purchaseId, quantity: r.quantity }
               : { name: r.name, quantity: r.quantity, unitCost: r.unitCost, shippingCost: r.shippingCost, partNumber: r.partNumber, vendor: r.vendor, currency: r.currency };
           });
-          if (type === 'Repair' && f.resolve && f.linkedIssueId.value) payload.resolveIssue = f.resolve.checked;
+          if (f.resolve && f.linkedIssueId.value) payload.resolveIssue = f.resolve.checked;
         }
         if (f.mileage && !odoRow.hidden && odoCheck.checked) payload.updateOdometer = true;
         if (taskSelect && taskSelect.value && !taskSelect.disabled) payload.taskId = taskSelect.value;
@@ -797,7 +796,7 @@
 
       root.replaceChildren(el('section', { class: 'card' }, [
         fmt.backLink(existing ? '#/car/' + car.id + '/entry/' + existing.id : '#/car/' + car.id + '/add', existing ? existing.title : 'Add an entry'),
-        el('h1', { text: existing ? 'Edit ' + meta.label.toLowerCase() : 'Add ' + (type === 'Purchase' ? 'a purchased item' : 'a ' + meta.label.toLowerCase()) }),
+        el('h1', { text: existing ? 'Edit ' + meta.label.toLowerCase() : 'Add ' + (type === 'Purchase' ? 'a purchased item' : type === 'Maintenance' ? 'maintenance' : 'a ' + meta.label.toLowerCase()) }),
         el('p', { class: 'muted', text: car.registration + ' · ' + car.make + ' ' + car.model + '. ' + meta.blurb }),
         msg, form,
       ]));
