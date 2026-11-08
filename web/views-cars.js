@@ -293,7 +293,11 @@
         ]);
       });
 
+      var editTop = el('a', { class: 'btn block big edit-top', href: '#/car/' + car.id + '/edit', text: 'Edit car' });
+      var editBottom = el('a', { class: 'btn block big edit-bottom', href: '#/car/' + car.id + '/edit', text: 'Edit car' });
+
       root.replaceChildren(
+        editTop,
         el('section', { class: 'card' }, [
           backLink('#/', 'Fleet'),
           el('div', { class: 'page-head' }, [
@@ -307,7 +311,6 @@
           photo(car, 'big', 'full'),
           el('div', { class: 'btn-row' }, [photoPicker.take, photoPicker.choose, removePhotoBtn]),
           photoStatus,
-          el('a', { class: 'btn block big edit-main', href: '#/car/' + car.id + '/edit', text: 'Edit car' }),
           deleteBtn ? el('div', { class: 'btn-row' }, [deleteBtn]) : null,
         ]),
         el('section', { class: 'card' }, [
@@ -338,7 +341,8 @@
         el('section', { class: 'card muted' }, [
           el('p', { text: 'Issues, repairs, maintenance and costs for this car are coming in the next phases.' }),
           el('p', { class: 'small-text', text: 'Last changed ' + fmtDate(car.updatedAt) }),
-        ])
+        ]),
+        editBottom
       );
     }
   };
