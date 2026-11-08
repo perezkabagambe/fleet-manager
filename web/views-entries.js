@@ -56,6 +56,14 @@
     if (entries && entries.length) lastCurrency[carId] = entries[0].currency; // newest first
   };
 
+  // A reading is shown in the car's own unit. If it was entered in the other unit, the original is shown in brackets.
+  function mileageText(e, car) {
+    var carUnit = car.distanceUnit || 'mi';
+    var unit = e.mileageUnit || carUnit;
+    if (unit === carUnit) return fmt.num(e.mileage) + ' ' + carUnit;
+    return fmt.num(fmt.convertDistance(e.mileage, unit, carUnit)) + ' ' + carUnit + ' (' + fmt.num(e.mileage) + ' ' + unit + ')';
+  }
+
   function costText(e) {
     if (e.type === 'Repair' || e.type === 'Maintenance') return moneyMap(e.jobCost);
     if (e.type === 'Purchase') return fmt.money(e.total, e.currency);
@@ -72,7 +80,7 @@
 
     function row(e) {
       var meta = [dateText(e.date)];
-      if (e.mileage !== null) meta.push(fmt.num(e.mileage) + ' ' + (e.mileageUnit || car.distanceUnit));
+      if (e.mileage !== null) meta.push(mileageText(e, car));
       if (e.vendor) meta.push(e.vendor);
       var tags = [];
       if (e.type === 'Issue') tags.push(el('span', { class: 'chip st-' + e.status.toLowerCase().replace(/[^a-z]/g, ''), text: e.status }));
@@ -196,7 +204,7 @@
 
       // header
       var meta = [dateText(e.date)];
-      if (e.mileage !== null) meta.push(fmt.num(e.mileage) + ' ' + (e.mileageUnit || car.distanceUnit));
+      if (e.mileage !== null) meta.push(mileageText(e, car));
       if (e.vendor) meta.push(e.vendor);
       var deleteBtn = null;
       if (FleetAuth.isAdmin()) {
@@ -403,14 +411,21 @@
       // mileage (not for purchases), with an offer to update the car's odometer
       var odoCheck = el('input', { type: 'checkbox' });
       odoCheck.checked = true;
-      var odoRow = el('label', { class: 'check', hidden: true }, [odoCheck, el('span', { text: 'Update the car\'s odometer to this reading' })]);
+      var odoText = el('span', { text: 'Update the car\'s odometer to this reading' });
+      var odoRow = el('label', { class: 'check', hidden: true }, [odoCheck, odoText]);
       function mileageField() {
         var m = text('mileage', v.mileage === null || v.mileage === undefined ? '' : v.mileage, { inputmode: 'numeric', id: 'f-mileage' });
         var carUnit = car.distanceUnit || 'mi';
         var unit = select('mileageUnit', [['mi', 'Miles'], ['km', 'Kilometres']], (existing && existing.mileageUnit) || carUnit);
         unit.setAttribute('aria-label', 'Distance unit');
-        // The car's odometer is only offered an update when the reading is in the car's own unit (nothing is converted behind your back).
-        function check() { odoRow.hidden = !(unit.value === carUnit && num0(m.value) > Number(car.odometer || 0)); }
+        // The car's odometer is offered a rise whatever unit the reading is in; a reading in the other unit is converted for the car.
+        function check() {
+          var reading = num0(m.value);
+          var converted = fmt.convertDistance(reading, unit.value, carUnit);
+          odoRow.hidden = !(reading > 0 && converted > Number(car.odometer || 0));
+          odoText.textContent = 'Update the car\'s odometer to ' + fmt.num(converted) + ' ' + carUnit +
+            (unit.value !== carUnit ? ' (converted from ' + fmt.num(reading) + ' ' + unit.value + ')' : '');
+        }
         m.addEventListener('input', check);
         unit.addEventListener('change', check);
         check();

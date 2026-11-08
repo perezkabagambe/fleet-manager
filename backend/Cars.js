@@ -10,6 +10,14 @@ const CURRENCIES = ['GBP', 'UGX', 'USD', 'KES', 'EUR'];
 const DISTANCE_UNITS = ['mi', 'km'];
 const CAR_STATUSES = ['Active', 'Sold', 'Scrapped', 'Off-road'];
 const MAX_ODOMETER = 9999999;
+const KM_PER_MILE = 1.609344;
+
+/** Convert a distance between 'mi' and 'km', rounded to a whole number. Currencies are never converted. */
+function convertDistance_(value, from, to) {
+  const n = Number(value);
+  if (!isFinite(n) || from === to) return n;
+  return Math.round(from === 'mi' ? n * KM_PER_MILE : n / KM_PER_MILE);
+}
 
 function summarizeCar_(c) {
   return {
@@ -246,7 +254,12 @@ function saveCar_(p, ctx) {
   const input = parseCarInput_(p.fields || {}, existing);
   const dupes = findDuplicates_(input, existing ? existing.id : '');
   if (dupes.length && !p.force) return { saved: false, warnings: dupes };
-  checkOdometer_(existing, input.current_odometer, p, ctx);
+  // If the car's unit is being switched, compare the new reading with the old one converted into the new unit.
+  const oldUnit = existing ? (existing.distance_unit || 'mi') : input.distance_unit;
+  const comparable = existing && oldUnit !== input.distance_unit && existing.current_odometer !== ''
+    ? Object.assign({}, existing, { current_odometer: String(convertDistance_(existing.current_odometer, oldUnit, input.distance_unit)) })
+    : existing;
+  checkOdometer_(comparable, input.current_odometer, p, ctx);
 
   const now = nowIso_();
   if (!existing) {

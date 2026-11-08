@@ -96,8 +96,17 @@
   }
   function carUrl(id) { return (cfg.siteUrl || location.origin + location.pathname) + '#/car/' + id; }
 
+  // Miles <-> kilometres, rounded to a whole number. (Money is never converted.) Same maths as the server.
+  var KM_PER_MILE = 1.609344;
+  function convertDistance(value, from, to) {
+    var n = Number(value);
+    if (!isFinite(n) || from === to) return n;
+    return Math.round(from === 'mi' ? n * KM_PER_MILE : n / KM_PER_MILE);
+  }
+
   // Shared with the entry screens.
   Views.fmt = {
+    convertDistance: convertDistance,
     money: money, date: fmtDate, num: num, hostOf: hostOf, chip: chip, loading: loading, backLink: backLink,
     notFound: notFound, currencyOptions: CURRENCY_OPTIONS,
   };
@@ -479,10 +488,20 @@
         var odo = text('odometer', v.odometer === null || v.odometer === undefined ? '' : v.odometer, { inputmode: 'numeric', id: 'f-odometer' });
         var unit = select('distanceUnit', [['mi', 'Miles'], ['km', 'Kilometres']], v.distanceUnit);
         unit.setAttribute('aria-label', 'Distance unit');
+        // Switching the unit converts the number for you. It always converts from what was last typed, so flipping back and forth never drifts.
+        var base = { unit: v.distanceUnit, value: odo.value };
+        var note = el('div', { class: 'hint', text: 'Whole number. If you switch the unit, the number is converted for you.' });
+        odo.addEventListener('input', function () { base = { unit: unit.value, value: odo.value }; note.textContent = 'Whole number. If you switch the unit, the number is converted for you.'; });
+        unit.addEventListener('change', function () {
+          var n = Number(String(base.value).replace(/[,\s]/g, ''));
+          if (String(base.value).trim() === '' || !isFinite(n)) return;
+          odo.value = String(convertDistance(n, base.unit, unit.value));
+          note.textContent = unit.value === base.unit ? 'Whole number.' : 'Converted from ' + num(n) + ' ' + base.unit + '.';
+        });
         return el('div', { class: 'field' }, [
           el('label', { for: 'f-odometer', text: 'Current odometer' }),
           el('div', { class: 'odo-row' }, [odo, unit]),
-          el('div', { class: 'hint', text: 'Whole number. Changing the unit does not convert the number.' }),
+          note,
         ]);
       }
 

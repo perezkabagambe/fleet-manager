@@ -464,14 +464,36 @@ test('a reading carries its own unit (miles or km), defaulting to the car\'s', (
   assert.equal(add('Issue', issue({ mileage: '5', mileageUnit: 'furlongs' })).error, 'invalid_unit');
 });
 
-test('the odometer is only raised when the reading is in the car\'s own unit', () => {
+test('a reading in the other unit is converted into the car\'s unit when it raises the odometer', () => {
   const { env, sam, car, add } = setup();
   const odo = () => env.call('getCar', { token: sam, id: car.id }).data.car.odometer;
-  // 90000 km would be about 55,900 miles, but we never convert silently
-  assert.equal(add('Issue', issue({ mileage: '90000', mileageUnit: 'km' }), { updateOdometer: true }).data.odometerUpdated, undefined);
+  // the car is in miles at 50,000. 90,000 km is 55,923 miles (rounded)
+  assert.equal(add('Issue', issue({ mileage: '90000', mileageUnit: 'km' })).data.odometerUpdated, undefined, 'not unless asked');
   assert.equal(odo(), 50000);
-  assert.equal(add('Issue', issue({ mileage: '52000', mileageUnit: 'mi' }), { updateOdometer: true }).data.odometerUpdated, true);
-  assert.equal(odo(), 52000);
+  assert.equal(add('Issue', issue({ mileage: '90000', mileageUnit: 'km' }), { updateOdometer: true }).data.odometerUpdated, true);
+  assert.equal(odo(), 55923);
+  // 40,000 km is about 24,855 miles: lower than the odometer, so it is left alone
+  assert.equal(add('Issue', issue({ mileage: '40000', mileageUnit: 'km' }), { updateOdometer: true }).data.odometerUpdated, undefined);
+  assert.equal(odo(), 55923);
+  // a reading already in the car's unit works as before
+  assert.equal(add('Issue', issue({ mileage: '56000', mileageUnit: 'mi' }), { updateOdometer: true }).data.odometerUpdated, true);
+  assert.equal(odo(), 56000);
+  // the entry itself keeps what was typed
+  const e = add('Issue', issue({ mileage: '100000', mileageUnit: 'km' })).data.entry;
+  assert.equal(e.mileage, 100000);
+  assert.equal(e.mileageUnit, 'km');
+  assert.ok(env.sheets.Audit._rows.slice(1).some((r) => /converted from 90000 km/.test(r[6])));
+});
+
+test('distance conversion is exact enough, symmetric on whole numbers, and never touches money', () => {
+  const { env } = setup();
+  const conv = vm.runInContext('convertDistance_', env.ctx);
+  assert.equal(conv(50000, 'mi', 'km'), 80467);
+  assert.equal(conv(80467, 'km', 'mi'), 50000);
+  assert.equal(conv(131000, 'km', 'mi'), 81400);
+  assert.equal(conv(100, 'mi', 'mi'), 100);
+  assert.equal(conv(0, 'km', 'mi'), 0);
+  assert.ok(Number.isNaN(conv('abc', 'km', 'mi')));
 });
 
 test('labour, other costs and an invoice total each keep their own currency', () => {

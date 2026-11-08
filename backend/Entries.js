@@ -399,12 +399,18 @@ function saveEntry_(p, ctx) {
       extras.issueResolved = true;
     }
   }
+  // The reading may be in the other unit (km on a miles car): convert it into the car's unit.
   const carUnit = car.distance_unit || 'mi';
-  if (p.updateOdometer === true && input.mileage !== '' && (input.mileage_unit || carUnit) === carUnit && Number(input.mileage) > Number(car.current_odometer || 0)) {
-    const patch = touch_(car, ctx, { current_odometer: input.mileage, odometer_updated_at: now });
-    Db.update('Cars', car._row, patch);
-    audit_(ctx.user, 'odometer_updated', 'Car', car.id, car.registration + ': ' + (car.current_odometer || 'not set') + ' to ' + input.mileage + ' (from ' + type.toLowerCase() + ')');
-    extras.odometerUpdated = true;
+  if (p.updateOdometer === true && input.mileage !== '') {
+    const readingUnit = input.mileage_unit || carUnit;
+    const reading = convertDistance_(input.mileage, readingUnit, carUnit);
+    if (reading > Number(car.current_odometer || 0)) {
+      const patch = touch_(car, ctx, { current_odometer: String(reading), odometer_updated_at: now });
+      Db.update('Cars', car._row, patch);
+      audit_(ctx.user, 'odometer_updated', 'Car', car.id, car.registration + ': ' + (car.current_odometer || 'not set') + ' to ' + reading + ' ' + carUnit +
+        (readingUnit !== carUnit ? ' (converted from ' + input.mileage + ' ' + readingUnit + ')' : '') + ' (from ' + type.toLowerCase() + ')');
+      extras.odometerUpdated = true;
+    }
   }
   return Object.assign({ entry: summarizeEntry_(row) }, extras);
 }

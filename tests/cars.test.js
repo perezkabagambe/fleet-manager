@@ -277,6 +277,23 @@ test('lowering the odometer through the edit form follows the same rule', () => 
   assert.equal(r.error, 'odometer_lower');
 });
 
+test('switching a car between miles and km converts the odometer, and the check compares like with like', () => {
+  const { env, sam } = setup();
+  const car = addCar(env, sam, { odometer: '50000', distanceUnit: 'mi' }).data.car;
+  const save = (version, fields) => env.call('saveCar', { token: sam, id: car.id, version, fields: Object.assign({}, CAR, fields) });
+  // miles -> km: the form sends the converted figure (50,000 mi = 80,467 km); it must not look like a drop
+  let r = save(1, { odometer: '80467', distanceUnit: 'km' });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.car.odometer, 80467);
+  assert.equal(r.data.car.distanceUnit, 'km');
+  // switching back needs a figure that is not lower than the same distance in the old unit (80,467 km is about 50,000 mi)
+  assert.equal(save(2, { odometer: '40000', distanceUnit: 'mi' }).error, 'odometer_lower', '40,000 mi is below 80,467 km');
+  r = save(2, { odometer: '50000', distanceUnit: 'mi' });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.car.odometer, 50000);
+  assert.equal(r.data.car.distanceUnit, 'mi');
+});
+
 // ---------- delete / restore ----------
 
 test('admin deletes a car (soft) and can restore it; users never see deleted cars', () => {
