@@ -11,6 +11,28 @@
     'Coolant', 'Brake fluid', 'Power steering fluid', 'Washer fluid', 'AC refrigerant',
   ];
 
+  // Greyed-out examples shown in an empty Specification / Capacity box. They are
+  // only suggestions of a typical standard for that kind of fluid, never saved.
+  // Order matters: the first pattern that matches the fluid name wins.
+  var FLUID_HINTS = [
+    [/transfer/i, { spec: 'e.g. 75W-90 API GL-4', cap: 'e.g. 1 L' }],
+    [/differential|diff\b/i, { spec: 'e.g. 75W-90 API GL-5', cap: 'e.g. 1.2 L' }],
+    [/engine|motor oil/i, { spec: 'e.g. 5W-30 ACEA C3', cap: 'e.g. 5.5 L' }],
+    [/gearbox|transmission|\batf\b|gear oil/i, { spec: 'e.g. ATF Dexron VI, or 75W-80 GL-4', cap: 'e.g. 7 L' }],
+    [/coolant|antifreeze/i, { spec: 'e.g. OAT coolant (G12+), 50/50', cap: 'e.g. 8 L' }],
+    [/brake|clutch/i, { spec: 'e.g. DOT 4', cap: 'e.g. 1 L' }],
+    [/steering/i, { spec: 'e.g. ATF Dexron III, or CHF 11S', cap: 'e.g. 1 L' }],
+    [/washer|screen/i, { spec: 'e.g. screenwash, ready mixed', cap: 'e.g. 3 L' }],
+    [/refrigerant|a\/c|\bac\b|air con/i, { spec: 'e.g. R134a or R1234yf', cap: 'e.g. 450 g' }],
+  ];
+  var FLUID_HINT_DEFAULT = { spec: 'e.g. grade or standard', cap: 'e.g. 1 L' };
+  function fluidHint(name) {
+    for (var i = 0; i < FLUID_HINTS.length; i++) {
+      if (FLUID_HINTS[i][0].test(name || '')) return FLUID_HINTS[i][1];
+    }
+    return FLUID_HINT_DEFAULT;
+  }
+
   var carsCache = null; // last fleet list: shown instantly while a fresh copy loads
 
   // ---------- helpers ----------
@@ -357,18 +379,29 @@
       var datalist = el('datalist', { id: 'fluid-names' }, FLUID_TEMPLATE.map(function (n) { return el('option', { value: n }); }));
 
       function rowEl(row, i) {
-        function inp(key, label, attrs) {
+        function inp(key, attrs) {
           var input = el('input', Object.assign({ type: 'text', value: row[key] || '', autocomplete: 'off' }, attrs || {}));
           input.addEventListener('input', function () { row[key] = input.value; });
-          return UI.field(label, input);
+          return input;
         }
+        var fluidIn = inp('fluid', { list: 'fluid-names', maxlength: '40' });
+        var specIn = inp('specification', { maxlength: '120' });
+        var capIn = inp('capacity', { maxlength: '40' });
+        // The examples follow the fluid name, so a differential oil never suggests an engine oil grade.
+        function showHints() {
+          var h = fluidHint(fluidIn.value);
+          specIn.placeholder = h.spec;
+          capIn.placeholder = h.cap;
+        }
+        fluidIn.addEventListener('input', showHints);
+        showHints();
         var remove = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
         remove.addEventListener('click', function () { rows.splice(i, 1); draw(); });
         return el('div', { class: 'fluid-edit' }, [
-          inp('fluid', 'Fluid', { list: 'fluid-names', maxlength: '40' }),
-          inp('specification', 'Specification', { maxlength: '120', placeholder: 'e.g. 5W-30 ACEA C2' }),
-          inp('capacity', 'Capacity', { maxlength: '40', placeholder: 'e.g. 6.5 L' }),
-          inp('notes', 'Notes', { maxlength: '200' }),
+          UI.field('Fluid', fluidIn),
+          UI.field('Specification', specIn),
+          UI.field('Capacity', capIn),
+          UI.field('Notes', inp('notes', { maxlength: '200' })),
           remove,
         ]);
       }
