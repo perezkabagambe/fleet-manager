@@ -390,3 +390,9 @@ input[type="date"] {
 .entry-title { margin: 0 0 2px; }
 .entry-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
 .entry-tags { flex: 0 1 auto; max-width: 46%; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px; margin: 0; }
+
+/* ---------- reminders ---------- */
+.chip.s-overdue { color: var(--bad); border-color: var(--bad); font-weight: 700; }
+.chip.s-due_soon { color: var(--warn-text); background: var(--warn-bg); border-color: transparent; }
+.chip.s-ok { color: var(--ok); border-color: var(--ok); }
+.chip.s-paused { color: var(--muted); }

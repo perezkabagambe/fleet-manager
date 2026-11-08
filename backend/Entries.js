@@ -123,6 +123,7 @@ function summarizeEntry_(e) {
     cost: numOrNull_(e.cost), expiryDate: e.expiry_date || '',
     partNumber: e.part_number, quantity: numOrNull_(e.quantity), unitCost: numOrNull_(e.unit_cost),
     shippingCost: numOrNull_(e.shipping_cost), productUrl: e.product_url,
+    taskId: e.task_id || '',
     version: Number(e.version || 1), createdBy: e.created_by, createdAt: e.created_at, updatedAt: e.updated_at,
   };
 }
@@ -194,6 +195,11 @@ function getEntry_(p, ctx) {
   out.attachments = Db.all('Attachments')
     .filter(function (a) { return a.entry_id === e.id && !isTrue_(a.deleted); })
     .map(function (a) { return { id: a.id, filename: a.filename, mime: a.mime, size: Number(a.size || 0) }; });
+
+  if (e.task_id) {
+    const t = findTask_(e.task_id);
+    if (t) out.reminder = { id: t.id, name: t.name };
+  }
 
   if (JOB_TYPES.indexOf(e.type) !== -1) {
     out.parts = c.usage.filter(function (u) { return u.event_id === e.id; })
@@ -364,6 +370,14 @@ function saveEntry_(p, ctx) {
   }
   const plan = isJob ? planParts_(p.parts || [], car, input.date, input.currency, existing ? existing.id : '', c) : null;
 
+  // A maintenance entry can be logged against a reminder; a compliance renewal keeps one for its expiry date.
+  let linkedTask = null;
+  const taskId = cleanStr_(p.taskId, 64);
+  if (taskId && (type === 'Maintenance' || type === 'Compliance')) {
+    linkedTask = findTask_(taskId);
+    if (!linkedTask || linkedTask.car_id !== car.id) fail_('not_found');
+  }
+
   if (type === 'Purchase' && existing) {
     const used = c.used[existing.id] || 0;
     if (Number(input.quantity) < used - 1e-9) fail_('quantity_below_used');
@@ -409,8 +423,23 @@ function saveEntry_(p, ctx) {
       Db.update('Cars', car._row, patch);
       audit_(ctx.user, 'odometer_updated', 'Car', car.id, car.registration + ': ' + (car.current_odometer || 'not set') + ' to ' + reading + ' ' + carUnit +
         (readingUnit !== carUnit ? ' (converted from ' + input.mileage + ' ' + readingUnit + ')' : '') + ' (from ' + type.toLowerCase() + ')');
+      car.current_odometer = String(reading); // so the reminder below is worded from the new reading
       extras.odometerUpdated = true;
     }
+  }
+
+  let updatedTask = null;
+  if (type === 'Maintenance' && linkedTask && !existing) {
+    updatedTask = completeTask_(linkedTask, car, { date: input.date, mileage: input.mileage, unit: input.mileage_unit }, ctx);
+  } else if (type === 'Compliance' && input.expiry_date) {
+    updatedTask = ensureComplianceTask_(row, car, ctx, linkedTask);
+  }
+  if (updatedTask) {
+    const stored = Db.all('Entries').filter(function (e) { return e.id === row.id; })[0];
+    if (stored && stored.task_id !== updatedTask.id) Db.update('Entries', stored._row, { task_id: updatedTask.id });
+    row.task_id = updatedTask.id; // so the entry returned to the app already carries its reminder
+    const d = describeTask_(updatedTask, car, todayIso_());
+    extras.reminder = { id: updatedTask.id, name: updatedTask.name, status: d.status, text: d.text };
   }
   return Object.assign({ entry: summarizeEntry_(row) }, extras);
 }

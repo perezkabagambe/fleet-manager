@@ -303,6 +303,7 @@
           odoForm,
         ]),
         EntryUI.historyCard(car),
+        RemindersUI.card(car),
         el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids and specs' }),
           fluids.length ? el('ul', { class: 'fluids' }, fluidRows) : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' }),

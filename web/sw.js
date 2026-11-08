@@ -19,6 +19,7 @@ const SHELL = [
   'views-cars.js',
   'views-people.js',
   'views-entries.js',
+  'views-reminders.js',
   'app.js',
   'manifest.webmanifest',
   'icons/icon.svg',

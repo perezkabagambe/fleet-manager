@@ -45,6 +45,16 @@ http.createServer((req, res) => {
     res.end();
     return;
   }
+  if (url === '/__outbox') { // the emails the backend would have sent, for checking them by eye
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(env.outbox));
+    return;
+  }
+  if (url === '/__reminders') { // pretend it is Monday morning: run the weekly job now
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ sent: env.ctx.sendWeeklyReminders() }));
+    return;
+  }
   if (url === '/sw.js') { res.writeHead(404); res.end(); return; } // no service worker while testing
   if (url === '/config.js') {
     const src = fs.readFileSync(path.join(WEB, 'config.js'), 'utf8')

@@ -47,7 +47,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8; // 8: no new columns, but the migration now also creates the weekly reminder trigger
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
@@ -62,6 +62,7 @@ function migrateIfNeeded_() {
   try {
     if (props.getProperty('SCHEMA_VERSION') === String(SCHEMA_VERSION)) return;
     ensureSchema_(SpreadsheetApp.openById(props.getProperty('DB_ID')));
+    ensureReminderTrigger_();
     props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   } finally {
     lock.releaseLock();
@@ -118,6 +119,7 @@ function setup() {
   // 6. Secret salt for hashing tokens, and the trigger that writes the text event log
   salt_();
   ensureTrigger_('flushTextLog', 10);
+  ensureReminderTrigger_();
 
   Logger.log('Setup complete.\nDB: ' + ss.getUrl() + '\nRoot folder: ' + root.getUrl());
 }

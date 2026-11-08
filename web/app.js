@@ -65,7 +65,9 @@
       r.params.userId = m[1];
       view = FleetAuth.isAdmin() ? Views.userCars : viewForbidden;
     } else if (r.path === '/car/new') view = Views.carForm;
-    else if ((m = /^\/car\/([0-9a-f-]{8,40})\/add$/.exec(r.path))) { r.params.id = m[1]; view = Views.chooseEntry; }
+    else if ((m = /^\/car\/([0-9a-f-]{8,40})\/reminder\/(new|[0-9a-f-]{8,40})$/.exec(r.path))) {
+      r.params.id = m[1]; r.params.tid = m[2] === 'new' ? '' : m[2]; view = Views.reminderForm;
+    } else if ((m = /^\/car\/([0-9a-f-]{8,40})\/add$/.exec(r.path))) { r.params.id = m[1]; view = Views.chooseEntry; }
     else if ((m = /^\/car\/([0-9a-f-]{8,40})\/add\/(issue|repair|maintenance|purchase|compliance)$/.exec(r.path))) {
       r.params.id = m[1]; r.params.type = m[2]; view = Views.entryForm;
     } else if ((m = /^\/car\/([0-9a-f-]{8,40})\/entry\/([0-9a-f-]{8,40})(\/edit)?$/.exec(r.path))) {

@@ -239,6 +239,7 @@
         fmt.backLink('#/car/' + carId, car.registration),
         el('div', { class: 'page-head' }, [el('div', {}, [el('h1', { text: e.title }), el('div', { class: 'muted', text: meta.join(' · ') })]), typeChip(e.type)]),
         msg, statusArea,
+        d.reminder ? el('p', { class: 'muted small-text' }, [el('span', { text: 'Reminder: ' }), el('a', { href: '#/car/' + carId + '/reminder/' + d.reminder.id, text: d.reminder.name })]) : null,
         el('a', { class: 'btn block big edit-top', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit ' + BY_TYPE[e.type].label.toLowerCase() }),
         deleteBtn ? el('div', { class: 'btn-row' }, [deleteBtn]) : null,
       ])];
@@ -357,16 +358,16 @@
     root.replaceChildren(el('section', { class: 'card' }, [fmt.loading()]));
     if (!eid && !TYPES[typeKey]) { fmt.notFound(root); return; }
 
-    var calls = [FleetApi.call('getCar', { id: carId }), FleetApi.call('listPurchases', { carId: carId, eventId: eid })];
+    var calls = [FleetApi.call('getCar', { id: carId }), FleetApi.call('listPurchases', { carId: carId, eventId: eid }), FleetApi.call('listTasks', { carId: carId })];
     if (eid) calls.push(FleetApi.call('getEntry', { id: eid }));
     Promise.all(calls).then(function (res) {
-      build(res[0].data.car, res[1].data, res[2] ? res[2].data : null);
+      build(res[0].data.car, res[1].data, res[3] ? res[3].data : null, res[2].data.tasks);
     }).catch(function (e) {
       if (e.code === 'not_found') fmt.notFound(root);
       else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e))]));
     });
 
-    function build(car, lists, existingData) {
+    function build(car, lists, existingData, tasks) {
       var existing = existingData ? existingData.entry : null;
       var type = existing ? existing.type : TYPES[typeKey].type;
       var meta = BY_TYPE[type];
@@ -408,8 +409,22 @@
 
       // ----- common fields -----
       var sections = [];
+      // A maintenance entry can be logged against a reminder (from the email link, or picked here); a renewal can name the one it renews.
+      var taskSelect = null;
+      var preTask = null;
+      if (type === 'Maintenance' || type === 'Compliance') {
+        var wanted = type === 'Maintenance' ? 'maintenance' : 'compliance';
+        var choices = tasks.filter(function (t) { return t.kind === wanted; });
+        var chosenId = existing ? existing.taskId : (ctx.query.task || '');
+        preTask = choices.filter(function (t) { return t.id === chosenId; })[0] || null;
+        taskSelect = el('select', { name: 'taskId' }, [el('option', { value: '', text: type === 'Maintenance' ? 'Not linked to a reminder' : 'None of these' })].concat(
+          choices.map(function (t) { return el('option', { value: t.id, text: t.name + ' (' + t.text + ')', selected: preTask && t.id === preTask.id }); })));
+        // a finished maintenance entry has already moved its reminder on; it is not moved again by editing
+        if (existing && type === 'Maintenance') taskSelect.disabled = true;
+        f.taskId = taskSelect;
+      }
       var top = [
-        UI.field(type === 'Purchase' ? 'Item *' : 'Title *', text('title', v.title, { maxlength: '120', placeholder: meta.placeholder, required: true })),
+        UI.field(type === 'Purchase' ? 'Item *' : 'Title *', text('title', v.title || (preTask ? preTask.name : ''), { maxlength: '120', placeholder: meta.placeholder, required: true })),
         UI.field(type === 'Compliance' ? 'Date done or paid *' : 'Date *', text('date', v.date || isoToday(), { type: 'date', max: isoToday(), required: true })),
       ];
 
@@ -439,6 +454,16 @@
           el('div', { class: 'odo-row' }, [m, unit]),
           odoRow,
         ]);
+      }
+
+      if (taskSelect) {
+        top.push(UI.field('Reminder', taskSelect, type === 'Maintenance'
+          ? 'Optional. Logging this moves that reminder on: its next due date and distance are worked out from this entry.'
+          : 'Optional. Pick the reminder this renews. If you set a new expiry date below, a reminder is kept for it automatically.'));
+        taskSelect.addEventListener('change', function () {
+          var t = tasks.filter(function (x) { return x.id === taskSelect.value; })[0];
+          if (t && !f.title.value.trim()) f.title.value = t.name;
+        });
       }
 
       var body = [];
@@ -713,6 +738,8 @@
       }
 
       var state = { entryId: existing ? existing.id : '', version: existing ? existing.version : 0 };
+      var reminderNote = '';
+      var uploadFailed = false;
 
       function uploadStaged(entryId) {
         var i = 0;
@@ -722,6 +749,7 @@
           return Photos.prepareAttachment(s.file).then(function (a) {
             return FleetApi.call('uploadAttachment', { entryId: entryId, mime: a.mime, data: a.data, filename: a.filename });
           }).then(function () { i++; return next(); }, function (e) {
+            uploadFailed = true;
             FleetApp.setFlash('error', 'The entry was saved, but "' + s.name + '" could not be attached: ' + UI.errorText(e) + ' You can add it with Edit.');
           });
         }
@@ -740,13 +768,18 @@
           if (type === 'Repair' && f.resolve && f.linkedIssueId.value) payload.resolveIssue = f.resolve.checked;
         }
         if (f.mileage && !odoRow.hidden && odoCheck.checked) payload.updateOdometer = true;
+        if (taskSelect && taskSelect.value && !taskSelect.disabled) payload.taskId = taskSelect.value;
         return FleetApi.call('saveEntry', payload).then(function (r) {
           var entry = r.data.entry;
+          reminderNote = r.data.reminder ? 'Reminder "' + r.data.reminder.name + '" is now ' + r.data.reminder.text + '.' : '';
           state.entryId = entry.id;
           state.version = entry.version;
           Views.invalidateCars();
           lastCurrency[car.id] = entry.currency;
-          return uploadStaged(entry.id).then(function () { FleetApp.go('/car/' + car.id + '/entry/' + entry.id); });
+          return uploadStaged(entry.id).then(function () {
+            if (reminderNote && !uploadFailed) FleetApp.setFlash('ok', reminderNote);
+            FleetApp.go('/car/' + car.id + '/entry/' + entry.id);
+          });
         });
       }
 

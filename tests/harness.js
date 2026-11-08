@@ -8,7 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const BACKEND = path.join(__dirname, '..', 'backend');
-const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'People.js', 'Photos.js', 'Entries.js', 'Attachments.js', 'Code.js', 'Version.js', 'Setup.js'];
+const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'People.js', 'Photos.js', 'Entries.js', 'Attachments.js', 'Tasks.js', 'Reminders.js', 'Code.js', 'Version.js', 'Setup.js'];
 
 function makeSheet(header) {
   const rows = [header.slice()];
@@ -58,6 +58,7 @@ function createEnv() {
   const files = {};
   const state = { tokeninfo: null, mailQuota: 100 };
   const folders = {};
+  const triggers = [];
   let folderCount = 0;
   const toSigned = (buf) => Array.from(buf).map((b) => (b > 127 ? b - 256 : b));
 
@@ -115,6 +116,18 @@ function createEnv() {
       }),
     },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    ScriptApp: {
+      WeekDay: { MONDAY: 'MONDAY' },
+      getProjectTriggers: () => triggers.map((t) => ({ getHandlerFunction: () => t.fn })),
+      newTrigger: (fn) => {
+        const t = { fn };
+        const chain = {
+          timeBased: () => chain, onWeekDay: (d) => { t.day = d; return chain; }, atHour: (h) => { t.hour = h; return chain; },
+          inTimezone: (z) => { t.tz = z; return chain; }, everyMinutes: () => chain, create: () => { triggers.push(t); },
+        };
+        return chain;
+      },
+    },
     Utilities: {
       getUuid: () => crypto.randomUUID(),
       computeDigest: (_alg, value) => Array.from(crypto.createHash('sha256').update(String(value), 'utf8').digest()).map((b) => (b > 127 ? b - 256 : b)),
@@ -208,7 +221,7 @@ function createEnv() {
   }
 
   return {
-    ctx, call, seedUser, lastLoginMail, signInAs, outbox, sleeps, files, folders, props, sheets, state,
+    ctx, call, seedUser, lastLoginMail, signInAs, outbox, sleeps, files, folders, props, sheets, state, triggers,
     advance: (ms) => { offsetMs += ms; },
   };
 }

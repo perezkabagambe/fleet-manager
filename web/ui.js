@@ -83,6 +83,12 @@
     too_many_attachments: 'This entry already has the maximum number of attachments.',
     invalid_attachment: 'That file is not a photo or a PDF that can be attached.',
     attachment_too_large: 'That file is too large. Photos are shrunk automatically; PDFs can be up to 2.5 MB.',
+    name_required: 'Please give the reminder a name.',
+    invalid_kind: 'Please choose maintenance or renewal.',
+    invalid_interval: 'Repeat intervals must be whole numbers (months up to 240).',
+    invalid_lead: 'The heads-up must be a whole number of days or miles/km.',
+    task_needs_due: 'Give it a next due date or distance, or a repeat so one can be worked out.',
+    duplicate_task: 'This car already has a reminder with that name.',
     network: 'Could not reach the server. Check your connection and try again.',
     timeout: 'The server took too long to respond. Please try again.',
   };
