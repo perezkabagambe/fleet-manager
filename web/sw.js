@@ -26,10 +26,10 @@ const SHELL = [
   'views-feedback.js',
   'app.js',
   'manifest.webmanifest',
-  'icons/icon.svg',
   'icons/logo.jpg',
   'icons/icon-192.png',
   'icons/icon-512.png',
+  'icons/icon-maskable-512.png',
   'icons/apple-touch-icon.png',
 ];
 
