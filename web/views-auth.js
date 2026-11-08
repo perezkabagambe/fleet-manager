@@ -24,6 +24,9 @@
     } catch (e) { return ''; }
   }
 
+  // Handed from the sign-in page to the request page when someone is new (kept in memory, never put in a web address).
+  var requestPrefill = null;
+
   function signedIn(res, next) {
     var remembered = takeNext();
     var target = next || remembered || '/';
@@ -51,7 +54,20 @@
         msg.replaceChildren();
         if (!email.value.trim()) { msg.append(UI.notice('error', UI.errorText({ code: 'invalid_email' }))); return; }
         UI.busy(btn, 'Sending…', FleetApi.call('requestLogin', { email: email.value.trim() }))
-          .then(function () { rememberNext(next); stepCode(email.value.trim()); })
+          .then(function (r) {
+            var d = (r && r.data) || {};
+            if (d.newUser) { // not known yet: straight to the request form, with their email filled in
+              requestPrefill = { email: email.value.trim() };
+              window.FleetApp.go('/request');
+              return;
+            }
+            if (d.pending) {
+              msg.append(UI.notice('ok', 'Your account request is still waiting for an administrator to approve it. You will get an email as soon as it is approved.'));
+              return;
+            }
+            rememberNext(next);
+            stepCode(email.value.trim());
+          })
           .catch(function (e) { msg.append(UI.notice('error', UI.errorText(e))); });
       });
 
@@ -157,11 +173,14 @@
 
   // ---------- request an account ----------
   Views.request = function (ctx, root) {
+    var prefill = requestPrefill;
+    requestPrefill = null;
     var msg = el('div');
     var name = el('input', { type: 'text', name: 'name', autocomplete: 'name', required: true, maxlength: '80' });
     var email = el('input', { type: 'email', name: 'email', autocomplete: 'email', inputmode: 'email', required: true, autocapitalize: 'off', spellcheck: 'false' });
     // Honeypot: hidden from people, tempting to bots.
     var trap = el('input', { type: 'text', name: 'website', tabindex: '-1', autocomplete: 'off' });
+    if (prefill && prefill.email) email.value = prefill.email;
     var btn = el('button', { type: 'submit', class: 'btn block', text: 'Request account' });
     var form = el('form', { novalidate: true }, [
       UI.field('Your name', name),
@@ -171,6 +190,7 @@
     ]);
     var card = el('section', { class: 'card narrow' }, [
       el('h1', { text: 'Request an account' }),
+      prefill ? UI.notice('ok', 'It looks like you\'re a new user. Please fill in your name and email address below to request a new account.') : null,
       el('p', { class: 'muted', text: 'An administrator will review your request. You will get an email when it is approved.' }),
       msg, form,
       el('p', { class: 'center' }, [el('a', { href: '#/login', text: 'Back to sign in' })]),

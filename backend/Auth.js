@@ -150,6 +150,7 @@ function requestAccount_(p) {
   return generic;
 }
 
+/** Sends a sign-in link and code. New or pending addresses get { newUser } or { pending } instead (see below); everyone else gets { sent: true }. */
 function requestLogin_(p) {
   const email = normEmail_(p.email);
   if (!email) fail_('invalid_email');
@@ -157,8 +158,16 @@ function requestLogin_(p) {
   if (!rateLimit_('login:' + hash_(email), 5, 3600)) return generic;
 
   const user = findUserByEmail_(email);
-  if (!user || user.status !== 'Approved') {
-    sleep_(1200); // roughly match the time an approved request takes
+  // Someone who is not known yet is told so, so the app can take them to the request form. A request that is
+  // still waiting for approval is told that too. Both answers share a daily limit, so this cannot be used to
+  // work out in bulk who has an account: once it is used up, everyone gets the plain answer again.
+  if (!user || user.status === 'Pending') {
+    if (dailyCap_('login_unknown_checks', 100)) return user ? { sent: false, pending: true } : { sent: false, newUser: true };
+    sleep_(1200);
+    return generic;
+  }
+  if (user.status !== 'Approved') {
+    sleep_(1200); // rejected or revoked: say nothing, and take roughly as long as an approved request
     return generic;
   }
   if (!dailyCap_('login_emails', 50)) {

@@ -78,14 +78,46 @@ test('tokens are stored hashed, never in plain text', () => {
   assert.ok(!dump.includes(l.code));
 });
 
-test('login email does not leak whether an address is known', () => {
+test('an unknown address is told it is new, and no email is sent to it', () => {
   const { env } = setup();
   const known = env.call('requestLogin', { email: 'sam@example.com' });
+  assert.deepEqual(known.data, { sent: true });
   const before = env.outbox.length;
   const unknown = env.call('requestLogin', { email: 'stranger@example.com' });
-  assert.deepEqual(known, unknown);
+  assert.equal(unknown.ok, true);
+  assert.deepEqual(unknown.data, { sent: false, newUser: true });
   assert.equal(env.outbox.length, before, 'no email to unknown address');
-  assert.ok(env.sleeps.length > 0, 'unknown path is padded with a delay');
+});
+
+test('a person whose request is still pending is told so, with no email', () => {
+  const { env } = setup();
+  env.seedUser({ email: 'waiting@example.com', status: 'Pending' });
+  const before = env.outbox.length;
+  assert.deepEqual(env.call('requestLogin', { email: 'waiting@example.com' }).data, { sent: false, pending: true });
+  assert.equal(env.outbox.length, before);
+});
+
+test('rejected and revoked people get the plain answer, as before, and no email', () => {
+  const { env } = setup();
+  ['Rejected', 'Revoked'].forEach((status, i) => {
+    const email = 'gone' + i + '@example.com';
+    env.seedUser({ email, status });
+    const before = env.outbox.length;
+    assert.deepEqual(env.call('requestLogin', { email }).data, { sent: true });
+    assert.equal(env.outbox.length, before);
+  });
+  assert.ok(env.sleeps.length > 0, 'padded with a delay');
+});
+
+test('telling new addresses apart has a daily limit, so it cannot list who has an account', () => {
+  const { env } = setup();
+  for (let i = 0; i < 100; i++) assert.equal(env.call('requestLogin', { email: 'probe' + i + '@example.com' }).data.newUser, true, 'probe ' + i);
+  const over = env.call('requestLogin', { email: 'probe-over@example.com' });
+  assert.deepEqual(over.data, { sent: true }, 'after the limit it looks like any other address');
+  env.seedUser({ email: 'late@example.com', status: 'Pending' });
+  assert.deepEqual(env.call('requestLogin', { email: 'late@example.com' }).data, { sent: true }, 'pending is hidden too once the limit is used');
+  assert.deepEqual(env.call('requestLogin', { email: 'sam@example.com' }).data, { sent: true });
+  assert.ok(env.lastLoginMail('sam@example.com'), 'approved people can still sign in');
 });
 
 test('pending, rejected and revoked users cannot sign in', () => {
