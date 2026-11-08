@@ -137,6 +137,22 @@ test('acquisition date accepts a year, a month and year, or a full date, and kee
   assert.equal(addCar(env, sam, { registration: 'NEXTYR', vin: '', acquisitionDate: String(now.getFullYear() + 1) }).error, 'invalid_date');
 });
 
+test('the car form does not need a currency: new cars get a country default, edits keep what is there', () => {
+  const { env, sam } = setup();
+  const uk = addCar(env, sam, { registration: 'DEF1', vin: '' }).data.car;       // no currency in the form
+  assert.equal(uk.currency, 'GBP');
+  const ug = addCar(env, sam, { registration: 'DEF2', vin: '', country: 'UG' }).data.car;
+  assert.equal(ug.currency, 'UGX');
+  // an older car that has USD keeps it when edited through a form without a currency field
+  const usd = addCar(env, sam, { registration: 'DEF3', vin: '', currency: 'USD' }).data.car;
+  const edited = env.call('saveCar', { token: sam, id: usd.id, version: 1, fields: Object.assign({}, CAR, { registration: 'DEF3', vin: '', colour: 'Red' }) });
+  assert.equal(edited.data.car.currency, 'USD');
+  assert.equal(edited.data.car.colour, 'Red');
+  // changing the country on an existing car does not silently change its stored currency
+  const moved = env.call('saveCar', { token: sam, id: usd.id, version: 2, fields: Object.assign({}, CAR, { registration: 'DEF3', vin: '', colour: 'Red', country: 'UG' }) });
+  assert.equal(moved.data.car.currency, 'USD');
+});
+
 test('acquisition cost can be in GBP, UGX, USD or KES, independent of the car currency', () => {
   const { env, sam } = setup();
   // no currency given: falls back to the car's own currency

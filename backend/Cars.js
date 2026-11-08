@@ -63,7 +63,7 @@ function oneOf_(value, list, fallback, errorCode) {
 }
 
 /** Validate and normalise the editable car fields. Throws an API error on bad input. */
-function parseCarInput_(f) {
+function parseCarInput_(f, existing) {
   const out = {};
   out.registration = cleanStr_(f.registration, 20).toUpperCase();
   if (!out.registration) fail_('registration_required');
@@ -85,7 +85,10 @@ function parseCarInput_(f) {
   out.vin = vin;
 
   out.country = oneOf_(f.country, COUNTRIES, 'UK', 'invalid_country');
-  out.currency = oneOf_(f.currency, CURRENCIES, out.country === 'UG' ? 'UGX' : 'GBP', 'invalid_currency');
+  // The car has no fixed "currency for costs": every cost carries its own. This is only the
+  // starting default for new costs. It is not asked for, so an edit keeps whatever the car has.
+  const defaultCurrency = out.country === 'UG' ? 'UGX' : 'GBP';
+  out.currency = oneOf_(f.currency, CURRENCIES, existing && existing.currency ? existing.currency : defaultCurrency, 'invalid_currency');
   out.distance_unit = oneOf_(f.distanceUnit, DISTANCE_UNITS, out.country === 'UG' ? 'km' : 'mi', 'invalid_unit');
   out.status = oneOf_(f.status, CAR_STATUSES, 'Active', 'invalid_status');
 
@@ -210,13 +213,13 @@ function getCar_(p, ctx) {
  * exists, nothing is saved and the warnings are returned; resend with force: true to save anyway.
  */
 function saveCar_(p, ctx) {
-  const input = parseCarInput_(p.fields || {});
   let existing = null;
   if (p.id) {
     existing = findCar_(cleanStr_(p.id, 64), false);
     if (!existing) fail_('not_found');
     if (Number(existing.version || 1) !== Number(p.version)) fail_('conflict');
   }
+  const input = parseCarInput_(p.fields || {}, existing);
   const dupes = findDuplicates_(input, existing ? existing.id : '');
   if (dupes.length && !p.force) return { saved: false, warnings: dupes };
   checkOdometer_(existing, input.current_odometer, p, ctx);
