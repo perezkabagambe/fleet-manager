@@ -137,6 +137,27 @@ test('acquisition date accepts a year, a month and year, or a full date, and kee
   assert.equal(addCar(env, sam, { registration: 'NEXTYR', vin: '', acquisitionDate: String(now.getFullYear() + 1) }).error, 'invalid_date');
 });
 
+test('acquisition cost can be in GBP, UGX, USD or KES, independent of the car currency', () => {
+  const { env, sam } = setup();
+  // no currency given: falls back to the car's own currency
+  const a = addCar(env, sam, { registration: 'CUR0', vin: '', country: 'UG', acquisitionCost: '1000' }).data.car;
+  assert.equal(a.currency, 'UGX');
+  assert.equal(a.acquisitionCurrency, 'UGX');
+  // each supported currency, on a car running in UGX
+  ['GBP', 'UGX', 'USD', 'KES'].forEach((cur, i) => {
+    const c = addCar(env, sam, { registration: 'CUR' + (i + 1), vin: '', country: 'UG', acquisitionCost: '5000', acquisitionCurrency: cur }).data.car;
+    assert.equal(c.currency, 'UGX');
+    assert.equal(c.acquisitionCurrency, cur);
+  });
+  assert.equal(addCar(env, sam, { registration: 'CUR9', vin: '', acquisitionCost: '5000', acquisitionCurrency: 'XYZ' }).error, 'invalid_currency');
+  // KES also works as a car currency
+  assert.equal(addCar(env, sam, { registration: 'KESCAR', vin: '', currency: 'KES' }).data.car.currency, 'KES');
+  // no cost means no stored currency; older cars read back as the car currency
+  const none = addCar(env, sam, { registration: 'NOCUR', vin: '', acquisitionCurrency: 'USD' }).data.car;
+  assert.equal(none.acquisitionCost, null);
+  assert.equal(none.acquisitionCurrency, none.currency);
+});
+
 test('acquisition details can be added later and changes are audited', () => {
   const { env, sam } = setup();
   const car = addCar(env, sam).data.car;

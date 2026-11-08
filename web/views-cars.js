@@ -33,6 +33,8 @@
     return FLUID_HINT_DEFAULT;
   }
 
+  var CURRENCY_OPTIONS = [['GBP', 'GBP (£)'], ['UGX', 'UGX (USh)'], ['USD', 'USD ($)'], ['KES', 'KES (KSh)'], ['EUR', 'EUR (€)']];
+
   var carsCache = null; // last fleet list: shown instantly while a fresh copy loads
 
   // ---------- helpers ----------
@@ -204,7 +206,7 @@
         detail('Country', car.country === 'UG' ? 'Uganda' : 'United Kingdom'),
         detail('Currency', car.currency),
         detail('Acquired', fmtAcquired(car.acquisitionDate)),
-        detail('Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? '' : money(car.acquisitionCost, car.currency))
+        detail('Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? '' : money(car.acquisitionCost, car.acquisitionCurrency || car.currency))
       );
 
       var fluidRows = fluids.map(function (f) {
@@ -293,14 +295,20 @@
 
       var v = car || { country: 'UK', currency: 'GBP', distanceUnit: 'mi', status: 'Active' };
 
-      // Optional purchase price, labelled with whichever currency is currently chosen above.
+      // Optional purchase price with its own currency, which can differ from the car's running-cost currency.
       function acquisitionCostField() {
         var cost = text('acquisitionCost', v.acquisitionCost === null || v.acquisitionCost === undefined ? '' : v.acquisitionCost, { inputmode: 'decimal', id: 'f-cost' });
-        var label = el('label', { for: 'f-cost' });
-        function setLabel() { label.textContent = 'Acquisition cost (' + f.currency.value + ')'; }
-        setLabel();
-        f.currency.addEventListener('change', setLabel);
-        return el('div', { class: 'field' }, [label, cost, el('div', { class: 'hint', text: 'Optional. What you paid for the car, as a number.' })]);
+        var cur = select('acquisitionCurrency', CURRENCY_OPTIONS, v.acquisitionCurrency || v.currency);
+        cur.setAttribute('aria-label', 'Currency of the acquisition cost');
+        // Follows the car's currency until you pick one here yourself.
+        var touched = !!(car && car.acquisitionCost !== null && car.acquisitionCost !== undefined);
+        cur.addEventListener('change', function () { touched = true; });
+        f.currency.addEventListener('change', function () { if (!touched) cur.value = f.currency.value; });
+        return el('div', { class: 'field' }, [
+          el('label', { for: 'f-cost', text: 'Acquisition cost' }),
+          el('div', { class: 'odo-row' }, [cost, cur]),
+          el('div', { class: 'hint', text: 'Optional. What you paid for the car, in any of these currencies.' }),
+        ]);
       }
 
       // Odometer reading with its unit chosen right beside it.
@@ -323,7 +331,7 @@
         UI.field('Nickname', text('nickname', v.nickname, { maxlength: '40' }), 'Optional, e.g. "The work truck".'),
         UI.field('VIN / chassis number', text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 'The 17-character VIN, or the chassis number for Japanese imports.'),
         UI.field('Country', select('country', [['UK', 'United Kingdom'], ['UG', 'Uganda']], v.country)),
-        UI.field('Currency for costs', select('currency', [['GBP', 'GBP (£)'], ['UGX', 'UGX (USh)'], ['USD', 'USD ($)'], ['EUR', 'EUR (€)']], v.currency)),
+        UI.field('Currency for costs', select('currency', CURRENCY_OPTIONS, v.currency)),
         UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
         odometerField(),
         UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. 2021, Mar 2021 or 12/03/2021' }), 'Optional. A full date, or just the month and year, or just the year.'),
@@ -351,7 +359,7 @@
           registration: f.registration.value, make: f.make.value, model: f.model.value, year: f.year.value, colour: f.colour.value,
           nickname: f.nickname.value, vin: f.vin.value, country: f.country.value, currency: f.currency.value,
           distanceUnit: f.distanceUnit.value, status: f.status.value, odometer: f.odometer.value,
-          acquisitionCost: f.acquisitionCost.value, acquisitionDate: f.acquisitionDate.value,
+          acquisitionCost: f.acquisitionCost.value, acquisitionCurrency: f.acquisitionCurrency.value, acquisitionDate: f.acquisitionDate.value,
           partsouqUrl: f.partsouqUrl.value, notes: f.notes.value,
         };
       }

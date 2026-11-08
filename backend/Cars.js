@@ -6,7 +6,7 @@
  */
 
 const COUNTRIES = ['UK', 'UG'];
-const CURRENCIES = ['GBP', 'UGX', 'USD', 'EUR'];
+const CURRENCIES = ['GBP', 'UGX', 'USD', 'KES', 'EUR'];
 const DISTANCE_UNITS = ['mi', 'km'];
 const CAR_STATUSES = ['Active', 'Sold', 'Scrapped', 'Off-road'];
 const MAX_ODOMETER = 9999999;
@@ -31,6 +31,8 @@ function summarizeCar_(c) {
     photoId: c.photo_file_id,
     photoThumbId: c.photo_thumb_file_id,
     acquisitionCost: c.acquisition_cost === '' || c.acquisition_cost === undefined ? null : Number(c.acquisition_cost),
+    // Older records have no separate currency: the price was in the car's own currency.
+    acquisitionCurrency: c.acquisition_currency || c.currency || 'GBP',
     acquisitionDate: c.acquisition_date || '',
     notes: c.notes,
     version: Number(c.version || 1),
@@ -93,6 +95,10 @@ function parseCarInput_(f) {
 
   out.current_odometer = parseOdometer_(f.odometer);
   out.acquisition_cost = parseMoney_(f.acquisitionCost);
+  // The price may be in a different currency from the car's running costs (e.g. bought in GBP, run in UGX).
+  out.acquisition_currency = out.acquisition_cost === ''
+    ? ''
+    : oneOf_(f.acquisitionCurrency, CURRENCIES, out.currency, 'invalid_currency');
   out.acquisition_date = parseDate_(f.acquisitionDate);
   out.notes = cleanText_(f.notes, 2000);
   return out;
