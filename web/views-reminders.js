@@ -146,7 +146,7 @@
       fields.push(
         el('div', { class: 'form-section' }, [
           el('h2', { text: 'Who is reminded?' }),
-          el('p', { class: 'muted small-text', text: 'Tick no one to remind this car\'s owners/custodians (or the admins if it has none).' }),
+          el('p', { class: 'muted small-text', text: 'Tick the people who should get the email for this reminder. If you tick no one, it goes to this car\'s owners/custodians. If the car has none, it goes to the admins.' }),
           who,
         ]),
         el('div', { class: 'form-section' }, [
