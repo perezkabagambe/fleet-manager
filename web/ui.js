@@ -50,6 +50,7 @@
     registration_required: 'Please enter the registration number.',
     make_required: 'Please enter the make.',
     model_required: 'Please enter the model.',
+    year_required: 'Please enter the year of the vehicle.',
     invalid_year: 'The year must be a four-digit year, such as 2015.',
     invalid_vin: 'The VIN or chassis number may only contain letters, numbers and hyphens (5 to 25 characters).',
     invalid_country: 'Please choose a country from the list.',

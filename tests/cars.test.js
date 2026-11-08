@@ -63,6 +63,8 @@ test('required fields and formats are enforced', () => {
   bad({ registration: '  ' }, 'registration_required');
   bad({ make: '' }, 'make_required');
   bad({ model: '' }, 'model_required');
+  bad({ year: '' }, 'year_required');
+  bad({ year: '   ' }, 'year_required');
   bad({ year: '1850' }, 'invalid_year');
   bad({ year: 'abcd' }, 'invalid_year');
   bad({ vin: 'no good!' }, 'invalid_vin');

@@ -293,7 +293,7 @@
         UI.field('Registration number *', text('registration', v.registration, { maxlength: '20', autocapitalize: 'characters', required: true })),
         UI.field('Make *', text('make', v.make, { maxlength: '40', placeholder: 'e.g. Toyota', required: true })),
         UI.field('Model *', text('model', v.model, { maxlength: '40', placeholder: 'e.g. Land Cruiser', required: true })),
-        UI.field('Year', text('year', v.year, { inputmode: 'numeric', maxlength: '4', placeholder: 'e.g. 2015' })),
+        UI.field('Year *', text('year', v.year, { inputmode: 'numeric', maxlength: '4', placeholder: 'e.g. 2015', required: true })),
         UI.field('Colour', text('colour', v.colour, { maxlength: '30' })),
         UI.field('Nickname', text('nickname', v.nickname, { maxlength: '40' }), 'Optional, e.g. "The work truck".'),
         UI.field('VIN / chassis number', text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 'The 17-character VIN, or the chassis number for Japanese imports.'),

@@ -71,13 +71,10 @@ function parseCarInput_(f) {
   out.colour = cleanStr_(f.colour, 30);
 
   const yearRaw = cleanStr_(f.year, 6);
-  if (yearRaw) {
-    const y = Number(yearRaw);
-    if (!/^\d{4}$/.test(yearRaw) || y < 1900 || y > new Date().getFullYear() + 1) fail_('invalid_year');
-    out.year = String(y);
-  } else {
-    out.year = '';
-  }
+  if (!yearRaw) fail_('year_required');
+  const y = Number(yearRaw);
+  if (!/^\d{4}$/.test(yearRaw) || y < 1900 || y > new Date().getFullYear() + 1) fail_('invalid_year');
+  out.year = String(y);
 
   const vin = cleanStr_(f.vin, 30).toUpperCase().replace(/\s+/g, '');
   if (vin && !/^[A-Z0-9-]{5,25}$/.test(vin)) fail_('invalid_vin');
