@@ -38,14 +38,8 @@
 
   var carsCache = null; // last fleet list: shown instantly while a fresh copy loads
 
-  // Other screens call these to keep the fleet list fresh and to remember a "Not now" on the nudge.
+  // Other screens call this to keep the fleet list fresh.
   Views.invalidateCars = function () { carsCache = null; };
-  Views.skipCarPrompt = function (userId) {
-    try { localStorage.setItem('fleet.skipCars.' + userId, '1'); } catch (e) { /* remembered only for this visit */ }
-  };
-  Views.carPromptSkipped = function (userId) {
-    try { return localStorage.getItem('fleet.skipCars.' + userId) === '1'; } catch (e) { return false; }
-  };
 
   // ---------- helpers ----------
   function num(n) { return n === null || n === undefined ? '–' : Number(n).toLocaleString('en-GB'); }
@@ -129,13 +123,12 @@
     var msg = el('div');
     var grid = el('div', { class: 'car-grid' });
     var deletedBox = el('div');
-    var promptBox = el('div');
     root.replaceChildren(el('section', { class: 'card' }, [
       el('div', { class: 'page-head' }, [
         el('h1', { text: 'Fleet' }),
         el('a', { class: 'btn small', href: '#/car/new', text: 'Add car' }),
       ]),
-      msg, promptBox, grid, deletedBox,
+      msg, grid, deletedBox,
     ]));
 
     function card(c, mine) {
@@ -153,29 +146,7 @@
       ]);
     }
 
-    // First-time nudge: asks which cars you own or keep, until you answer or tap "Not now".
-    function prompt(data) {
-      var me = FleetAuth.getUser();
-      var answered = Object.keys(data.mine || {}).length > 0;
-      if (!me || answered || !data.cars.length || Views.carPromptSkipped(me.id)) return null;
-      var skip = el('button', { type: 'button', class: 'btn small secondary', text: 'Not now' });
-      var box = el('div', { class: 'prompt' }, [
-        el('strong', { text: 'Do you own or look after any of these cars?' }),
-        el('p', { class: 'muted small-text', text: 'Tell us which ones you own or are the custodian of, or add a car that is not here yet.' }),
-        el('div', { class: 'btn-row' }, [
-          el('a', { class: 'btn small', href: '#/profile/cars', text: 'Choose my cars' }),
-          el('a', { class: 'btn small secondary', href: '#/car/new?mine=1', text: 'Add a new car' }),
-          skip,
-        ]),
-      ]);
-      skip.addEventListener('click', function () { Views.skipCarPrompt(me.id); box.remove(); });
-      return box;
-    }
-
     function render(data) {
-      promptBox.replaceChildren();
-      var pr = prompt(data);
-      if (pr) promptBox.append(pr);
       grid.replaceChildren.apply(grid, data.cars.length
         ? data.cars.map(function (c) { return card(c, (data.mine || {})[c.id]); })
         : [el('div', { class: 'empty' }, [
@@ -301,6 +272,19 @@
       var ownerNames = people.owners.map(function (x) { return x.name; }).concat(car.ownerOther ? [car.ownerOther] : []);
       details.push(el('dt', { text: 'Owner/Custodian' }), el('dd', { class: ownerNames.length ? '' : 'muted', text: ownerNames.length ? ownerNames.join(', ') : 'Not recorded yet' }));
 
+      // "I own or look after this car": a quick toggle, so nobody has to open Edit car for it
+      var me = FleetAuth.getUser();
+      var isMine = !!me && people.owners.some(function (x) { return x.userId === me.id; });
+      var mineBtn = el('button', { type: 'button', class: 'btn small secondary', text: isMine ? 'I no longer look after this car' : 'I own or look after this car' });
+      mineBtn.addEventListener('click', function () {
+        msg.replaceChildren();
+        UI.busy(mineBtn, 'Saving…', FleetApi.call('setMyCarRole', { carId: car.id, owner: !isMine })).then(function () {
+          carsCache = null;
+          FleetApp.setFlash('ok', isMine ? 'You are no longer listed as an owner/custodian of this car.' : 'You are now listed as an owner/custodian of this car. Its reminders will come to you.');
+          Views.car(Object.assign({}, ctx, { keepOpen: true }), root);
+        }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+      });
+
       var fluidRows = fluids.map(function (f) {
         return el('li', { class: 'fluid' }, [
           el('div', { class: 'fluid-name', text: f.fluid }),
@@ -328,6 +312,7 @@
           photo(car, 'big', 'full'),
           el('dl', { class: 'details top-details' }, details),
           car.notes ? el('p', { class: 'notes' , text: car.notes }) : null,
+          el('div', { class: 'btn-row' }, [mineBtn]),
         ]),
         collapsible('Odometer', el('section', { class: 'card' }, [
           el('h2', { text: 'Odometer' }),

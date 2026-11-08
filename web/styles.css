@@ -305,8 +305,6 @@ input[type="file"] { width: 100%; font: inherit; font-size: 16px; padding: 10px 
 .person-row { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
 .person-car { font-weight: 600; overflow-wrap: anywhere; }
 .role-boxes { display: flex; flex-wrap: wrap; gap: 0 20px; margin-top: 4px; }
-.prompt { border: 1px solid var(--accent); border-radius: var(--radius); padding: 12px; margin: 8px 0 12px; }
-.prompt p { margin: 4px 0 0; }
 .mine { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 
 .catalogue { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }

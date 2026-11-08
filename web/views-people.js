@@ -39,7 +39,6 @@
         UI.busy(saveBtn, 'Saving…', FleetApi.call('saveUserCars', userId ? { userId: userId, cars: cars } : { cars: cars }))
           .then(function () {
             Views.invalidateCars();
-            if (self) Views.skipCarPrompt(me.id); // answered, so the nudge on the fleet screen can stop
             msg.replaceChildren(UI.notice('ok', 'Saved.'));
           })
           .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
