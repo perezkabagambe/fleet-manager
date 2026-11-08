@@ -438,7 +438,7 @@
       // mileage (not for purchases), with an offer to update the car's odometer
       var odoCheck = el('input', { type: 'checkbox' });
       odoCheck.checked = true;
-      var odoText = el('span', { text: 'Update the car\'s odometer to this reading' });
+      var odoText = el('span', { text: 'Update the car\'s Odometer Log to this reading' });
       var odoRow = el('label', { class: 'check', hidden: true }, [odoCheck, odoText]);
       function mileageField() {
         var m = text('mileage', v.mileage === null || v.mileage === undefined ? '' : v.mileage, { inputmode: 'numeric', id: 'f-mileage' });
@@ -446,7 +446,7 @@
         function check() {
           var reading = num0(m.value);
           odoRow.hidden = !(reading > 0 && reading > Number(car.odometer || 0));
-          odoText.textContent = 'Update the car\'s odometer to ' + fmt.num(reading) + ' mi';
+          odoText.textContent = 'Update the car\'s Odometer Log to ' + fmt.num(reading) + ' mi';
         }
         m.addEventListener('input', check);
         check();

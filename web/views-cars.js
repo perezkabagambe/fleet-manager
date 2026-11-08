@@ -306,8 +306,8 @@
           car.notes ? el('p', { class: 'notes' , text: car.notes }) : null,
           el('div', { class: 'btn-row' }, [mineBtn]),
         ]),
-        collapsible('Odometer', el('section', { class: 'card' }, [
-          el('h2', { text: 'Odometer' }),
+        collapsible('Odometer Log', el('section', { class: 'card' }, [
+          el('h2', { text: 'Odometer Log' }),
           el('div', { class: 'big-number', text: car.odometer === null ? 'Not set' : num(car.odometer) + ' mi' }),
           car.odometerUpdatedAt ? el('div', { class: 'muted small-text', text: 'Updated ' + fmtDate(car.odometerUpdatedAt) }) : null,
           odoForm,
