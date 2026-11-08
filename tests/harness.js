@@ -31,7 +31,7 @@ function makeSheet(header) {
         return out;
       },
       setValues: (vals) => {
-        for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) rows[r - 1 + i][c - 1 + j] = vals[i][j];
+        for (let i = 0; i < nr; i++) { rows[r - 1 + i] = rows[r - 1 + i] || []; for (let j = 0; j < nc; j++) rows[r - 1 + i][c - 1 + j] = vals[i][j]; }
       },
     }),
     appendRow: (arr) => rows.push(arr.slice()),
@@ -139,7 +139,7 @@ function createEnv() {
       sleep: (ms) => sleeps.push(ms),
       formatDate: (d, _tz, fmt) => {
         const iso = new RealDate(d).toISOString();
-        return fmt === 'yyyy-MM-dd' ? iso.slice(0, 10) : fmt === 'yyyy-MM' ? iso.slice(0, 7) : iso;
+        return fmt === "yyyy-MM-dd'T'HH:mm:ss" ? iso.slice(0, 19) : fmt === 'yyyy-MM-dd' ? iso.slice(0, 10) : fmt === 'yyyy-MM' ? iso.slice(0, 7) : iso;
       },
     },
     ContentService: {

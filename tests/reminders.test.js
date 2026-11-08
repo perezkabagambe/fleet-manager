@@ -487,3 +487,19 @@ test('the reminder wording after logging uses the odometer the entry has just se
   const r = entry('Maintenance', { title: 'Oil', date: '2025-06-01', mileage: '52000' }, { taskId: t.id, updateOdometer: true });
   assert.match(r.data.reminder.text, /due at 58,000 mi \(6,000 mi to go\)/);
 });
+
+// ---------- Sheets turning a date cell into a real Date ----------
+
+test('a due date that Sheets has turned into a Date still reads as yyyy-mm-dd (no "NaN days")', () => {
+  const { env, car, task, tasks } = setup();
+  const t = task({ name: 'Insurance', kind: 'compliance', intervalMonths: '12', dueDate: day(200) }).data.task;
+  const sheet = env.sheets.Tasks;
+  const col = sheet._rows[0].indexOf('due_date');
+  const dueIso = day(200);
+  sheet._rows[1][col] = vm.runInContext('new Date("' + dueIso + 'T00:00:00Z")', env.ctx); // (built inside the backend's own realm) // what Sheets hands back for an auto-converted date cell
+  const got = tasks().filter((x) => x.id === t.id)[0];
+  assert.equal(got.dueDate, dueIso);
+  assert.ok(!/NaN/.test(got.text), got.text);
+  assert.match(got.text, /^due in 200 days/);
+  assert.equal(got.status, 'ok');
+});

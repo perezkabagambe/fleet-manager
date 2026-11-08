@@ -14,8 +14,17 @@ const Db = (function () {
     return sh;
   }
 
+  /**
+   * Sheets turns a cell that looks like a date into a real Date. Give those back as the plain "yyyy-mm-dd"
+   * they were typed as (midnight in the spreadsheet's time zone), and anything with a time as a full timestamp.
+   */
   function str_(v) {
-    if (v instanceof Date) return v.toISOString();
+    if (v instanceof Date) {
+      let zone = TZ;
+      try { zone = ss && ss.getSpreadsheetTimeZone ? ss.getSpreadsheetTimeZone() : TZ; } catch (e) { zone = TZ; }
+      const local = Utilities.formatDate(v, zone, "yyyy-MM-dd'T'HH:mm:ss");
+      return local.slice(11) === '00:00:00' ? local.slice(0, 10) : v.toISOString();
+    }
     if (v === null || v === undefined) return '';
     return String(v);
   }
@@ -47,7 +56,10 @@ const Db = (function () {
   function insert(name, obj) {
     const sh = sheet_(name);
     const header = header_(sh);
-    sh.appendRow(header.map(function (h) { return cell_(obj[h]); }));
+    // Write as text so Sheets never reinterprets "2027-11-08" as a date.
+    const range = sh.getRange(sh.getLastRow() + 1, 1, 1, header.length);
+    range.setNumberFormat('@');
+    range.setValues([header.map(function (h) { return cell_(obj[h]); })]);
   }
 
   /** Merge `patch` into the row; unknown columns are ignored. */
@@ -60,6 +72,7 @@ const Db = (function () {
       const j = header.indexOf(k);
       if (j >= 0) cur[j] = patch[k];
     });
+    range.setNumberFormat('@');
     range.setValues([cur.map(cell_)]);
   }
 
