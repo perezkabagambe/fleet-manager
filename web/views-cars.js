@@ -225,35 +225,6 @@
       var flash = FleetApp.takeFlash();
       if (flash) msg.append(UI.notice(flash.kind, flash.text));
 
-      // photo: take with the camera, choose from the gallery, or remove
-      var photoStatus = el('div', { class: 'muted small-text', role: 'status' });
-      var photoPicker = Photos.picker(function (file) {
-        msg.replaceChildren();
-        photoPicker.setBusy(true);
-        photoStatus.textContent = 'Preparing photo…';
-        Photos.prepare(file).then(function (p) {
-          photoStatus.textContent = 'Uploading…';
-          return FleetApi.call('uploadCarPhoto', { carId: car.id, full: p.full, thumb: p.thumb });
-        }).then(function () {
-          carsCache = null;
-          Views.car(ctx, root);
-        }).catch(function (e) {
-          photoStatus.textContent = '';
-          photoPicker.setBusy(false);
-          msg.replaceChildren(UI.notice('error', UI.errorText(e)));
-        });
-      });
-      var removePhotoBtn = null;
-      if (car.photoThumbId) {
-        removePhotoBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Remove photo' });
-        removePhotoBtn.addEventListener('click', function () {
-          if (!window.confirm('Remove this photo?')) return;
-          UI.busy(removePhotoBtn, 'Removing…', FleetApi.call('removeCarPhoto', { carId: car.id }))
-            .then(function () { carsCache = null; Views.car(ctx, root); })
-            .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
-        });
-      }
-
       // delete (admin)
       var deleteBtn = null;
       if (FleetAuth.isAdmin()) {
@@ -309,8 +280,6 @@
           ]),
           msg,
           photo(car, 'big', 'full'),
-          el('div', { class: 'btn-row' }, [photoPicker.take, photoPicker.choose, removePhotoBtn]),
-          photoStatus,
           deleteBtn ? el('div', { class: 'btn-row' }, [deleteBtn]) : null,
         ]),
         el('section', { class: 'card' }, [
@@ -555,29 +524,55 @@
 
       var fluidsEd = fluidsEditor(fluids);
 
-      // New cars can take a photo straight away; existing cars manage it on the car page.
-      var chosenPhoto = null;
-      var photoFields = [];
-      if (!car) {
-        var photoName = el('div', { class: 'muted small-text', role: 'status' });
-        var clearPhoto = el('button', { type: 'button', class: 'linklike', text: 'Remove photo', hidden: true });
-        var formPicker = Photos.picker(function (file) {
-          chosenPhoto = file;
-          photoName.textContent = 'Photo ready: ' + file.name;
-          clearPhoto.hidden = false;
-        });
-        clearPhoto.addEventListener('click', function () {
-          chosenPhoto = null;
-          photoName.textContent = '';
-          clearPhoto.hidden = true;
-        });
-        photoFields.push(el('div', { class: 'field' }, [
-          el('div', { class: 'field-label', text: 'Photo' }),
-          el('div', { class: 'btn-row' }, [formPicker.take, formPicker.choose]),
-          photoName, clearPhoto,
-          el('div', { class: 'hint', text: 'Optional. Take a photo now or choose one from your gallery. You can also add it later.' }),
-        ]));
+      // Photo: take one, choose one, or remove it. Nothing is sent until you tap Save, like the other parts.
+      var photoChange = null; // null, { type: 'upload', file, url } or { type: 'remove' }
+      var hasPhoto = !!(car && car.photoThumbId);
+      var previewBox = el('div', { class: 'photo-preview' });
+      var photoNote = el('div', { class: 'muted small-text', role: 'status' });
+      var removeBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Remove photo' });
+      var undoBtn = el('button', { type: 'button', class: 'linklike', text: 'Undo', hidden: true });
+
+      function showPhoto() {
+        var node;
+        if (photoChange && photoChange.type === 'upload') {
+          node = el('div', { class: 'photo' }, [el('img', { class: 'photo-img', src: photoChange.url, alt: 'New photo' })]);
+          photoNote.textContent = 'New photo ready. It is saved when you tap ' + (car ? 'Save changes' : 'Add car') + '.';
+        } else if (photoChange && photoChange.type === 'remove') {
+          node = el('div', { class: 'photo placeholder', 'aria-hidden': 'true', text: '🚗' });
+          photoNote.textContent = 'The photo will be removed when you tap Save changes.';
+        } else if (hasPhoto) {
+          node = photo(car, '', 'full');
+          photoNote.textContent = '';
+        } else {
+          node = el('div', { class: 'photo placeholder', 'aria-hidden': 'true', text: '🚗' });
+          photoNote.textContent = 'No photo yet.';
+        }
+        previewBox.replaceChildren(node);
+        // "Remove" makes sense when there is a photo to remove (saved, or just picked)
+        removeBtn.hidden = !((hasPhoto && !(photoChange && photoChange.type === 'remove')) || (photoChange && photoChange.type === 'upload'));
+        undoBtn.hidden = !(photoChange && photoChange.type === 'remove');
       }
+      function dropStagedUrl() {
+        if (photoChange && photoChange.url) { try { URL.revokeObjectURL(photoChange.url); } catch (e) { /* ignore */ } }
+      }
+      var photoPicker = Photos.picker(function (file) {
+        dropStagedUrl();
+        photoChange = { type: 'upload', file: file, url: URL.createObjectURL(file) };
+        showPhoto();
+      });
+      removeBtn.addEventListener('click', function () {
+        dropStagedUrl();
+        photoChange = hasPhoto ? { type: 'remove' } : null; // a staged pick on a car with no photo just gets cleared
+        showPhoto();
+      });
+      undoBtn.addEventListener('click', function () { photoChange = null; showPhoto(); });
+      showPhoto();
+      var photoFields = [
+        previewBox,
+        el('div', { class: 'btn-row' }, [photoPicker.take, photoPicker.choose, removeBtn]),
+        photoNote, undoBtn,
+        el('div', { class: 'hint', text: 'Take a photo with your camera, or choose one from your gallery.' }),
+      ];
 
       if (!car) {
         f.country.addEventListener('change', function () {
@@ -593,7 +588,8 @@
         section('Details', detailFields),
         section('Owner/Custodian', ownerFields),
         section('Fluids and specs', [fluidsEd.node]),
-      ].concat(photoFields.length ? [section('Photo', photoFields)] : []).concat([btn]));
+        section('Photo', photoFields),
+      ].concat([btn]));
 
       function collect() {
         return {
@@ -661,11 +657,18 @@
           return null;
         }).then(function (stop) {
           if (stop === 'stop') return 'stop';
-          if (car || !chosenPhoto || state.photoDone) return null;
+          if (!photoChange || state.photoDone) return null;
           step = 'the photo';
-          // The car is already saved, so a failed photo is reported on the next screen instead of blocking.
-          return Photos.upload(state.carId, chosenPhoto).then(function () { state.photoDone = true; }, function (e) {
-            FleetApp.setFlash('error', 'The car was saved, but its photo could not be added: ' + UI.errorText(e) + ' You can add it from this page.');
+          var doPhoto = photoChange.type === 'upload'
+            ? Photos.upload(state.carId, photoChange.file)
+            : FleetApi.call('removeCarPhoto', { carId: state.carId });
+          return doPhoto.then(function () {
+            state.photoDone = true;
+            done.push('photo');
+          }, function (e) {
+            if (car) throw e; // editing: stay here so the photo can be retried
+            // A brand-new car is already saved, so report the photo on the next screen instead of blocking.
+            FleetApp.setFlash('error', 'The car was saved, but its photo could not be added: ' + UI.errorText(e) + ' You can add it with Edit car.');
           });
         }).then(function (stop) {
           if (stop === 'stop') return;
