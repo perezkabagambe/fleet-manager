@@ -290,3 +290,12 @@ dl.details dd { margin: 0; overflow-wrap: anywhere; }
 .odo-row select { width: auto; min-width: 130px; }
 
 .save-gap { margin-top: 28px; }
+
+/* ---------- photos ---------- */
+.photo { position: relative; overflow: hidden; }
+.photo-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo.big { aspect-ratio: 4 / 3; }
+.file-btn { position: relative; cursor: pointer; overflow: hidden; }
+.file-btn .file-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 0; }
+.file-btn.disabled { opacity: 0.6; pointer-events: none; }
+input[type="file"] { width: 100%; font: inherit; font-size: 16px; padding: 10px 0; }

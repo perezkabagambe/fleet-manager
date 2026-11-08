@@ -39,6 +39,9 @@ function actions_() {
     deleteCar: { auth: 'admin', lock: true, fn: deleteCar_ },
     restoreCar: { auth: 'admin', lock: true, fn: restoreCar_ },
     saveFluids: { auth: 'user', lock: true, fn: saveFluids_ },
+    uploadCarPhoto: { auth: 'user', lock: true, fn: uploadCarPhoto_ },
+    removeCarPhoto: { auth: 'user', lock: true, fn: removeCarPhoto_ },
+    getPhoto: { auth: 'user', fn: getPhoto_ },
   };
 }
 

@@ -186,13 +186,22 @@ test('acquisition details can be added later and changes are audited', () => {
   assert.equal(cleared.data.car.acquisitionCost, null);
 });
 
-test('PartSouq link must be an https partsouq.com address', () => {
+test('catalogue link may be any secure https link (PartSouq is just an example)', () => {
   const { env, sam } = setup();
-  ['http://partsouq.com/x', 'https://evil.example/partsouq.com', 'javascript:alert(1)', 'https://partsouq.com.evil.example/', 'https://partsouq.com/a b']
-    .forEach((u) => assert.equal(addCar(env, sam, { partsouqUrl: u, registration: 'X' + Math.random() }).error, 'invalid_partsouq_url', u));
-  const ok = addCar(env, sam, { partsouqUrl: 'https://partsouq.com/en/catalog/genuine/unit?c=Toyota&vid=1' });
-  assert.equal(ok.ok, true);
-  assert.ok(addCar(env, sam, { partsouqUrl: 'https://www.partsouq.com/', registration: 'ZZ99' }).ok);
+  [
+    'http://partsouq.com/x',                 // not secure
+    'javascript:alert(1)', 'data:text/html,<b>x</b>', 'ftp://parts.example.com/', 'file:///etc/passwd',
+    'https://', 'https://localhost/', 'https://192.168.0.1/', 'https://nodots/', 'https://exa mple.com/',
+    'https://user:pass@evil.example.com/', 'https://evil.example.com/a b', 'https://evil.example.com/<script>',
+    'partsouq.com/en/catalog', 'https://' + 'a'.repeat(500) + '.com',
+  ].forEach((u, i) => assert.equal(addCar(env, sam, { partsouqUrl: u, registration: 'BADLINK' + i, vin: '' }).error, 'invalid_catalogue_url', u));
+  [
+    'https://partsouq.com/en/catalog/genuine/unit?c=Toyota&vid=1',
+    'https://www.partsouq.com/',
+    'https://www.ebay.co.uk/sch/i.html?_nkw=brake+pads',
+    'https://parts.toyota.co.ug:8443/catalogue#top',
+  ].forEach((u, i) => assert.equal(addCar(env, sam, { partsouqUrl: u, registration: 'OKLINK' + i, vin: '' }).data.car.partsouqUrl, u, u));
+  assert.equal(addCar(env, sam, { partsouqUrl: '', registration: 'NOLINK', vin: '' }).data.car.partsouqUrl, '');
 });
 
 test('notes keep line breaks but lose control characters; text is length-capped', () => {

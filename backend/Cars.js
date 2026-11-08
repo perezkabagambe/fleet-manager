@@ -28,8 +28,8 @@ function summarizeCar_(c) {
     status: c.status || 'Active',
     odometer: c.current_odometer === '' ? null : Number(c.current_odometer),
     odometerUpdatedAt: c.odometer_updated_at,
-    photoId: c.photo_file_id,
-    photoThumbId: c.photo_thumb_file_id,
+    photoId: c.photo_file_id || '',
+    photoThumbId: c.photo_thumb_file_id || '',
     acquisitionCost: c.acquisition_cost === '' || c.acquisition_cost === undefined ? null : Number(c.acquisition_cost),
     // Older records have no separate currency: the price was in the car's own currency.
     acquisitionCurrency: c.acquisition_currency || c.currency || 'GBP',
@@ -92,8 +92,11 @@ function parseCarInput_(f, existing) {
   out.distance_unit = oneOf_(f.distanceUnit, DISTANCE_UNITS, out.country === 'UG' ? 'km' : 'mi', 'invalid_unit');
   out.status = oneOf_(f.status, CAR_STATUSES, 'Active', 'invalid_status');
 
-  const url = cleanStr_(f.partsouqUrl, 500);
-  if (url && !/^https:\/\/([a-z0-9-]+\.)*partsouq\.com(\/[^\s]*)?$/i.test(url)) fail_('invalid_partsouq_url');
+  // Any secure link to a parts catalogue (PartSouq is the usual one). https only, a real host name,
+  // no embedded passwords. The column keeps its original name, partsouq_url.
+  const url = String(f.partsouqUrl === null || f.partsouqUrl === undefined ? '' : f.partsouqUrl).trim();
+  if (url && !/^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}(:\d{1,5})?([\/?#][^\s<>"']*)?$/i.test(url)) fail_('invalid_catalogue_url');
+  if (url.length > 500) fail_('invalid_catalogue_url');
   out.partsouq_url = url;
 
   out.current_odometer = parseOdometer_(f.odometer);

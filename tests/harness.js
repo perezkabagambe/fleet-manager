@@ -8,7 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const BACKEND = path.join(__dirname, '..', 'backend');
-const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'Code.js', 'Version.js', 'Setup.js'];
+const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'Photos.js', 'Code.js', 'Version.js', 'Setup.js'];
 
 function makeSheet(header) {
   const rows = [header.slice()];
@@ -57,6 +57,39 @@ function createEnv() {
   const sleeps = [];
   const files = {};
   const state = { tokeninfo: null, mailQuota: 100 };
+  const folders = {};
+  let folderCount = 0;
+  const toSigned = (buf) => Array.from(buf).map((b) => (b > 127 ? b - 256 : b));
+
+  function fileObj(id) {
+    return {
+      getId: () => id,
+      getBlob: () => ({
+        getDataAsString: () => String(files[id].content),
+        getBytes: () => files[id].bytes || toSigned(Buffer.from(String(files[id].content))),
+        getContentType: () => 'image/jpeg',
+      }),
+      setContent: (c) => { files[id].content = c; },
+      setTrashed: (t) => { files[id].trashed = !!t; },
+    };
+  }
+  function folderObj(id) {
+    return {
+      getId: () => id,
+      createFolder: (name) => {
+        const fid = 'folder-' + (++folderCount);
+        folders[fid] = { name, parent: id };
+        return folderObj(fid);
+      },
+      createFile: (a, b) => {
+        const fid = 'file-' + Object.keys(files).length;
+        files[fid] = typeof a === 'string'
+          ? { name: a, content: b, folder: id }
+          : { name: a.getName(), bytes: a.getBytes(), folder: id };
+        return fileObj(fid);
+      },
+    };
+  }
 
   const sandbox = {
     console: { log() {}, error() {}, warn() {} },
@@ -85,6 +118,9 @@ function createEnv() {
     Utilities: {
       getUuid: () => crypto.randomUUID(),
       computeDigest: (_alg, value) => Array.from(crypto.createHash('sha256').update(String(value), 'utf8').digest()).map((b) => (b > 127 ? b - 256 : b)),
+      base64Decode: (s) => toSigned(Buffer.from(String(s), 'base64')),
+      base64Encode: (bytes) => Buffer.from(bytes.map((b) => b & 0xff)).toString('base64'),
+      newBlob: (bytes, mime, name) => ({ getBytes: () => bytes, getName: () => name, getContentType: () => mime }),
       DigestAlgorithm: { SHA_256: 'SHA_256' },
       Charset: { UTF_8: 'UTF_8' },
       sleep: (ms) => sleeps.push(ms),
@@ -109,24 +145,10 @@ function createEnv() {
       },
     },
     DriveApp: {
-      getFolderById: () => ({
-        createFile: (name, content) => {
-          const id = 'file-' + Object.keys(files).length;
-          files[id] = { name, content };
-          return {
-            getId: () => id,
-            getBlob: () => ({ getDataAsString: () => files[id].content }),
-            setContent: (c) => { files[id].content = c; },
-          };
-        },
-      }),
+      getFolderById: (id) => folderObj(id),
       getFileById: (id) => {
         if (!files[id]) throw new Error('not found');
-        return {
-          getId: () => id,
-          getBlob: () => ({ getDataAsString: () => files[id].content }),
-          setContent: (c) => { files[id].content = c; },
-        };
+        return fileObj(id);
       },
     },
     SpreadsheetApp: null,
@@ -149,6 +171,7 @@ function createEnv() {
   });
   props.SCHEMA_VERSION = String(vm.runInContext('SCHEMA_VERSION', ctx));
   props.DB_ID = 'db';
+  props.UPLOADS_FOLDER_ID = 'uploads';
   props.LOGS_FOLDER_ID = 'logs';
   props.HASH_SALT = 'test-salt';
 
@@ -182,7 +205,7 @@ function createEnv() {
   }
 
   return {
-    ctx, call, seedUser, lastLoginMail, signInAs, outbox, sleeps, files, props, sheets, state,
+    ctx, call, seedUser, lastLoginMail, signInAs, outbox, sleeps, files, folders, props, sheets, state,
     advance: (ms) => { offsetMs += ms; },
   };
 }

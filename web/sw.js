@@ -12,6 +12,7 @@ const SHELL = [
   'ui.js',
   'auth.js',
   'api.js',
+  'photos.js',
   'views-auth.js',
   'views-admin.js',
   'vendor/qrcode.js',

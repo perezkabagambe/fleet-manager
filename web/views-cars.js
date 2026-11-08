@@ -49,6 +49,10 @@
     if (p.length === 2) return months[Number(p[1]) - 1] + ' ' + p[0];
     return Number(p[2]) + ' ' + months[Number(p[1]) - 1] + ' ' + p[0];
   }
+  // Show where a link goes (e.g. partsouq.com) so nobody taps it blind.
+  function hostOf(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return 'link'; }
+  }
   function money(n, currency) {
     try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency }).format(n); }
     catch (e) { return currency + ' ' + n; }
@@ -61,8 +65,9 @@
   function chip(status) {
     return el('span', { class: 'chip ' + status.toLowerCase().replace(/[^a-z]/g, ''), text: status });
   }
-  function photo(car, cls) {
-    return el('div', { class: 'photo placeholder ' + (cls || ''), 'aria-hidden': 'true', text: '🚗' });
+  // Thumbnail on the fleet list, full-size on the car page. Falls back to a placeholder.
+  function photo(car, cls, kind) {
+    return Photos.element(car, kind || 'thumb', cls);
   }
   function loading() { return el('p', { class: 'muted center pad', text: 'Loading…' }); }
   function backLink(href, text) { return el('a', { class: 'back', href: href, text: '← ' + text }); }
@@ -184,6 +189,45 @@
         });
       });
 
+      var flash = FleetApp.takeFlash();
+      if (flash) msg.append(UI.notice(flash.kind, flash.text));
+
+      // photo: add / change / remove
+      var photoStatus = el('div', { class: 'muted small-text', role: 'status' });
+      var fileInput = el('input', { type: 'file', accept: 'image/*', class: 'file-input' });
+      var pickLabel = el('label', { class: 'btn small secondary file-btn' }, [
+        el('span', { text: car.photoThumbId ? 'Change photo' : 'Add photo' }), fileInput,
+      ]);
+      fileInput.addEventListener('change', function () {
+        var file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        msg.replaceChildren();
+        pickLabel.classList.add('disabled');
+        photoStatus.textContent = 'Preparing photo…';
+        Photos.prepare(file).then(function (p) {
+          photoStatus.textContent = 'Uploading…';
+          return FleetApi.call('uploadCarPhoto', { carId: car.id, full: p.full, thumb: p.thumb });
+        }).then(function () {
+          carsCache = null;
+          Views.car(ctx, root);
+        }).catch(function (e) {
+          photoStatus.textContent = '';
+          pickLabel.classList.remove('disabled');
+          fileInput.value = '';
+          msg.replaceChildren(UI.notice('error', UI.errorText(e)));
+        });
+      });
+      var removePhotoBtn = null;
+      if (car.photoThumbId) {
+        removePhotoBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Remove photo' });
+        removePhotoBtn.addEventListener('click', function () {
+          if (!window.confirm('Remove this photo?')) return;
+          UI.busy(removePhotoBtn, 'Removing…', FleetApi.call('removeCarPhoto', { carId: car.id }))
+            .then(function () { carsCache = null; Views.car(ctx, root); })
+            .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+        });
+      }
+
       // delete (admin)
       var deleteBtn = null;
       if (FleetAuth.isAdmin()) {
@@ -227,11 +271,13 @@
             chip(car.status),
           ]),
           msg,
-          photo(car, 'big'),
+          photo(car, 'big', 'full'),
+          el('div', { class: 'btn-row' }, [pickLabel, removePhotoBtn]),
+          photoStatus,
           el('div', { class: 'btn-row' }, [
             el('a', { class: 'btn small', href: '#/car/' + car.id + '/edit', text: 'Edit' }),
             car.partsouqUrl
-              ? el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue' })
+              ? el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Catalogue: ' + hostOf(car.partsouqUrl) })
               : null,
             deleteBtn,
           ]),
@@ -334,12 +380,19 @@
         odometerField(),
         UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. 2021, Mar 2021 or 12/03/2021' }), 'Optional. A full date, or just the month and year, or just the year.'),
         acquisitionCostField(),
-        UI.field('PartSouq catalogue link', text('partsouqUrl', v.partsouqUrl, { inputmode: 'url', placeholder: 'https://partsouq.com/…' }), 'Optional. Must be a partsouq.com address.'),
+        UI.field('Parts catalogue link', text('partsouqUrl', v.partsouqUrl, { inputmode: 'url', placeholder: 'https://…' }), 'Optional. Any secure (https) link, e.g. partsouq.com'),
       ];
       var notes = el('textarea', { name: 'notes', rows: '4', maxlength: '2000' });
       notes.value = v.notes || '';
       f.notes = notes;
       fields.push(UI.field('Notes', notes));
+
+      // New cars can take a photo straight away; existing cars manage it on the car page.
+      var photoInput = null;
+      if (!car) {
+        photoInput = el('input', { type: 'file', accept: 'image/*', name: 'photo' });
+        fields.push(UI.field('Photo', photoInput, 'Optional. Take a photo or choose one from your gallery. You can also add it later.'));
+      }
 
       if (!car) {
         f.country.addEventListener('change', function () {
@@ -370,8 +423,14 @@
             return null;
           }
           carsCache = null;
-          FleetApp.go('/car/' + d.car.id);
-          return null;
+          var goToCar = function () { FleetApp.go('/car/' + d.car.id); };
+          var photoFile = photoInput && photoInput.files && photoInput.files[0];
+          if (!photoFile) { goToCar(); return null; }
+          // The car is already saved; if the photo fails, say so on the next screen rather than losing the car.
+          return Photos.upload(d.car.id, photoFile).then(goToCar, function (e) {
+            FleetApp.setFlash('error', 'The car was saved, but its photo could not be added: ' + UI.errorText(e) + ' You can add it from this page.');
+            goToCar();
+          });
         }).catch(function (e) {
           if (e.code === 'odometer_lower' && FleetAuth.isAdmin() &&
               window.confirm('That odometer reading is lower than the current one. Correct it anyway?')) {

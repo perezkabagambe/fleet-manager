@@ -242,7 +242,14 @@
   }
 
   // ---------- start ----------
-  window.FleetApp = { go: go, refreshNav: refreshNav };
+  // A one-shot message to show on the next screen (e.g. "saved, but the photo failed").
+  var flash = null;
+  window.FleetApp = {
+    go: go,
+    refreshNav: refreshNav,
+    setFlash: function (kind, text) { flash = { kind: kind, text: text }; },
+    takeFlash: function () { var f = flash; flash = null; return f; },
+  };
   window.addEventListener('hashchange', route);
   renderFooter();
   refreshNav();
