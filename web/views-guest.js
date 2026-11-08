@@ -98,9 +98,11 @@
 
       var leave = el('button', { type: 'button', class: 'btn small secondary', text: 'Leave guest mode' });
       leave.addEventListener('click', function () {
-        if (!window.confirm('Leave guest mode on this phone? Your name stays reserved, so you would need to scan the QR code again and use a new name.')) return;
-        FleetGuest.clear(carId);
-        FleetApp.go('/login');
+        UI.confirm('Leave guest mode on this phone? Your name stays reserved, so you would need to scan the QR code again and use a new name.', { okLabel: 'Leave', danger: true }).then(function (yes) {
+          if (!yes) return;
+          FleetGuest.clear(carId);
+          FleetApp.go('/login');
+        });
       });
 
       function photos(e) {
@@ -141,10 +143,12 @@
         if (e.mine) {
           del = el('button', { type: 'button', class: 'btn small danger', text: 'Delete' });
           del.addEventListener('click', function () {
-            if (!window.confirm('Delete "' + e.title + '"? Only you and the administrators can see that it existed.')) return;
-            UI.busy(del, 'Deleting…', FleetApi.callGuest(carId, 'guestDeleteEntry', { id: e.id }))
-              .then(function () { FleetApp.setFlash('ok', 'Deleted.'); FleetApp.go('/guest/' + carId); })
-              .catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
+            UI.confirm('Delete "' + e.title + '"? Only you and the administrators can see that it existed.', { okLabel: 'Delete', danger: true }).then(function (yes) {
+              if (!yes) return;
+              UI.busy(del, 'Deleting…', FleetApi.callGuest(carId, 'guestDeleteEntry', { id: e.id }))
+                .then(function () { FleetApp.setFlash('ok', 'Deleted.'); FleetApp.go('/guest/' + carId); })
+                .catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
+            });
           });
         }
         return el('div', { class: 'entry-line guest-entry' }, [
@@ -320,9 +324,12 @@
       if (isAdmin && (g.blocked || g.active)) {
         btn = el('button', { type: 'button', class: 'btn small ' + (g.blocked ? 'secondary' : 'danger'), text: g.blocked ? 'Unblock' : 'Block' });
         btn.addEventListener('click', function () {
-          if (!g.blocked && !window.confirm('Block "' + g.name + '"? They are signed out at once, and their name stays reserved.')) return;
-          UI.busy(btn, '…', FleetApi.call('setGuestBlocked', { id: g.id, blocked: !g.blocked })).then(loadGuests)
-            .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+          function go() {
+            UI.busy(btn, '…', FleetApi.call('setGuestBlocked', { id: g.id, blocked: !g.blocked })).then(loadGuests)
+              .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+          }
+          if (g.blocked) return go();
+          UI.confirm('Block "' + g.name + '"? They are signed out at once, and their name stays reserved.', { okLabel: 'Block', danger: true }).then(function (yes) { if (yes) go(); });
         });
       }
       return el('div', { class: 'entry-line' }, [el('div', { class: 'entry-row' }, [
@@ -352,21 +359,26 @@
         var toggle = el('button', { type: 'button', class: 'btn small' + (state.enabled ? ' danger' : ''), text: state.enabled ? 'Switch off guest access' : 'Switch on guest access' });
         toggle.addEventListener('click', function () {
           msg.replaceChildren();
-          if (state.enabled && !window.confirm('Switch off guest access? Guests are locked out at once. You can switch it back on later.')) return;
-          UI.busy(toggle, 'Saving…', FleetApi.call('setGuestAccess', { carId: car.id, enabled: !state.enabled })).then(function (r) {
-            state.enabled = r.data.enabled;
-            Views.invalidateCars();
-            draw();
-          }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+          function go() {
+            UI.busy(toggle, 'Saving…', FleetApi.call('setGuestAccess', { carId: car.id, enabled: !state.enabled })).then(function (r) {
+              state.enabled = r.data.enabled;
+              Views.invalidateCars();
+              draw();
+            }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+          }
+          if (!state.enabled) return go();
+          UI.confirm('Switch off guest access? Guests are locked out at once. You can switch it back on later.', { okLabel: 'Switch off', danger: true }).then(function (yes) { if (yes) go(); });
         });
         var replace = el('button', { type: 'button', class: 'btn small secondary', text: 'Replace QR code' });
         replace.addEventListener('click', function () {
           msg.replaceChildren();
-          if (!window.confirm('Make a new QR code for this car? Labels already printed stop working for guests until you print the new one. Signed-in people can still use the old label, and guests already in are not signed out.')) return;
-          UI.busy(replace, 'Replacing…', FleetApi.call('replaceGuestSecret', { carId: car.id })).then(function () {
-            FleetApp.setFlash('ok', 'A new QR code has been made. Print a new label for this car.');
-            FleetApp.go('/car/' + car.id);
-          }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+          UI.confirm('Make a new QR code for this car? Labels already printed stop working for guests until you print the new one. Signed-in people can still use the old label, and guests already in are not signed out.', { okLabel: 'Make new code', danger: true }).then(function (yes) {
+            if (!yes) return;
+            UI.busy(replace, 'Replacing…', FleetApi.call('replaceGuestSecret', { carId: car.id })).then(function () {
+              FleetApp.setFlash('ok', 'A new QR code has been made. Print a new label for this car.');
+              FleetApp.go('/car/' + car.id);
+            }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+          });
         });
         kids.push(el('div', { class: 'btn-row' }, [toggle, replace]));
       } else {

@@ -73,6 +73,7 @@
     var list = el('div', { class: 'history' }, [fmt.loading()]);
     var filter = 'All';
     var data = [];
+    var editing = false; // the section's Edit button shows an Edit button on every row
 
     function row(e) {
       var meta = [dateText(e.date)];
@@ -96,7 +97,11 @@
         el('div', { class: 'entry-tags' }, [typeChip(e.type)].concat(tags)),
       ]);
       // a small link icon beside each row copies a link straight to that entry
-      return el('div', { class: 'entry-line' }, [link, UI.copyLinkButton(fmt.entryUrl(car.id, e.id), { aria: 'Copy link to ' + e.title })]);
+      return el('div', { class: 'entry-line' }, [
+        link,
+        editing ? el('a', { class: 'btn small secondary row-edit', href: '#/car/' + car.id + '/entry/' + e.id + '/edit', text: 'Edit', 'aria-label': 'Edit ' + e.title }) : null,
+        UI.copyLinkButton(fmt.entryUrl(car.id, e.id), { aria: 'Copy link to ' + e.title }),
+      ]);
     }
 
     function render() {
@@ -128,8 +133,10 @@
       });
     }
 
+    var editBtn = UI.editToggle(function (on) { editing = on; render(); });
     return el('section', { class: 'card' }, [
       el('h2', { text: 'Service & Issues Log' }),
+      el('div', { class: 'section-tools' }, [editBtn]),
       el('a', { class: 'btn block big', href: '#/car/' + car.id + '/add', text: 'Add entry' }),
       chips, list,
     ]);
@@ -220,10 +227,12 @@
       if (FleetAuth.isAdmin()) {
         deleteBtn = el('button', { type: 'button', class: 'btn small danger', text: 'Delete' });
         deleteBtn.addEventListener('click', function () {
-          if (!window.confirm('Delete this ' + e.type.toLowerCase() + '? It will be hidden everywhere, and any parts it used go back to stock.')) return;
-          UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteEntry', { id: e.id }))
-            .then(function () { Views.invalidateCars(); FleetApp.go('/car/' + carId); })
-            .catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
+          UI.confirm('Delete this ' + e.type.toLowerCase() + '? It will be hidden everywhere, and any parts it used go back to stock.', { okLabel: 'Delete', danger: true }).then(function (yes) {
+            if (!yes) return;
+            UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteEntry', { id: e.id }))
+              .then(function () { Views.invalidateCars(); FleetApp.go('/car/' + carId); })
+              .catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
+          });
         });
       }
       var statusArea = el('div', { class: 'entry-status' });
@@ -335,11 +344,13 @@
         if (FleetAuth.isAdmin()) {
           var rm = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
           rm.addEventListener('click', function () {
-            if (!window.confirm('Remove ' + a.filename + '?')) return;
-            UI.busy(rm, 'Removing…', FleetApi.call('deleteAttachment', { id: a.id })).then(function () {
-              d.attachments = d.attachments.filter(function (x) { return x.id !== a.id; });
-              drawAttachments();
-            }).catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
+            UI.confirm('Remove ' + a.filename + '?', { okLabel: 'Remove', danger: true }).then(function (yes) {
+              if (!yes) return;
+              UI.busy(rm, 'Removing…', FleetApi.call('deleteAttachment', { id: a.id })).then(function () {
+                d.attachments = d.attachments.filter(function (x) { return x.id !== a.id; });
+                drawAttachments();
+              }).catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
+            });
           });
           buttons.push(rm);
         }
@@ -700,9 +711,11 @@
           if (FleetAuth.isAdmin()) {
             var rm = el('button', { type: 'button', class: 'linklike', text: 'Remove' });
             rm.addEventListener('click', function () {
-              if (!window.confirm('Remove ' + a.filename + '?')) return;
-              FleetApi.call('deleteAttachment', { id: a.id }).then(function () { row.remove(); })
-                .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+              UI.confirm('Remove ' + a.filename + '?', { okLabel: 'Remove', danger: true }).then(function (yes) {
+                if (!yes) return;
+                FleetApi.call('deleteAttachment', { id: a.id }).then(function () { row.remove(); })
+                  .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+              });
             });
             line.push(rm);
           }

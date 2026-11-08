@@ -231,9 +231,11 @@
         ev.preventDefault();
         msg.replaceChildren();
         UI.busy(odoBtn, 'Saving…', sendOdometer(false)).catch(function (e) {
-          if (e.code === 'odometer_lower' && FleetAuth.isAdmin() &&
-              window.confirm('That is lower than the current reading (' + num(car.odometer) + '). Correct it anyway?')) {
-            UI.busy(odoBtn, 'Saving…', sendOdometer(true)).catch(function (e2) { msg.replaceChildren(UI.notice('error', UI.errorText(e2))); });
+          if (e.code === 'odometer_lower' && FleetAuth.isAdmin()) {
+            UI.confirm('That is lower than the current reading (' + num(car.odometer) + '). Correct it anyway?', { okLabel: 'Correct it' }).then(function (yes) {
+              if (yes) UI.busy(odoBtn, 'Saving…', sendOdometer(true)).catch(function (e2) { msg.replaceChildren(UI.notice('error', UI.errorText(e2))); });
+              else msg.replaceChildren(UI.notice('error', UI.errorText(e)));
+            });
             return;
           }
           msg.replaceChildren(UI.notice('error', UI.errorText(e)));
@@ -285,11 +287,7 @@
         ]);
       });
 
-      var editTop = el('a', { class: 'btn block big edit-top', href: '#/car/' + car.id + '/edit', text: 'Edit car' });
-      var editBottom = el('a', { class: 'btn block big edit-bottom', href: '#/car/' + car.id + '/edit', text: 'Edit car' });
-
       root.replaceChildren(
-        editTop,
         el('div', { class: 'copy-row' }, [UI.copyLinkButton(carUrl(car.id), { label: 'Copy link to this car' })]),
         el('section', { class: 'card' }, [
           backLink('#/', 'Fleet'),
@@ -301,6 +299,10 @@
             chip(car.status),
           ]),
           msg,
+          el('div', { class: 'section-head' }, [
+            el('h2', { text: 'Vehicle details' }),
+            el('a', { class: 'btn small secondary section-edit', href: '#/car/' + car.id + '/edit', text: 'Edit', 'aria-label': 'Edit the vehicle details' }),
+          ]),
           photo(car, 'big', 'full'),
           el('dl', { class: 'details top-details' }, details),
           car.notes ? el('p', { class: 'notes' , text: car.notes }) : null,
@@ -316,6 +318,7 @@
         collapsible('Reminders', RemindersUI.card(car, page && page.tasks), page && page.tasks ? reminderHint(page.tasks) : ''),
         collapsible('Fluids and specs', el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids and specs' }),
+          el('div', { class: 'section-tools' }, [el('a', { class: 'btn small secondary section-edit', href: '#/car/' + car.id + '/fluids', text: 'Edit', 'aria-label': 'Edit the fluids and specs' })]),
           fluids.length ? el('ul', { class: 'fluids' }, fluidRows) : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' }),
           el('div', { class: 'catalogue' }, car.partsouqUrl
             ? [el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) })]
@@ -331,7 +334,6 @@
           el('p', {}, [el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/label', text: 'Print label' })]),
         ])),
         el('p', { class: 'muted small-text center', text: 'Car details last changed ' + fmtDate(car.updatedAt) }),
-        editBottom
       );
     }
   };
@@ -601,11 +603,12 @@
       function section(title, children) {
         return el('div', { class: 'form-section' }, [el('h2', { text: title })].concat(children));
       }
+      var fluidsSection = section('Fluids and specs', [fluidsEd.node]);
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: car ? 'Save changes' : 'Add car' });
       var form = el('form', { novalidate: true }, [
         section('Details', detailFields),
         section('Owner/Custodian', ownerFields),
-        section('Fluids and specs', [fluidsEd.node]),
+        fluidsSection,
         section('Photo', photoFields),
       ].concat([btn]));
 
@@ -632,8 +635,9 @@
           var d = r.data;
           if (!d.saved) {
             var lines = d.warnings.map(function (w) { return (w.type === 'vin' ? 'Same VIN as ' : 'Same registration as ') + w.label; }).join('\n');
-            if (window.confirm('Possible duplicate:\n' + lines + '\n\nSave anyway?')) return saveCarStep(Object.assign({}, extra, { force: true }));
-            return 'cancelled';
+            return UI.confirm('Possible duplicate:\n' + lines + '\n\nSave anyway?', { okLabel: 'Save anyway' }).then(function (yes) {
+              return yes ? saveCarStep(Object.assign({}, extra, { force: true })) : 'cancelled';
+            });
           }
           state.carId = d.car.id;
           state.version = d.car.version;
@@ -643,9 +647,10 @@
         }).catch(function (e) {
           if (e.code === 'odometer_lower' && !e.asked && FleetAuth.isAdmin()) {
             e.asked = true;
-            if (window.confirm('That odometer reading is lower than the current one. Correct it anyway?')) {
-              return saveCarStep(Object.assign({}, extra, { forceOdometer: true }));
-            }
+            return UI.confirm('That odometer reading is lower than the current one. Correct it anyway?', { okLabel: 'Correct it' }).then(function (yes) {
+              if (yes) return saveCarStep(Object.assign({}, extra, { forceOdometer: true }));
+              throw e;
+            });
           }
           throw e;
         });
@@ -716,10 +721,12 @@
       if (car && FleetAuth.isAdmin()) {
         var deleteBtn = el('button', { type: 'button', class: 'btn small danger', text: 'Delete car' });
         deleteBtn.addEventListener('click', function () {
-          if (!window.confirm('Delete ' + car.registration + '? You can restore it later from the fleet page.')) return;
-          UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteCar', { id: car.id }))
-            .then(function () { carsCache = null; FleetApp.go('/'); })
-            .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); window.scrollTo(0, 0); });
+          UI.confirm('Delete ' + car.registration + '? You can restore it later from the fleet page.', { okLabel: 'Delete car', danger: true }).then(function (yes) {
+            if (!yes) return;
+            UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteCar', { id: car.id }))
+              .then(function () { carsCache = null; FleetApp.go('/'); })
+              .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); window.scrollTo(0, 0); });
+          });
         });
         deleteBox = el('div', { class: 'form-section delete-zone' }, [
           el('h2', { text: 'Delete this car' }),
@@ -734,6 +741,8 @@
         msg, form,
         deleteBox,
       ]));
+      // "Edit" on the Fluids and specs section of the car page lands straight on that part of the form
+      if (/\/fluids$/.test(ctx.path || '')) setTimeout(function () { fluidsSection.scrollIntoView(); }, 0);
     }
   };
 

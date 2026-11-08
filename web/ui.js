@@ -27,6 +27,54 @@
     ]);
   }
 
+  /** A small Edit / Done button for a section. `onChange(editing)` is called each time it is pressed. */
+  function editToggle(onChange, label) {
+    var editing = false;
+    var b = el('button', { type: 'button', class: 'btn small secondary section-edit', text: label || 'Edit', 'aria-pressed': 'false' });
+    b.addEventListener('click', function () {
+      editing = !editing;
+      b.textContent = editing ? 'Done' : (label || 'Edit');
+      b.setAttribute('aria-pressed', editing ? 'true' : 'false');
+      onChange(editing);
+    });
+    return b;
+  }
+
+  // A Yes/No question shown inside the page. (The browser's own pop-up is blocked or answered "no" at once in some
+  // browsers and home-screen apps, which made Remove and Delete buttons do nothing.) Resolves true for OK, false otherwise.
+  function confirmDialog(message, opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      var previous = document.activeElement;
+      var ok = el('button', { type: 'button', class: 'btn' + (opts.danger ? ' danger' : ''), text: opts.okLabel || 'OK' });
+      var cancel = el('button', { type: 'button', class: 'btn secondary', text: opts.cancelLabel || 'Cancel' });
+      var box = el('div', { class: 'dialog', role: 'alertdialog', 'aria-modal': 'true' }, [
+        el('p', { class: 'dialog-text', text: message }),
+        el('div', { class: 'dialog-actions' }, [cancel, ok]),
+      ]);
+      var overlay = el('div', { class: 'dialog-overlay' }, [box]);
+      function close(answer) {
+        document.removeEventListener('keydown', onKey, true);
+        overlay.remove();
+        if (previous && previous.focus) { try { previous.focus(); } catch (e) { /* ignore */ } }
+        resolve(answer);
+      }
+      function onKey(ev) {
+        if (ev.key === 'Escape') { ev.preventDefault(); close(false); }
+        else if (ev.key === 'Tab') { // keep the focus inside the dialog
+          ev.preventDefault();
+          (document.activeElement === cancel ? ok : cancel).focus();
+        }
+      }
+      ok.addEventListener('click', function () { close(true); });
+      cancel.addEventListener('click', function () { close(false); });
+      overlay.addEventListener('click', function (ev) { if (ev.target === overlay) close(false); });
+      document.addEventListener('keydown', onKey, true);
+      document.body.append(overlay);
+      cancel.focus(); // the safe choice is the one under the thumb
+    });
+  }
+
   function notice(kind, text) {
     return el('div', { class: 'notice ' + kind, role: kind === 'error' ? 'alert' : 'status', text: text });
   }
@@ -181,5 +229,5 @@
     return btn;
   }
 
-  window.UI = { el: el, field: field, notice: notice, errorText: errorText, busy: busy, copyText: copyText, copyLinkButton: copyLinkButton };
+  window.UI = { el: el, field: field, notice: notice, errorText: errorText, busy: busy, confirm: confirmDialog, editToggle: editToggle, copyText: copyText, copyLinkButton: copyLinkButton };
 })();

@@ -445,3 +445,15 @@ details.collapsible[open] > summary .collapse-hint { display: none; }
 .my-cars li { border-bottom: 1px solid var(--border); }
 .my-cars li:last-child { border-bottom: 0; }
 .my-cars a { display: block; padding: 10px 0; min-height: 44px; }
+
+/* In-page Yes/No question */
+.dialog-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(15, 25, 35, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.dialog { background: var(--surface); color: var(--text, inherit); border-radius: var(--radius); padding: 20px; width: 100%; max-width: 420px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3); }
+.dialog-text { margin: 0 0 16px; white-space: pre-line; overflow-wrap: anywhere; }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+
+/* Edit buttons on the car page sections */
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0 8px; }
+.section-head h2 { margin: 0; }
+.section-tools { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+.entry-line .row-edit { flex: none; margin-left: 8px; align-self: center; }

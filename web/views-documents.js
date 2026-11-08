@@ -55,9 +55,11 @@
       if (FleetAuth.isAdmin()) {
         var rm = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
         rm.addEventListener('click', function () {
-          if (!window.confirm('Remove ' + d.filename + '?')) return;
-          UI.busy(rm, 'Removing…', FleetApi.call('deleteCarDocument', { id: d.id })).then(load)
-            .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+          UI.confirm('Remove ' + d.filename + '?', { okLabel: 'Remove', danger: true }).then(function (yes) {
+            if (!yes) return;
+            UI.busy(rm, 'Removing…', FleetApi.call('deleteCarDocument', { id: d.id })).then(load)
+              .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+          });
         });
         actions.push(rm);
       }

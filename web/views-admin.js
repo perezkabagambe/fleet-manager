@@ -19,11 +19,14 @@
     root.replaceChildren(el('section', { class: 'card' }, [el('h1', { text: 'Users' }), msg, listBox]));
 
     function act(btn, label, action, params, confirmText) {
-      if (confirmText && !window.confirm(confirmText)) return;
-      msg.replaceChildren();
-      UI.busy(btn, label, FleetApi.call(action, params))
-        .then(load)
-        .catch(function (e) { msg.append(UI.notice('error', UI.errorText(e))); });
+      function go() {
+        msg.replaceChildren();
+        UI.busy(btn, label, FleetApi.call(action, params))
+          .then(load)
+          .catch(function (e) { msg.append(UI.notice('error', UI.errorText(e))); });
+      }
+      if (!confirmText) return go();
+      UI.confirm(confirmText, { okLabel: 'Yes', danger: true }).then(function (yes) { if (yes) go(); });
     }
 
     function userCard(u) {

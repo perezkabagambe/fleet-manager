@@ -24,9 +24,11 @@
     var list = el('div', { class: 'history' }, [fmt.loading()]);
     var msg = el('div');
     var body = el('div');
+    var editing = false; // the section's Edit button shows an Edit button on every row
+    var shown = [];
 
     function row(t) {
-      return el('a', { class: 'entry-row', href: '#/car/' + car.id + '/reminder/' + t.id }, [
+      var link = el('a', { class: 'entry-row', href: '#/car/' + car.id + '/reminder/' + t.id }, [
         el('div', { class: 'entry-main' }, [
           el('div', { class: 'entry-title', text: t.name }),
           el('div', { class: 'muted small-text', text: t.active ? t.text : (t.pausedReason || 'Paused') }),
@@ -34,9 +36,14 @@
         ]),
         el('div', { class: 'entry-tags' }, [statusChip(t.status), t.kind === 'compliance' ? el('span', { class: 'chip t-compliance', text: 'Renewal' }) : null]),
       ]);
+      return el('div', { class: 'entry-line' }, [
+        link,
+        editing ? el('a', { class: 'btn small secondary row-edit', href: '#/car/' + car.id + '/reminder/' + t.id, text: 'Edit', 'aria-label': 'Edit ' + t.name }) : null,
+      ]);
     }
 
     function draw(tasks) {
+      shown = tasks;
       list.replaceChildren.apply(list, tasks.length ? tasks.map(row)
         : [el('p', { class: 'muted', text: 'No reminders yet. Add the standard set to start, or add your own.' })]);
     }
@@ -68,8 +75,10 @@
       msg, list
     );
     if (preloaded) draw(preloaded); else load();
+    var editBtn = UI.editToggle(function (on) { editing = on; draw(shown); });
     return el('section', { class: 'card' }, [
       el('h2', { text: 'Reminders' }),
+      el('div', { class: 'section-tools' }, [editBtn]),
       el('p', { class: 'muted small-text', text: 'Emailed to the car\'s owners/custodians every Monday while something is due.' }),
       body,
     ]);
@@ -178,10 +187,12 @@
       if (task && FleetAuth.isAdmin()) {
         deleteBtn = el('button', { type: 'button', class: 'btn small danger', text: 'Delete reminder' });
         deleteBtn.addEventListener('click', function () {
-          if (!window.confirm('Delete the reminder "' + task.name + '"? Past entries are not affected.')) return;
-          UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteTask', { id: task.id }))
-            .then(function () { FleetApp.go('/car/' + car.id); })
-            .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+          UI.confirm('Delete the reminder "' + task.name + '"? Past entries are not affected.', { okLabel: 'Delete', danger: true }).then(function (yes) {
+            if (!yes) return;
+            UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteTask', { id: task.id }))
+              .then(function () { FleetApp.go('/car/' + car.id); })
+              .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+          });
         });
       }
 
