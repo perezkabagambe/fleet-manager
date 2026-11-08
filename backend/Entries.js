@@ -161,8 +161,11 @@ function listEntries_(p, ctx) {
   if (!car) fail_('not_found');
   const c = entryContext_(car.id);
   const attachments = {};
+  const firstImage = {}; // the first photo attached to each entry: it is the entry's thumbnail
   Db.all('Attachments').forEach(function (a) {
-    if (a.car_id === car.id && !isTrue_(a.deleted)) attachments[a.entry_id] = (attachments[a.entry_id] || 0) + 1;
+    if (a.car_id !== car.id || isTrue_(a.deleted)) return;
+    attachments[a.entry_id] = (attachments[a.entry_id] || 0) + 1;
+    if (a.mime === 'image/jpeg' && !firstImage[a.entry_id]) firstImage[a.entry_id] = a;
   });
   const guestNames = guestNamesById_();
   const rowOf = {};
@@ -170,6 +173,8 @@ function listEntries_(p, ctx) {
     const s = summarizeEntry_(e, guestNames);
     rowOf[e.id] = e._row;
     s.attachmentCount = attachments[e.id] || 0;
+    const fi = firstImage[e.id];
+    s.thumbAttachmentId = fi && fi.thumb_file_id ? fi.id : '';
     if (JOB_TYPES.indexOf(e.type) !== -1) {
       s.jobCost = jobCost_(e, c.usage, c.purchasesById);
       s.partsUsed = c.usage.filter(function (u) { return u.event_id === e.id; }).length;
@@ -199,7 +204,7 @@ function getEntry_(p, ctx) {
 
   out.attachments = Db.all('Attachments')
     .filter(function (a) { return a.entry_id === e.id && !isTrue_(a.deleted); })
-    .map(function (a) { return { id: a.id, filename: a.filename, mime: a.mime, size: Number(a.size || 0) }; });
+    .map(function (a) { return { id: a.id, filename: a.filename, mime: a.mime, size: Number(a.size || 0), thumb: !!a.thumb_file_id }; });
 
   if (e.task_id) {
     const t = findTask_(e.task_id);

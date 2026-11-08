@@ -86,6 +86,7 @@
       if (e.guestName) tags.push(GuestUI.chip(e));
       var cost = costText(e);
       var link = el('a', { class: 'entry-row', href: '#/car/' + car.id + '/entry/' + e.id }, [
+        e.thumbAttachmentId ? Photos.thumbBox(e.thumbAttachmentId, 'row-thumb') : null,
         el('div', { class: 'entry-main' }, [
           el('div', { class: 'entry-title', text: e.title }),
           el('div', { class: 'entry-meta' }, [
@@ -249,10 +250,29 @@
       }
       if (e.type === 'Purchase' && d.stock) statusArea.append(el('span', { class: 'chip ' + (d.stock.status === 'In stock' ? 'active' : d.stock.status === 'Fitted' ? 'sold' : 'pending'), text: d.stock.status }));
 
+      // The entry's first photo, small, beside its title. Photos attached before thumbnails existed get theirs made here, once.
+      var topThumb = el('div', { class: 'top-thumb', hidden: true });
+      function refreshTopThumb() {
+        var first = d.attachments.filter(function (a) { return a.mime === 'image/jpeg'; })[0];
+        topThumb.replaceChildren();
+        topThumb.hidden = !first;
+        if (!first) return;
+        if (first.thumb) { topThumb.append(Photos.thumbBox(first.id, 'entry-thumb')); return; }
+        Photos.fetchAttachment(first.id).then(function (att) { return Photos.thumbFromBase64(att.data); }).then(function (b64) {
+          if (d.attachments.filter(function (a) { return a.mime === 'image/jpeg'; })[0] !== first) return; // it was removed meanwhile
+          var src = 'data:image/jpeg;base64,' + b64;
+          Photos.rememberAttachmentThumb(first.id, src);
+          first.thumb = true;
+          topThumb.replaceChildren(Photos.thumbBox(first.id, 'entry-thumb'));
+          FleetApi.call('setAttachmentThumb', { id: first.id, thumb: b64 }).then(function () { Views.invalidateCars(); }).catch(function () { /* shown anyway; it will be tried again next time */ });
+        }).catch(function () { /* no thumbnail */ });
+      }
+      refreshTopThumb();
+
       var cards = [el('div', { class: 'copy-row' }, [UI.copyLinkButton(fmt.entryUrl(carId, e.id), { label: 'Copy link to this entry' })]),
         el('section', { class: 'card' }, [
         fmt.backLink('#/car/' + carId, car.registration),
-        el('div', { class: 'page-head' }, [el('div', {}, [el('h1', { text: e.title }), el('div', { class: 'muted', text: meta.join(' · ') })]), el('div', { class: 'entry-tags' }, [typeChip(e.type), e.guestName ? GuestUI.chip(e) : null])]),
+        el('div', { class: 'page-head' }, [el('div', { class: 'head-with-thumb' }, [topThumb, el('div', {}, [el('h1', { text: e.title }), el('div', { class: 'muted', text: meta.join(' · ') })])]), el('div', { class: 'entry-tags' }, [typeChip(e.type), e.guestName ? GuestUI.chip(e) : null])]),
         msg, statusArea,
         d.reminder ? el('p', { class: 'muted small-text' }, [el('span', { text: 'Reminder: ' }), el('a', { href: '#/car/' + carId + '/reminder/' + d.reminder.id, text: d.reminder.name })]) : null,
         el('a', { class: 'btn block big edit-top', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit ' + BY_TYPE[e.type].label.toLowerCase() }),
@@ -349,6 +369,7 @@
               UI.busy(rm, 'Removing…', FleetApi.call('deleteAttachment', { id: a.id })).then(function () {
                 d.attachments = d.attachments.filter(function (x) { return x.id !== a.id; });
                 drawAttachments();
+                refreshTopThumb();
               }).catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
             });
           });
@@ -364,11 +385,12 @@
       function addFile(file) {
         msg.replaceChildren(UI.notice('ok', 'Adding ' + (file.name || 'the file') + '…'));
         return Photos.prepareAttachment(file).then(function (a) {
-          return FleetApi.call('uploadAttachment', { entryId: e.id, mime: a.mime, data: a.data, filename: a.filename });
+          return FleetApi.call('uploadAttachment', { entryId: e.id, mime: a.mime, data: a.data, thumb: a.thumb, filename: a.filename });
         }).then(function (r) {
           Views.invalidateCars();
           d.attachments.push(r.data.attachment);
           drawAttachments();
+          refreshTopThumb();
           msg.replaceChildren(UI.notice('ok', 'Added.'));
         }).catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
       }
@@ -782,7 +804,7 @@
           if (i >= staged.length) return Promise.resolve();
           var s = staged[i];
           return Photos.prepareAttachment(s.file).then(function (a) {
-            return FleetApi.call('uploadAttachment', { entryId: entryId, mime: a.mime, data: a.data, filename: a.filename });
+            return FleetApi.call('uploadAttachment', { entryId: entryId, mime: a.mime, data: a.data, thumb: a.thumb, filename: a.filename });
           }).then(function () { i++; return next(); }, function (e) {
             uploadFailed = true;
             FleetApp.setFlash('error', 'The entry was saved, but "' + s.name + '" could not be attached: ' + UI.errorText(e) + ' You can add it with Edit.');

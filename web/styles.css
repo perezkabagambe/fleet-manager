@@ -457,3 +457,12 @@ details.collapsible[open] > summary .collapse-hint { display: none; }
 .section-head h2 { margin: 0; }
 .section-tools { display: flex; justify-content: flex-end; margin: 0 0 8px; }
 .entry-line .row-edit { flex: none; margin-left: 8px; align-self: center; }
+
+/* Thumbnails of an entry's first photo */
+.thumb-box { flex: none; width: 56px; height: 56px; border-radius: 8px; background: var(--border); overflow: hidden; }
+.thumb-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.entry-row .row-thumb { margin-right: 4px; }
+.head-with-thumb { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
+.head-with-thumb > div:last-child { min-width: 0; }
+.top-thumb[hidden] { display: none; }
+.thumb-box.entry-thumb { width: 72px; height: 72px; }

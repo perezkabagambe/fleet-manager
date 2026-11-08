@@ -44,13 +44,52 @@ function uploadAttachment_(p, ctx) {
   if (existing.length >= MAX_ATTACHMENTS_PER_ENTRY) fail_('too_many_attachments');
 
   const filename = safeFilename_(p.filename, mime);
-  const file = carFolder_(car.id).createFile(Utilities.newBlob(bytes, mime, 'att-' + Date.now() + '-' + filename));
+  const folder = carFolder_(car.id);
+  // A photo comes with a small thumbnail (made on the phone) for the lists. It is optional: older phones do not send one.
+  let thumbBytes = null;
+  if (mime === 'image/jpeg' && p.thumb) {
+    try { thumbBytes = decodeJpeg_(p.thumb, MAX_THUMB_BYTES); } catch (e) { thumbBytes = null; } // a bad thumbnail never blocks the photo
+  }
+  const file = folder.createFile(Utilities.newBlob(bytes, mime, 'att-' + Date.now() + '-' + filename));
+  const thumbFile = thumbBytes ? folder.createFile(Utilities.newBlob(thumbBytes, 'image/jpeg', 'attthumb-' + Date.now() + '.jpg')) : null;
   const row = Object.assign(baseColumns_(ctx), {
     car_id: car.id, entry_id: entry.id, drive_file_id: file.getId(), filename: filename, mime: mime, size: bytes.length,
+    thumb_file_id: thumbFile ? thumbFile.getId() : '',
   });
   Db.insert('Attachments', row);
   audit_(ctx.user, 'attachment_added', 'Entry', entry.id, filename + ' attached to ' + entry.type.toLowerCase() + ' "' + entry.title + '" (' + car.registration + ')');
-  return { attachment: { id: row.id, filename: filename, mime: mime, size: bytes.length } };
+  return { attachment: { id: row.id, filename: filename, mime: mime, size: bytes.length, thumb: !!thumbFile } };
+}
+
+const MAX_THUMBS_PER_REQUEST = 8;
+
+/** Several small thumbnails in one go: { ids: [attachmentId...] } -> { thumbs: { attachmentId: base64 } }. Ids without a thumbnail are left out. */
+function getAttachmentThumbs_(p, ctx) {
+  if (!Array.isArray(p.ids) || p.ids.length > MAX_THUMBS_PER_REQUEST) fail_('invalid_input');
+  const thumbs = {};
+  p.ids.forEach(function (raw) {
+    const found = liveAttachment_(cleanStr_(raw, 64));
+    if (!found || !found.att.thumb_file_id) return;
+    if (!findCar_(found.att.car_id, ctx.user.role === 'admin')) return;
+    try {
+      thumbs[found.att.id] = Utilities.base64Encode(DriveApp.getFileById(found.att.thumb_file_id).getBlob().getBytes());
+    } catch (e) { /* the file is gone: no thumbnail */ }
+  });
+  return { thumbs: thumbs };
+}
+
+/** A photo that was attached before thumbnails existed gets one, made on the phone the first time it is opened. */
+function setAttachmentThumb_(p, ctx) {
+  const found = liveAttachment_(cleanStr_(p.id, 64));
+  if (!found) fail_('not_found');
+  const att = found.att;
+  if (!findCar_(att.car_id, false)) fail_('not_found');
+  if (att.mime !== 'image/jpeg') fail_('invalid_attachment');
+  if (att.thumb_file_id) return { thumb: true }; // already has one: nothing to do
+  const bytes = decodeJpeg_(p.thumb, MAX_THUMB_BYTES);
+  const file = carFolder_(att.car_id).createFile(Utilities.newBlob(bytes, 'image/jpeg', 'attthumb-' + Date.now() + '.jpg'));
+  Db.update('Attachments', att._row, { thumb_file_id: file.getId(), updated_at: nowIso_(), updated_by: ctx.user.id, version: Number(att.version || 1) + 1 });
+  return { thumb: true };
 }
 
 function liveAttachment_(id) {
@@ -79,7 +118,7 @@ function deleteAttachment_(p, ctx) {
   const found = liveAttachment_(cleanStr_(p.id, 64));
   if (!found) fail_('not_found');
   Db.update('Attachments', found.att._row, { deleted: true, updated_at: nowIso_(), updated_by: ctx.user.id, version: Number(found.att.version || 1) + 1 });
-  trashFiles_([found.att.drive_file_id]);
+  trashFiles_([found.att.drive_file_id, found.att.thumb_file_id]);
   audit_(ctx.user, 'attachment_removed', 'Entry', found.entry.id, found.att.filename + ' removed from "' + found.entry.title + '"');
   return { done: true };
 }

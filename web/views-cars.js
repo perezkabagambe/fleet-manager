@@ -247,6 +247,10 @@
       function detail(label, value) {
         return value ? [el('dt', { text: label }), el('dd', { text: value })] : [];
       }
+      // Always listed, so it is clear where to find it (and that it can be added): "Not recorded" until it is filled in.
+      function detailAlways(label, value) {
+        return [el('dt', { text: label }), el('dd', { class: value ? '' : 'muted', text: value || 'Not recorded' })];
+      }
       var details = [].concat(
         detail('Make and model', carTitle(car)),
         detail('Colour', car.colour),
@@ -259,7 +263,7 @@
         detail('Fuel capacity', car.fuelCapacity === null || car.fuelCapacity === undefined ? '' : car.fuelCapacity + ' litres'),
         detail('Imported', fmtAcquired(car.importDate)),
         detail('Acquired', fmtAcquired(car.acquisitionDate)),
-        detail('Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? '' : money(car.acquisitionCost, car.acquisitionCurrency || car.currency))
+        detailAlways('Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? '' : money(car.acquisitionCost, car.acquisitionCurrency || car.currency))
       );
 
       // owner/custodian: names from app users, plus any free-text person who is not a user (change them with Edit car)

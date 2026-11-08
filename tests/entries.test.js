@@ -445,6 +445,67 @@ test('attachments are read back through the record, and only admins remove them'
   assert.equal(env.call('deleteAttachment', { token: admin, id: a.id }).error, 'not_found');
 });
 
+test('the first photo on an entry becomes its thumbnail; PDFs and later photos do not', () => {
+  const { env, sam, car, add, get, list } = setup();
+  const e = add('Maintenance', repair()).data.entry;
+  const up = (mime, data, thumb, name) => env.call('uploadAttachment', { token: sam, entryId: e.id, mime, data, thumb, filename: name });
+  const thumbOf = () => list().find((x) => x.id === e.id).thumbAttachmentId;
+  assert.equal(thumbOf(), '', 'nothing attached yet');
+  assert.equal(up('application/pdf', pdf(500), jpeg(300), 'quote.pdf').data.attachment.thumb, false, 'a PDF never gets a thumbnail');
+  assert.equal(thumbOf(), '');
+  const first = up('image/jpeg', jpeg(3000), jpeg(400), 'one.jpg');
+  assert.equal(first.data.attachment.thumb, true);
+  const second = up('image/jpeg', jpeg(3000), jpeg(400), 'two.jpg');
+  assert.equal(thumbOf(), first.data.attachment.id, 'the FIRST photo is the thumbnail');
+  const got = get(e.id).data.attachments;
+  assert.deepEqual(got.map((a) => a.thumb), [false, true, true]);
+  const t = env.call('getAttachmentThumbs', { token: sam, ids: [first.data.attachment.id, second.data.attachment.id, 'nope'] }).data.thumbs;
+  assert.deepEqual(Object.keys(t).sort(), [first.data.attachment.id, second.data.attachment.id].sort());
+  assert.equal(t[first.data.attachment.id], jpeg(400));
+  assert.ok(car);
+});
+
+test('a bad or missing thumbnail never stops a photo being attached', () => {
+  const { env, sam, add, get, list } = setup();
+  const e = add('Issue', issue()).data.entry;
+  const bad = env.call('uploadAttachment', { token: sam, entryId: e.id, mime: 'image/jpeg', data: jpeg(2000), thumb: pdf(100), filename: 'a.jpg' });
+  assert.equal(bad.ok, true);
+  assert.equal(bad.data.attachment.thumb, false);
+  const none = env.call('uploadAttachment', { token: sam, entryId: e.id, mime: 'image/jpeg', data: jpeg(2000), filename: 'b.jpg' });
+  assert.equal(none.data.attachment.thumb, false);
+  assert.equal(list().find((x) => x.id === e.id).thumbAttachmentId, '', 'the first photo has no thumbnail yet');
+  assert.equal(get(e.id).data.attachments.length, 2);
+});
+
+test('an older photo gets its thumbnail added once, and then it shows in the list', () => {
+  const { env, sam, add, list } = setup();
+  const e = add('Issue', issue()).data.entry;
+  const a = env.call('uploadAttachment', { token: sam, entryId: e.id, mime: 'image/jpeg', data: jpeg(2000), filename: 'old.jpg' }).data.attachment;
+  assert.equal(env.call('setAttachmentThumb', { token: sam, id: a.id, thumb: jpeg(300) }).ok, true);
+  assert.equal(list().find((x) => x.id === e.id).thumbAttachmentId, a.id);
+  const filesBefore = Object.keys(env.files).length;
+  assert.equal(env.call('setAttachmentThumb', { token: sam, id: a.id, thumb: jpeg(350) }).ok, true, 'again: harmless');
+  assert.equal(Object.keys(env.files).length, filesBefore, 'no second thumbnail is stored');
+  assert.equal(env.call('setAttachmentThumb', { token: sam, id: a.id, thumb: pdf(100) }).ok, true, 'ignored once it has one');
+  const pdfAtt = env.call('uploadAttachment', { token: sam, entryId: e.id, mime: 'application/pdf', data: pdf(500), filename: 'q.pdf' }).data.attachment;
+  assert.equal(env.call('setAttachmentThumb', { token: sam, id: pdfAtt.id, thumb: jpeg(300) }).error, 'invalid_attachment');
+  assert.equal(env.call('setAttachmentThumb', { token: sam, id: 'nope', thumb: jpeg(300) }).error, 'not_found');
+});
+
+test('thumbnail actions need a session, ask for at most 8 at a time, and removing a photo removes its thumbnail', () => {
+  const { env, sam, admin, add } = setup();
+  const e = add('Issue', issue()).data.entry;
+  assert.equal(env.call('getAttachmentThumbs', { ids: ['x'] }).error, 'unauthorized');
+  assert.equal(env.call('setAttachmentThumb', { id: 'x', thumb: jpeg(10) }).error, 'unauthorized');
+  assert.equal(env.call('getAttachmentThumbs', { token: sam, ids: new Array(9).fill('x') }).error, 'invalid_input');
+  assert.equal(env.call('getAttachmentThumbs', { token: sam, ids: 'x' }).error, 'invalid_input');
+  const a = env.call('uploadAttachment', { token: sam, entryId: e.id, mime: 'image/jpeg', data: jpeg(2000), thumb: jpeg(300), filename: 'x.jpg' }).data.attachment;
+  const before = Object.keys(env.files).filter((k) => env.files[k].trashed).length;
+  assert.equal(env.call('deleteAttachment', { token: admin, id: a.id }).ok, true);
+  assert.equal(Object.keys(env.files).filter((k) => env.files[k].trashed).length, before + 2, 'photo and thumbnail both go to the trash');
+  assert.deepEqual(env.call('getAttachmentThumbs', { token: sam, ids: [a.id] }).data.thumbs, {});
+});
+
 test('attachments of a deleted entry cannot be read', () => {
   const { env, admin, sam, add } = setup();
   const e = add('Issue', issue()).data.entry;

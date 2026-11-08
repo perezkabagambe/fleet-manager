@@ -184,7 +184,88 @@
       if (file.size > MAX_PDF_BYTES) return Promise.reject(new FleetApi.ApiError('attachment_too_large', 'PDF too large'));
       return toBase64(file).then(function (b64) { return { mime: 'application/pdf', data: b64, filename: file.name || 'document.pdf' }; });
     }
-    return prepare(file).then(function (p) { return { mime: 'image/jpeg', data: p.full, filename: file.name || 'photo.jpg' }; });
+    return prepare(file).then(function (p) { return { mime: 'image/jpeg', data: p.full, thumb: p.thumb, filename: file.name || 'photo.jpg' }; });
+  }
+
+  // ---------- small thumbnails of the photos attached to entries ----------
+  // Fetched a few at a time (one request for up to 8), remembered on this phone by attachment id, and forgotten at sign-out.
+  var ATHUMB_KEY = 'fleet.athumb.';
+  var athumbMemory = {};
+  var athumbWaiting = {};
+  var athumbQueue = [];
+  var athumbTimer = null;
+
+  function rememberAthumb(id, src) {
+    athumbMemory[id] = src;
+    try { localStorage.setItem(ATHUMB_KEY + id, src); } catch (e) { /* storage full or blocked */ }
+  }
+
+  function flushAthumbs() {
+    athumbTimer = null;
+    var ids = athumbQueue.splice(0);
+    function settle(id, src, err) {
+      var w = athumbWaiting[id];
+      delete athumbWaiting[id];
+      if (!w) return;
+      if (src) w.resolve(src); else w.reject(err || new FleetApi.ApiError('no_photo', 'No thumbnail'));
+    }
+    for (var i = 0; i < ids.length; i += 8) {
+      (function (batch) {
+        FleetApi.call('getAttachmentThumbs', { ids: batch }).then(function (r) {
+          batch.forEach(function (id) {
+            var b64 = r.data.thumbs && r.data.thumbs[id];
+            if (b64) { var src = dataUrl(b64); rememberAthumb(id, src); settle(id, src); } else settle(id, null);
+          });
+        }).catch(function (e) { batch.forEach(function (id) { settle(id, null, e); }); });
+      })(ids.slice(i, i + 8));
+    }
+  }
+
+  /** Data URL of an attachment's small thumbnail. */
+  function attachmentThumb(id) {
+    if (athumbMemory[id]) return Promise.resolve(athumbMemory[id]);
+    try {
+      var saved = localStorage.getItem(ATHUMB_KEY + id);
+      if (saved) { athumbMemory[id] = saved; return Promise.resolve(saved); }
+    } catch (e) { /* ignore */ }
+    if (!athumbWaiting[id]) {
+      var w = {};
+      w.promise = new Promise(function (resolve, reject) { w.resolve = resolve; w.reject = reject; });
+      athumbWaiting[id] = w;
+      athumbQueue.push(id);
+      if (!athumbTimer) athumbTimer = setTimeout(flushAthumbs, 40);
+    }
+    return athumbWaiting[id].promise;
+  }
+
+  /** A small box for an attachment's thumbnail: a placeholder of the right size first, then the picture. */
+  function thumbBox(id, cls) {
+    var box = el('div', { class: 'thumb-box ' + (cls || ''), 'aria-hidden': 'true' });
+    attachmentThumb(id).then(function (src) {
+      box.replaceChildren(el('img', { class: 'thumb-img', src: src, alt: '' }));
+    }).catch(function () { /* no thumbnail: the placeholder stays */ });
+    return box;
+  }
+
+  /** For a photo attached before thumbnails existed: make the thumbnail on the phone from the full image (base64 JPEG). */
+  function thumbFromBase64(b64) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () { toJpeg(img, THUMB_SIDE, THUMB_QUALITY).then(toBase64).then(resolve, reject); };
+      img.onerror = function () { reject(new FleetApi.ApiError('invalid_photo', 'Unreadable image')); };
+      img.src = dataUrl(b64);
+    });
+  }
+
+  /** Called at sign-out: what this phone remembered about photos belongs to the person who left. */
+  function forgetThumbs() {
+    athumbMemory = {};
+    memory = {};
+    try {
+      Object.keys(localStorage).forEach(function (k) {
+        if (k.indexOf(ATHUMB_KEY) === 0 || k.indexOf(THUMB_KEY) === 0) localStorage.removeItem(k);
+      });
+    } catch (e) { /* ignore */ }
   }
 
   /** Download an attachment and show it: photos appear inline, PDFs are saved/opened as a file. */
@@ -200,6 +281,7 @@
 
   window.Photos = {
     prepare: prepare, upload: upload, get: get, element: element, picker: picker,
+    attachmentThumb: attachmentThumb, thumbBox: thumbBox, thumbFromBase64: thumbFromBase64, rememberAttachmentThumb: rememberAthumb, forgetThumbs: forgetThumbs,
     fileButton: fileButton, prepareAttachment: prepareAttachment, fetchAttachment: fetchAttachment, toBlobUrl: toBlobUrl,
   };
 })();

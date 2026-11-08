@@ -70,6 +70,8 @@ function actions_() {
     getCarCosts: { auth: 'user', fn: getCarCosts_ },
     uploadAttachment: { auth: 'user', lock: true, fn: uploadAttachment_ },
     getAttachment: { auth: 'user', fn: getAttachment_ },
+    getAttachmentThumbs: { auth: 'user', fn: getAttachmentThumbs_ },
+    setAttachmentThumb: { auth: 'user', lock: true, fn: setAttachmentThumb_ },
     deleteAttachment: { auth: 'admin', lock: true, fn: deleteAttachment_ },
     listCarDocuments: { auth: 'user', fn: listCarDocuments_ },
     uploadCarDocument: { auth: 'user', lock: true, fn: uploadCarDocument_ },
