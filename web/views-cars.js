@@ -49,6 +49,15 @@
 
   // ---------- helpers ----------
   function num(n) { return n === null || n === undefined ? '–' : Number(n).toLocaleString('en-GB'); }
+  function countText(n, one, many) { return n === 0 ? 'None' : n + ' ' + (n === 1 ? one : many); }
+  function reminderHint(tasks) {
+    var active = tasks.filter(function (t) { return t.active; });
+    var overdue = active.filter(function (t) { return t.status === 'overdue'; }).length;
+    var soon = active.filter(function (t) { return t.status === 'due_soon'; }).length;
+    if (overdue) return overdue + ' overdue';
+    if (soon) return soon + ' due soon';
+    return active.length ? 'All OK' : 'None';
+  }
   function carTitle(c) { return c.make + ' ' + c.model + (c.year ? ' (' + c.year + ')' : ''); }
   // The date is stored as YYYY, YYYY-MM or YYYY-MM-DD; show only the precision that is known.
   function fmtAcquired(s) {
@@ -203,8 +212,29 @@
   };
 
   // ---------- car page ----------
+  // Which sections of a car page are open. Every visit starts with all of them closed; the page redrawing itself
+  // (the fresh answer replacing the saved copy, or after an odometer update) keeps what you had opened.
+  var openCards = { carId: '', keys: {} };
+
+  /** Turn a card into a section that opens and closes. Its heading stays visible; `hint` is a short summary beside it. */
+  function collapsible(key, card, hint) {
+    if (!card) return null;
+    var kids = Array.prototype.slice.call(card.childNodes);
+    var heading = kids.filter(function (n) { return n.tagName === 'H2'; })[0];
+    var rest = kids.filter(function (n) { return n !== heading; });
+    var summary = el('summary', {}, [
+      heading || el('h2', { text: key }),
+      hint ? el('span', { class: 'muted small-text collapse-hint', text: hint }) : null,
+    ]);
+    var d = el('details', { class: 'card collapsible' }, [summary, el('div', { class: 'collapse-body' }, rest)]);
+    d.open = !!openCards.keys[key];
+    d.addEventListener('toggle', function () { openCards.keys[key] = d.open; });
+    return d;
+  }
+
   Views.car = function (ctx, root) {
     var id = ctx.params.id;
+    if (!ctx.keepOpen || openCards.carId !== id) openCards = { carId: id, keys: {} };
     var flash = FleetApp.takeFlash(); // taken once: the page may be drawn twice (saved copy, then fresh)
     root.replaceChildren(el('section', { class: 'card' }, [loading()]));
 
@@ -231,7 +261,7 @@
       function sendOdometer(force) {
         return FleetApi.call('updateOdometer', { id: car.id, odometer: odoInput.value, forceOdometer: !!force }).then(function () {
           carsCache = null;
-          Views.car(ctx, root);
+          Views.car(Object.assign({}, ctx, { keepOpen: true }), root); // the sections you opened stay open
         });
       }
       odoForm.addEventListener('submit', function (ev) {
@@ -248,18 +278,6 @@
       });
 
       if (flash) msg.append(UI.notice(flash.kind, flash.text));
-
-      // delete (admin)
-      var deleteBtn = null;
-      if (FleetAuth.isAdmin()) {
-        deleteBtn = el('button', { type: 'button', class: 'btn small danger', text: 'Delete' });
-        deleteBtn.addEventListener('click', function () {
-          if (!window.confirm('Delete ' + car.registration + '? You can restore it later from the fleet page.')) return;
-          UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteCar', { id: car.id }))
-            .then(function () { carsCache = null; FleetApp.go('/'); })
-            .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
-        });
-      }
 
       function detail(label, value) {
         return value ? [el('dt', { text: label }), el('dd', { text: value })] : [];
@@ -310,33 +328,32 @@
           photo(car, 'big', 'full'),
           el('dl', { class: 'details top-details' }, details),
           car.notes ? el('p', { class: 'notes' , text: car.notes }) : null,
-          deleteBtn ? el('div', { class: 'btn-row' }, [deleteBtn]) : null,
         ]),
-        el('section', { class: 'card' }, [
+        collapsible('Odometer', el('section', { class: 'card' }, [
           el('h2', { text: 'Odometer' }),
           el('div', { class: 'big-number', text: car.odometer === null ? 'Not set' : num(car.odometer) + ' ' + car.distanceUnit }),
           car.odometerUpdatedAt ? el('div', { class: 'muted small-text', text: 'Updated ' + fmtDate(car.odometerUpdatedAt) }) : null,
           odoForm,
-        ]),
-        EntryUI.historyCard(car, page && page.entries),
-        RemindersUI.card(car, page && page.tasks),
-        el('section', { class: 'card' }, [
+        ]), car.odometer === null ? 'Not set' : num(car.odometer) + ' ' + car.distanceUnit),
+        collapsible('Service History', EntryUI.historyCard(car, page && page.entries), page && page.entries ? countText(page.entries.length, 'entry', 'entries') : ''),
+        collapsible('Reminders', RemindersUI.card(car, page && page.tasks), page && page.tasks ? reminderHint(page.tasks) : ''),
+        collapsible('Fluids and specs', el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids and specs' }),
           fluids.length ? el('ul', { class: 'fluids' }, fluidRows) : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' }),
           el('div', { class: 'catalogue' }, car.partsouqUrl
             ? [el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) })]
             : [el('span', { class: 'muted', text: 'No parts catalogue link yet. Tap Edit car to add one.' })]),
-        ]),
-        DocumentsUI.card(car, page && page.documents),
-        el('section', { class: 'card' }, [
+        ])),
+        collapsible('Documents', DocumentsUI.card(car, page && page.documents), page && page.documents ? countText(page.documents.length, 'document', 'documents') : ''),
+        collapsible('Costs', EntryUI.costsCard(car, page && page.costs)),
+        collapsible('Guest access', GuestUI.card(car), car.guestEnabled ? 'On' : 'Off'),
+        collapsible('QR label', el('section', { class: 'card' }, [
           el('h2', { text: 'QR label' }),
-          el('p', { class: 'muted', text: 'Stick this on the windscreen or glovebox. Scanning it opens this car: signed-in people go straight to it, and anyone else can open it as a guest or sign in (unless guest access is switched off below).' }),
+          el('p', { class: 'muted', text: 'Stick this on the windscreen or glovebox. Scanning it opens this car: signed-in people go straight to it, and anyone else can open it as a guest or sign in (unless guest access is switched off in the Guest access section).' }),
           el('img', { class: 'qr', src: qrDataUrl(qrLink(car)), alt: 'QR code for ' + car.registration, width: '140', height: '140' }),
           el('p', {}, [el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/label', text: 'Print label' })]),
-        ]),
-        GuestUI.card(car),
+        ])),
         el('p', { class: 'muted small-text center', text: 'Car details last changed ' + fmtDate(car.updatedAt) }),
-        EntryUI.costsCard(car, page && page.costs),
         editBottom
       );
     }
@@ -735,10 +752,28 @@
         });
       });
 
+      // Delete (admins only, and only for a car that already exists): kept here so it is never one tap away from the car page.
+      var deleteBox = null;
+      if (car && FleetAuth.isAdmin()) {
+        var deleteBtn = el('button', { type: 'button', class: 'btn small danger', text: 'Delete car' });
+        deleteBtn.addEventListener('click', function () {
+          if (!window.confirm('Delete ' + car.registration + '? You can restore it later from the fleet page.')) return;
+          UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteCar', { id: car.id }))
+            .then(function () { carsCache = null; FleetApp.go('/'); })
+            .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); window.scrollTo(0, 0); });
+        });
+        deleteBox = el('div', { class: 'form-section delete-zone' }, [
+          el('h2', { text: 'Delete this car' }),
+          el('p', { class: 'muted small-text', text: 'Removes it from the fleet. Only admins can do this, and you can restore it later from the fleet page.' }),
+          deleteBtn,
+        ]);
+      }
+
       root.replaceChildren(el('section', { class: 'card' }, [
         backLink(car ? '#/car/' + car.id : '#/', car ? car.registration : 'Fleet'),
         el('h1', { text: car ? 'Edit car' : 'Add a car' }),
         msg, form,
+        deleteBox,
       ]));
     }
   };

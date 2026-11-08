@@ -418,3 +418,14 @@ input[type="date"] {
 
 /* ---------- report a bug / request a feature ---------- */
 .footer .feedback-link { flex-basis: 100%; text-align: center; font-weight: 600; color: var(--accent); padding: 6px 0; }
+
+/* Sections on the car page that open and close */
+details.collapsible > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; list-style: none; min-height: 44px; }
+details.collapsible > summary::-webkit-details-marker { display: none; }
+details.collapsible > summary h2 { margin: 0; }
+details.collapsible > summary::after { content: ''; flex: none; width: 10px; height: 10px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); margin: 0 4px 4px 0; }
+details.collapsible[open] > summary::after { transform: rotate(-135deg); margin: 4px 4px 0 0; }
+details.collapsible > summary .collapse-hint { margin-left: auto; }
+details.collapsible[open] > summary { margin-bottom: 8px; }
+.delete-zone { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--border); }
+details.collapsible[open] > summary .collapse-hint { display: none; }
