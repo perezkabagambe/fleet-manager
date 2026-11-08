@@ -160,13 +160,26 @@
         })
         .catch(function (e) { msg.append(UI.notice('error', UI.errorText(e))); });
     });
+    // The cars that are mine, each one a link to its page
+    var mine = el('div', { class: 'stack' }, [el('p', { class: 'muted', text: 'Loading…' })]);
+    FleetApi.call('getUserCars', {}).then(function (r) {
+      var cars = r.data.cars.filter(function (c) { return c.owner; });
+      mine.replaceChildren.apply(mine, cars.length
+        ? [el('ul', { class: 'my-cars' }, cars.map(function (c) {
+          return el('li', {}, [el('a', { href: '#/car/' + c.carId, text: c.registration + ' · ' + c.make + ' ' + c.model + (c.year ? ' (' + c.year + ')' : '') })]);
+        }))]
+        : [el('p', { class: 'muted', text: 'You have not chosen any cars yet.' })]);
+    }).catch(function (e) {
+      if (e.code !== 'unauthorized') mine.replaceChildren(UI.notice('error', UI.errorText(e)));
+    });
     root.replaceChildren(el('section', { class: 'card narrow' }, [
       el('h1', { text: 'Your profile' }),
       el('p', { class: 'muted', text: user.email + (user.role === 'admin' ? ' · Administrator' : '') }),
       msg, form,
       el('hr', { class: 'rule' }),
       el('h2', { text: 'My cars' }),
-      el('p', { class: 'muted', text: 'Say which cars you own or look after.' }),
+      el('p', { class: 'muted', text: 'The cars you own or look after.' }),
+      mine,
       el('a', { class: 'btn secondary', href: '#/profile/cars', text: 'Choose my cars' }),
     ]));
   };

@@ -440,3 +440,8 @@ details.collapsible[open] > summary .collapse-hint { display: none; }
   .topnav { order: 2; flex: 0 1 auto; margin-left: auto; }
   .logo-link { order: 3; margin-left: 0; }
 }
+
+.my-cars { list-style: none; margin: 0 0 12px; padding: 0; }
+.my-cars li { border-bottom: 1px solid var(--border); }
+.my-cars li:last-child { border-bottom: 0; }
+.my-cars a { display: block; padding: 10px 0; min-height: 44px; }
