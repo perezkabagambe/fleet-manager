@@ -257,10 +257,7 @@
 
       // owner/custodian: names from app users, plus any free-text person who is not a user (change them with Edit car)
       var ownerNames = people.owners.map(function (x) { return x.name; }).concat(car.ownerOther ? [car.ownerOther] : []);
-      var peopleCard = el('section', { class: 'card' }, [
-        el('h2', { text: 'Owner/Custodian' }),
-        el('p', { class: ownerNames.length ? '' : 'muted', text: ownerNames.length ? ownerNames.join(', ') : 'Not recorded yet.' }),
-      ]);
+      details.push(el('dt', { text: 'Owner/Custodian' }), el('dd', { class: ownerNames.length ? '' : 'muted', text: ownerNames.length ? ownerNames.join(', ') : 'Not recorded yet' }));
 
       var fluidRows = fluids.map(function (f) {
         return el('li', { class: 'fluid' }, [
@@ -286,6 +283,8 @@
           ]),
           msg,
           photo(car, 'big', 'full'),
+          el('dl', { class: 'details top-details' }, details),
+          car.notes ? el('p', { class: 'notes' , text: car.notes }) : null,
           deleteBtn ? el('div', { class: 'btn-row' }, [deleteBtn]) : null,
         ]),
         el('section', { class: 'card' }, [
@@ -296,12 +295,6 @@
         ]),
         EntryUI.historyCard(car),
         EntryUI.costsCard(car),
-        el('section', { class: 'card' }, [
-          el('h2', { text: 'Details' }),
-          el('dl', { class: 'details' }, details),
-          car.notes ? el('p', { class: 'notes', text: car.notes }) : null,
-        ]),
-        peopleCard,
         el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids and specs' }),
           fluids.length ? el('ul', { class: 'fluids' }, fluidRows) : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' }),

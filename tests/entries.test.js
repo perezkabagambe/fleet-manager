@@ -449,3 +449,95 @@ test('entry changes are audited, and the schema migration adds the expiry column
   assert.ok(env.sheets.Entries._rows[0].includes('expiry_date'));
   assert.equal(env.props.SCHEMA_VERSION, String(vm.runInContext('SCHEMA_VERSION', env.ctx)));
 });
+
+// ---------- mileage unit and a currency for each cost ----------
+
+test('a reading carries its own unit (miles or km), defaulting to the car\'s', () => {
+  const { add, get } = setup();
+  const def = add('Issue', issue({ mileage: '51000' })).data.entry;
+  assert.equal(def.mileageUnit, 'mi', 'the car is in miles');
+  const km = add('Issue', issue({ mileage: '82000', mileageUnit: 'km' })).data.entry;
+  assert.equal(km.mileageUnit, 'km');
+  assert.equal(get(km.id).data.entry.mileageUnit, 'km');
+  const none = add('Issue', issue({ mileage: '', mileageUnit: 'km' })).data.entry;
+  assert.equal(none.mileageUnit, '', 'no reading, no unit');
+  assert.equal(add('Issue', issue({ mileage: '5', mileageUnit: 'furlongs' })).error, 'invalid_unit');
+});
+
+test('the odometer is only raised when the reading is in the car\'s own unit', () => {
+  const { env, sam, car, add } = setup();
+  const odo = () => env.call('getCar', { token: sam, id: car.id }).data.car.odometer;
+  // 90000 km would be about 55,900 miles, but we never convert silently
+  assert.equal(add('Issue', issue({ mileage: '90000', mileageUnit: 'km' }), { updateOdometer: true }).data.odometerUpdated, undefined);
+  assert.equal(odo(), 50000);
+  assert.equal(add('Issue', issue({ mileage: '52000', mileageUnit: 'mi' }), { updateOdometer: true }).data.odometerUpdated, true);
+  assert.equal(odo(), 52000);
+});
+
+test('labour, other costs and an invoice total each keep their own currency', () => {
+  const { add, get, list } = setup();
+  const r = add('Repair', repair({
+    labourCost: '150000', labourCurrency: 'UGX', otherCost: '25', otherCurrency: 'USD', currency: 'UGX',
+  }), { parts: [{ name: 'UK part', quantity: '1', unitCost: '40', currency: 'GBP' }] }).data.entry;
+  assert.equal(r.labourCurrency, 'UGX');
+  assert.equal(r.otherCurrency, 'USD');
+  assert.deepEqual(get(r.id).data.jobCost, { UGX: 150000, USD: 25, GBP: 40 });
+  assert.deepEqual(list().find((e) => e.id === r.id).jobCost, { UGX: 150000, USD: 25, GBP: 40 });
+
+  const lump = add('Maintenance', repair({ costMode: 'lump', lumpSumCost: '300', lumpCurrency: 'KES', currency: 'KES' })).data.entry;
+  assert.equal(lump.lumpCurrency, 'KES');
+  assert.deepEqual(get(lump.id).data.jobCost, { KES: 300 });
+});
+
+test('a cost with no amount stores no currency; a bad currency is refused', () => {
+  const { env, add } = setup();
+  const e = add('Repair', repair({ labourCost: '', otherCost: '', labourCurrency: 'USD' })).data.entry;
+  const row = env.sheets.Entries._rows.find((r) => r[0] === e.id);
+  const header = env.sheets.Entries._rows[0];
+  assert.equal(row[header.indexOf('labour_currency')], '');
+  assert.equal(add('Repair', repair({ labourCurrency: 'XYZ' })).error, 'invalid_currency');
+  assert.equal(add('Repair', repair({ otherCost: '5', otherCurrency: 'XYZ' })).error, 'invalid_currency');
+  assert.equal(add('Repair', repair({ costMode: 'lump', lumpSumCost: '5', lumpCurrency: 'XYZ' })).error, 'invalid_currency');
+});
+
+test('when no separate currency is given, every cost uses the entry currency', () => {
+  const { add, get } = setup();
+  const e = add('Repair', repair({ currency: 'UGX', labourCost: '100', otherCost: '20' })).data.entry;
+  assert.equal(e.labourCurrency, 'UGX');
+  assert.equal(e.otherCurrency, 'UGX');
+  assert.deepEqual(get(e.id).data.jobCost, { UGX: 120 });
+});
+
+test('entries saved before these fields existed still work (they fall back to the entry currency and the car unit)', () => {
+  const { env, sam, car, add, get, list } = setup();
+  const e = add('Repair', repair({ currency: 'GBP', labourCost: '90', otherCost: '10', mileage: '50100' })).data.entry;
+  // simulate an old row: the new columns were empty
+  const header = env.sheets.Entries._rows[0];
+  const row = env.sheets.Entries._rows.find((r) => r[0] === e.id);
+  ['labour_currency', 'other_currency', 'lump_currency', 'mileage_unit'].forEach((k) => { row[header.indexOf(k)] = ''; });
+  assert.deepEqual(get(e.id).data.jobCost, { GBP: 100 });
+  assert.equal(get(e.id).data.entry.labourCurrency, 'GBP');
+  assert.equal(get(e.id).data.entry.mileageUnit, '', 'the app shows the car\'s unit for old readings');
+  const costs = env.call('getCarCosts', { token: sam, carId: car.id }).data.currencies;
+  assert.deepEqual(costs[0].categories, { labour: 90, other: 10 });
+  assert.ok(list().find((x) => x.id === e.id));
+});
+
+test('car costs split each cost into its own currency', () => {
+  const { env, sam, car, add } = setup();
+  add('Repair', repair({ date: '2025-05-01', labourCost: '150000', labourCurrency: 'UGX', otherCost: '30', otherCurrency: 'GBP', currency: 'UGX' }));
+  const costs = env.call('getCarCosts', { token: sam, carId: car.id }).data.currencies;
+  const ugx = costs.find((c) => c.currency === 'UGX');
+  const gbp = costs.find((c) => c.currency === 'GBP');
+  assert.deepEqual(ugx.categories, { labour: 150000 });
+  assert.deepEqual(gbp.categories, { other: 30 });
+});
+
+test('the schema migration adds the unit and currency columns', () => {
+  const { env, sam, car } = setup();
+  const header = env.sheets.Entries._rows[0];
+  ['mileage_unit', 'labour_currency', 'other_currency', 'lump_currency'].forEach((k) => header.splice(header.indexOf(k), 1));
+  env.props.SCHEMA_VERSION = '6';
+  assert.equal(env.call('listEntries', { token: sam, carId: car.id }).ok, true);
+  ['mileage_unit', 'labour_currency', 'other_currency', 'lump_currency'].forEach((k) => assert.ok(env.sheets.Entries._rows[0].includes(k), k));
+});

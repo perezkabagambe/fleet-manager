@@ -372,3 +372,7 @@ input[type="date"] {
 .entry-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
 .entry-status select { width: auto; min-width: 160px; }
 .field-label { display: block; font-weight: 600; margin-bottom: 6px; }
+
+.cur-label { display: flex; align-items: center; justify-content: center; min-width: 130px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--muted); }
+
+.top-details { margin-top: 14px; }

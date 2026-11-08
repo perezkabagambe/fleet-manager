@@ -2,7 +2,8 @@
  * A car's history: Issues, Repairs, Maintenance, Compliance renewals and Purchases.
  *
  * Costs (see PLAN section 18):
- *  - Every entry carries its own currency.
+ *  - Every entry carries its own currency, and each cost on a repair/maintenance (labour, other costs, invoice
+ *    total) can have its own, e.g. UK parts, Ugandan labour. Older entries without those fall back to the entry's currency.
  *  - A Purchase is bought stock (quantity x unit cost + shipping). Repairs and maintenance USE parts
  *    from purchases (PartUsage rows), so a part is only ever entered once and its money is counted once.
  *  - Job cost of a repair/maintenance = parts used + labour + other costs, or one invoice total.
@@ -96,11 +97,11 @@ function usedQuantities_(usage, excludeEventId) {
 function jobCost_(e, usage, purchasesById) {
   const out = {};
   if (e.cost_mode === 'lump') {
-    addMoney_(out, e.currency, numOr0_(e.lump_sum_cost));
+    addMoney_(out, e.lump_currency || e.currency, numOr0_(e.lump_sum_cost));
     return out;
   }
-  addMoney_(out, e.currency, numOr0_(e.labour_cost));
-  addMoney_(out, e.currency, numOr0_(e.other_cost));
+  addMoney_(out, e.labour_currency || e.currency, numOr0_(e.labour_cost));
+  addMoney_(out, e.other_currency || e.currency, numOr0_(e.other_cost));
   usage.forEach(function (u) {
     if (u.event_id !== e.id) return;
     const p = purchasesById[u.purchase_id];
@@ -114,10 +115,11 @@ function jobCost_(e, usage, purchasesById) {
 function summarizeEntry_(e) {
   return {
     id: e.id, carId: e.car_id, type: e.type, title: e.title, notes: e.notes, date: e.date,
-    mileage: numOrNull_(e.mileage), vendor: e.vendor, currency: e.currency || 'GBP',
+    mileage: numOrNull_(e.mileage), mileageUnit: e.mileage_unit || '', vendor: e.vendor, currency: e.currency || 'GBP',
     status: e.status, linkedIssueId: e.linked_issue_id, costMode: e.cost_mode || 'itemised',
-    lumpSumCost: numOrNull_(e.lump_sum_cost), labourCost: numOrNull_(e.labour_cost), labourNote: e.labour_note,
-    labourHours: numOrNull_(e.labour_hours), otherCost: numOrNull_(e.other_cost), otherNote: e.other_note,
+    lumpSumCost: numOrNull_(e.lump_sum_cost), lumpCurrency: e.lump_currency || e.currency || 'GBP',
+    labourCost: numOrNull_(e.labour_cost), labourCurrency: e.labour_currency || e.currency || 'GBP', labourNote: e.labour_note,
+    labourHours: numOrNull_(e.labour_hours), otherCost: numOrNull_(e.other_cost), otherCurrency: e.other_currency || e.currency || 'GBP', otherNote: e.other_note,
     cost: numOrNull_(e.cost), expiryDate: e.expiry_date || '',
     partNumber: e.part_number, quantity: numOrNull_(e.quantity), unitCost: numOrNull_(e.unit_cost),
     shippingCost: numOrNull_(e.shipping_cost), productUrl: e.product_url,
@@ -253,6 +255,8 @@ function parseEntryInput_(f, type, car) {
   if (!date) fail_('date_required');
   out.date = date;
   out.mileage = parseOdometer_(f.mileage);
+  // The reading's own unit (miles or km). It is only kept when there is a reading.
+  out.mileage_unit = out.mileage === '' ? '' : oneOf_(f.mileageUnit, DISTANCE_UNITS, car.distance_unit || 'mi', 'invalid_unit');
   out.vendor = cleanStr_(f.vendor, 80);
   out.currency = oneOf_(f.currency, CURRENCIES, car.currency || (car.country === 'UG' ? 'UGX' : 'GBP'), 'invalid_currency');
 
@@ -278,6 +282,11 @@ function parseEntryInput_(f, type, car) {
     out.labour_hours = parseHours_(f.labourHours);
     out.other_cost = parseMoney_(f.otherCost);
     out.other_note = cleanStr_(f.otherNote, 80);
+    // each cost can be in its own currency; one is only stored when that cost has an amount
+    const costCurrency = function (amount, raw) { return amount === '' ? '' : oneOf_(raw, CURRENCIES, out.currency, 'invalid_currency'); };
+    out.lump_currency = costCurrency(out.lump_sum_cost, f.lumpCurrency);
+    out.labour_currency = costCurrency(out.labour_cost, f.labourCurrency);
+    out.other_currency = costCurrency(out.other_cost, f.otherCurrency);
     out.linked_issue_id = type === 'Repair' ? cleanStr_(f.linkedIssueId, 64) : '';
   }
   return out;
@@ -390,7 +399,8 @@ function saveEntry_(p, ctx) {
       extras.issueResolved = true;
     }
   }
-  if (p.updateOdometer === true && input.mileage !== '' && Number(input.mileage) > Number(car.current_odometer || 0)) {
+  const carUnit = car.distance_unit || 'mi';
+  if (p.updateOdometer === true && input.mileage !== '' && (input.mileage_unit || carUnit) === carUnit && Number(input.mileage) > Number(car.current_odometer || 0)) {
     const patch = touch_(car, ctx, { current_odometer: input.mileage, odometer_updated_at: now });
     Db.update('Cars', car._row, patch);
     audit_(ctx.user, 'odometer_updated', 'Car', car.id, car.registration + ': ' + (car.current_odometer || 'not set') + ' to ' + input.mileage + ' (from ' + type.toLowerCase() + ')');
@@ -481,10 +491,10 @@ function getCarCosts_(p, ctx) {
     if (e.type === 'Purchase') add(e.currency, e.date, 'parts', purchaseTotal_(e));
     else if (e.type === 'Issue') add(e.currency, e.date, 'issues', numOr0_(e.cost));
     else if (e.type === 'Compliance') add(e.currency, e.date, 'compliance', numOr0_(e.cost));
-    else if (e.cost_mode === 'lump') add(e.currency, e.date, 'invoices', numOr0_(e.lump_sum_cost));
+    else if (e.cost_mode === 'lump') add(e.lump_currency || e.currency, e.date, 'invoices', numOr0_(e.lump_sum_cost));
     else {
-      add(e.currency, e.date, 'labour', numOr0_(e.labour_cost));
-      add(e.currency, e.date, 'other', numOr0_(e.other_cost));
+      add(e.labour_currency || e.currency, e.date, 'labour', numOr0_(e.labour_cost));
+      add(e.other_currency || e.currency, e.date, 'other', numOr0_(e.other_cost));
     }
   });
   const list = Object.keys(buckets).sort().map(function (cur) {

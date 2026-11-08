@@ -30,7 +30,8 @@ const SCHEMA = {
     base: true,
     cols: ['car_id', 'type', 'title', 'notes', 'date', 'mileage', 'cost', 'currency', 'vendor', 'status',
       'linked_issue_id', 'task_id', 'cost_mode', 'lump_sum_cost', 'labour_cost', 'labour_note', 'labour_hours',
-      'other_cost', 'other_note', 'part_number', 'quantity', 'unit_cost', 'shipping_cost', 'product_url', 'expiry_date'],
+      'other_cost', 'other_note', 'part_number', 'quantity', 'unit_cost', 'shipping_cost', 'product_url', 'expiry_date',
+      'mileage_unit', 'labour_currency', 'other_currency', 'lump_currency'],
   },
   PartUsage: { base: true, cols: ['purchase_id', 'event_id', 'quantity_used'] },
   Attachments: { base: true, cols: ['car_id', 'entry_id', 'drive_file_id', 'filename', 'mime', 'size'] },
@@ -46,7 +47,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {

@@ -72,7 +72,7 @@
 
     function row(e) {
       var meta = [dateText(e.date)];
-      if (e.mileage !== null) meta.push(fmt.num(e.mileage) + ' ' + car.distanceUnit);
+      if (e.mileage !== null) meta.push(fmt.num(e.mileage) + ' ' + (e.mileageUnit || car.distanceUnit));
       if (e.vendor) meta.push(e.vendor);
       var tags = [];
       if (e.type === 'Issue') tags.push(el('span', { class: 'chip st-' + e.status.toLowerCase().replace(/[^a-z]/g, ''), text: e.status }));
@@ -196,7 +196,7 @@
 
       // header
       var meta = [dateText(e.date)];
-      if (e.mileage !== null) meta.push(fmt.num(e.mileage) + ' ' + car.distanceUnit);
+      if (e.mileage !== null) meta.push(fmt.num(e.mileage) + ' ' + (e.mileageUnit || car.distanceUnit));
       if (e.vendor) meta.push(e.vendor);
       var deleteBtn = null;
       if (FleetAuth.isAdmin()) {
@@ -235,17 +235,17 @@
         var rows = [];
         if (d.linkedIssue) rows.push(el('p', {}, [el('span', { class: 'muted', text: 'Fixes issue: ' }), el('a', { href: '#/car/' + carId + '/entry/' + d.linkedIssue.id, text: d.linkedIssue.title + ' (' + d.linkedIssue.status + ')' })]));
         if (e.costMode === 'lump') {
-          rows.push(el('dl', { class: 'details' }, line('Invoice total', e.lumpSumCost === null ? '' : fmt.money(e.lumpSumCost, e.currency))));
+          rows.push(el('dl', { class: 'details' }, line('Invoice total', e.lumpSumCost === null ? '' : fmt.money(e.lumpSumCost, e.lumpCurrency))));
         } else {
           var cost = [];
           d.parts.forEach(function (p) {
             cost.push(el('li', {}, [el('span', { text: p.name + ' × ' + p.quantity }), el('span', { text: fmt.money(p.cost, p.currency) })]));
           });
           if (e.labourCost !== null) {
-            cost.push(el('li', {}, [el('span', { text: 'Labour' + (e.labourNote ? ' (' + e.labourNote + ')' : '') + (e.labourHours ? ', ' + e.labourHours + ' h' : '') }), el('span', { text: fmt.money(e.labourCost, e.currency) })]));
+            cost.push(el('li', {}, [el('span', { text: 'Labour' + (e.labourNote ? ' (' + e.labourNote + ')' : '') + (e.labourHours ? ', ' + e.labourHours + ' h' : '') }), el('span', { text: fmt.money(e.labourCost, e.labourCurrency) })]));
           }
           if (e.otherCost !== null) {
-            cost.push(el('li', {}, [el('span', { text: 'Other' + (e.otherNote ? ' (' + e.otherNote + ')' : '') }), el('span', { text: fmt.money(e.otherCost, e.currency) })]));
+            cost.push(el('li', {}, [el('span', { text: 'Other' + (e.otherNote ? ' (' + e.otherNote + ')' : '') }), el('span', { text: fmt.money(e.otherCost, e.otherCurrency) })]));
           }
           rows.push(cost.length ? el('ul', { class: 'cost-list' }, cost) : el('p', { class: 'muted', text: 'No costs recorded.' }));
         }
@@ -375,16 +375,23 @@
         f[name].value = value || '';
         return f[name];
       }
-      var currencySelect = select('currency', fmt.currencyOptions, existing ? existing.currency : (lastCurrency[car.id] || car.currency || 'GBP'));
-      currencySelect.setAttribute('aria-label', 'Currency');
-      var amountRow = function (label, input, hint, id) {
+      // Every cost has a currency dropdown beside it. They start from the currency used last on this car.
+      var defaultCurrency = existing ? existing.currency : (lastCurrency[car.id] || car.currency || 'GBP');
+      function currencyPick(name, value) {
+        var sel = select(name, fmt.currencyOptions, value || defaultCurrency);
+        sel.setAttribute('aria-label', 'Currency');
+        return sel;
+      }
+      var currencySelect = currencyPick('currency', existing ? existing.currency : '');
+      function costField(label, input, cur, hint, id) {
         input.id = id;
         return el('div', { class: 'field' }, [
           el('label', { for: id, text: label }),
-          el('div', { class: 'odo-row' }, [input, currencySelect]),
+          el('div', { class: 'odo-row' }, [input, cur]),
           hint ? el('div', { class: 'hint', text: hint }) : null,
         ]);
-      };
+      }
+      var amountRow = function (label, input, hint, id) { return costField(label, input, currencySelect, hint, id); };
 
       // ----- common fields -----
       var sections = [];
@@ -399,11 +406,18 @@
       var odoRow = el('label', { class: 'check', hidden: true }, [odoCheck, el('span', { text: 'Update the car\'s odometer to this reading' })]);
       function mileageField() {
         var m = text('mileage', v.mileage === null || v.mileage === undefined ? '' : v.mileage, { inputmode: 'numeric', id: 'f-mileage' });
-        function check() { odoRow.hidden = !(num0(m.value) > Number(car.odometer || 0)); }
+        var carUnit = car.distanceUnit || 'mi';
+        var unit = select('mileageUnit', [['mi', 'Miles'], ['km', 'Kilometres']], (existing && existing.mileageUnit) || carUnit);
+        unit.setAttribute('aria-label', 'Distance unit');
+        // The car's odometer is only offered an update when the reading is in the car's own unit (nothing is converted behind your back).
+        function check() { odoRow.hidden = !(unit.value === carUnit && num0(m.value) > Number(car.odometer || 0)); }
         m.addEventListener('input', check);
+        unit.addEventListener('change', check);
         check();
         return el('div', { class: 'field' }, [
-          el('label', { for: 'f-mileage', text: 'Mileage (' + car.distanceUnit + ')' }), m, odoRow,
+          el('label', { for: 'f-mileage', text: 'Mileage' }),
+          el('div', { class: 'odo-row' }, [m, unit]),
+          odoRow,
         ]);
       }
 
@@ -425,6 +439,19 @@
         ];
       } else if (type === 'Purchase') {
         costTotal = el('div', { class: 'job-total' });
+        // Shipping belongs to the same order, so it is in the same currency as the price.
+        var shipCur = el('span', { class: 'cur-label' });
+        var shippingField = function () {
+          var ship = text('shippingCost', v.shippingCost === null || v.shippingCost === undefined ? '' : v.shippingCost, { inputmode: 'decimal', id: 'f-ship' });
+          var showCur = function () { shipCur.textContent = currencySelect.value; };
+          currencySelect.addEventListener('change', showCur);
+          showCur();
+          return el('div', { class: 'field' }, [
+            el('label', { for: 'f-ship', text: 'Shipping or delivery' }),
+            el('div', { class: 'odo-row' }, [ship, shipCur]),
+            el('div', { class: 'hint', text: 'Optional. For the whole order, in the same currency as the price.' }),
+          ]);
+        };
         var updatePurchaseTotal = function () {
           var t = num0(f.quantity.value) * num0(f.unitCost.value) + num0(f.shippingCost.value);
           costTotal.replaceChildren(el('span', { text: 'Total' }), el('strong', { text: fmt.money(round2(t), currencySelect.value) }));
@@ -434,7 +461,7 @@
           UI.field('Part number', text('partNumber', v.partNumber, { maxlength: '60' }), 'Optional, e.g. the OEM number from the catalogue.'),
           UI.field('Quantity *', text('quantity', v.quantity === null || v.quantity === undefined ? '1' : v.quantity, { inputmode: 'decimal', required: true }), 'How many were bought, e.g. 1, 4 or 4.5 litres.'),
           amountRow('Price of each *', text('unitCost', v.unitCost === null || v.unitCost === undefined ? '' : v.unitCost, { inputmode: 'decimal', required: true }), null, 'f-unit'),
-          UI.field('Shipping or delivery', text('shippingCost', v.shippingCost === null || v.shippingCost === undefined ? '' : v.shippingCost, { inputmode: 'decimal' }), 'Optional. For the whole order.'),
+          shippingField(),
           UI.field('Product link', text('productUrl', v.productUrl, { inputmode: 'url', placeholder: 'https://…' }), 'Optional. A secure (https) link.'),
           costTotal,
         ];
@@ -470,6 +497,9 @@
 
         // cost mode
         var modeItemised = el('input', { type: 'radio', name: 'costMode', value: 'itemised' });
+        var labourCur = currencyPick('labourCurrency', existing ? existing.labourCurrency : '');
+        var otherCur = currencyPick('otherCurrency', existing ? existing.otherCurrency : '');
+        var lumpCur = currencyPick('lumpCurrency', existing ? existing.lumpCurrency : '');
         var modeLump = el('input', { type: 'radio', name: 'costMode', value: 'lump' });
         (v.costMode === 'lump' ? modeLump : modeItemised).checked = true;
         var itemisedBox = el('div', { class: 'stack' });
@@ -490,25 +520,24 @@
           return p ? p.available : 0;
         }
         function jobTotals() {
-          var cur = currencySelect.value;
           var map = {};
           var add = function (c, a) { if (a) map[c] = round2((map[c] || 0) + a); };
           if (modeLump.checked) {
-            add(cur, num0(f.lumpSumCost.value));
+            add(lumpCur.value, num0(f.lumpSumCost.value));
           } else {
-            add(cur, num0(f.labourCost.value));
-            add(cur, num0(f.otherCost.value));
+            add(labourCur.value, num0(f.labourCost.value));
+            add(otherCur.value, num0(f.otherCost.value));
             partRows.forEach(function (r) {
               var q = num0(r.quantity);
               if (r.kind === 'existing') add(r.currency, q * (r.unitCost || 0));
-              else add(r.currency || cur, q * num0(r.unitCost) + num0(r.shippingCost));
+              else add(r.currency || defaultCurrency, q * num0(r.unitCost) + num0(r.shippingCost));
             });
           }
           return map;
         }
         function updateTotal() {
           var t = moneyMap(jobTotals());
-          totalBox.replaceChildren(el('span', { text: 'Job cost' }), el('strong', { text: t || fmt.money(0, currencySelect.value) }));
+          totalBox.replaceChildren(el('span', { text: 'Job cost' }), el('strong', { text: t || fmt.money(0, labourCur.value) }));
         }
         function partInput(row, key, label, attrs) {
           var input = el('input', Object.assign({ type: 'text', value: row[key] === undefined ? '' : String(row[key]), autocomplete: 'off' }, attrs || {}));
@@ -535,7 +564,7 @@
               (function () { var i2 = el('input', { type: 'text', value: row.unitCost || '', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Price of each' }); i2.addEventListener('input', function () { row.unitCost = i2.value; updateTotal(); }); return i2; })(),
               cur,
             ])]),
-            partInput(row, 'shippingCost', 'Shipping for these (optional)', { inputmode: 'decimal' }),
+            partInput(row, 'shippingCost', 'Shipping for these (optional, same currency)', { inputmode: 'decimal' }),
             partInput(row, 'partNumber', 'Part number (optional)', { maxlength: '60' }),
             partInput(row, 'vendor', 'Supplier (optional)', { maxlength: '80' }),
             remove,
@@ -563,15 +592,15 @@
         });
         var newBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add a new part' });
         newBtn.addEventListener('click', function () {
-          partRows.push({ kind: 'new', name: '', quantity: '1', unitCost: '', shippingCost: '', partNumber: '', vendor: '', currency: currencySelect.value });
+          partRows.push({ kind: 'new', name: '', quantity: '1', unitCost: '', shippingCost: '', partNumber: '', vendor: '', currency: defaultCurrency });
           drawParts();
         });
 
         var labour = [
-          UI.field('Labour cost', text('labourCost', v.labourCost === null || v.labourCost === undefined ? '' : v.labourCost, { inputmode: 'decimal' })),
+          costField('Labour cost', text('labourCost', v.labourCost === null || v.labourCost === undefined ? '' : v.labourCost, { inputmode: 'decimal' }), labourCur, null, 'f-labour'),
           UI.field('Who did the labour', text('labourNote', v.labourNote, { maxlength: '80' }), 'Optional, e.g. the garage or "myself".'),
           UI.field('Hours', text('labourHours', v.labourHours === null || v.labourHours === undefined ? '' : v.labourHours, { inputmode: 'decimal' }), 'Optional.'),
-          UI.field('Other costs', text('otherCost', v.otherCost === null || v.otherCost === undefined ? '' : v.otherCost, { inputmode: 'decimal' }), 'Optional: call-out, disposal, consumables.'),
+          costField('Other costs', text('otherCost', v.otherCost === null || v.otherCost === undefined ? '' : v.otherCost, { inputmode: 'decimal' }), otherCur, 'Optional: call-out, disposal, consumables.', 'f-other'),
           UI.field('What the other costs are for', text('otherNote', v.otherNote, { maxlength: '80' })),
         ];
         itemisedBox.append(
@@ -579,7 +608,7 @@
           el('div', { class: 'btn-row' }, [useBtn, newBtn])
         );
         labour.forEach(function (x) { itemisedBox.append(x); });
-        lumpBox.append(UI.field('Invoice total', text('lumpSumCost', v.lumpSumCost === null || v.lumpSumCost === undefined ? '' : v.lumpSumCost, { inputmode: 'decimal' }), 'The single figure on the invoice, with no breakdown.'));
+        lumpBox.append(costField('Invoice total', text('lumpSumCost', v.lumpSumCost === null || v.lumpSumCost === undefined ? '' : v.lumpSumCost, { inputmode: 'decimal' }), lumpCur, 'The single figure on the invoice, with no breakdown.', 'f-lump'));
 
         function syncMode() {
           itemisedBox.hidden = modeLump.checked;
@@ -589,12 +618,11 @@
         modeItemised.addEventListener('change', syncMode);
         modeLump.addEventListener('change', syncMode);
         ['labourCost', 'otherCost', 'lumpSumCost'].forEach(function (k) { f[k].addEventListener('input', updateTotal); });
-        currencySelect.addEventListener('change', updateTotal);
+        [labourCur, otherCur, lumpCur].forEach(function (c) { c.addEventListener('change', updateTotal); });
         f.modeLump = modeLump;
         f.partRows = partRows;
 
         out.push(
-          el('div', { class: 'field' }, [el('label', { for: 'f-jobcur', text: 'Currency for the costs below' }), (currencySelect.id = 'f-jobcur', currencySelect)]),
           el('div', { class: 'field' }, [
             el('div', { class: 'field-label', text: 'How do you want to record the cost?' }),
             el('label', { class: 'check' }, [modeItemised, el('span', { text: 'Itemised: parts, labour and other costs' })]),
@@ -654,10 +682,12 @@
       function collect() {
         var fields = {};
         ['title', 'date', 'mileage', 'vendor', 'notes', 'status', 'cost', 'expiryDate', 'partNumber', 'quantity', 'unitCost', 'shippingCost',
-          'productUrl', 'lumpSumCost', 'labourCost', 'labourNote', 'labourHours', 'otherCost', 'otherNote', 'linkedIssueId'].forEach(function (k) {
+          'productUrl', 'lumpSumCost', 'labourCost', 'labourNote', 'labourHours', 'otherCost', 'otherNote', 'linkedIssueId',
+          'mileageUnit', 'labourCurrency', 'otherCurrency', 'lumpCurrency'].forEach(function (k) {
           if (f[k]) fields[k] = f[k].value;
         });
-        fields.currency = currencySelect.value;
+        // the entry's main currency: for a repair/maintenance it follows the labour (or the invoice total)
+        fields.currency = isJob ? (f.modeLump.checked ? f.lumpCurrency.value : f.labourCurrency.value) : currencySelect.value;
         if (isJob) fields.costMode = f.modeLump.checked ? 'lump' : 'itemised';
         return fields;
       }
