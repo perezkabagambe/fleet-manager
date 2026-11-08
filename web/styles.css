@@ -407,3 +407,11 @@ input[type="date"] {
 .entry-line { display: flex; align-items: flex-start; border-bottom: 1px solid var(--border); }
 .entry-line:last-child { border-bottom: 0; }
 .entry-line .entry-row { flex: 1 1 auto; min-width: 0; border-bottom: 0; }
+
+/* ---------- guest access ---------- */
+.chip.g-guest { color: var(--warn-text); background: var(--warn-bg); border-color: transparent; }
+.plain-list { margin: 8px 0 14px; padding-left: 20px; }
+.plain-list li { margin: 4px 0; }
+.guest-row { width: 100%; }
+.guest-notes { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; }
+.guest-entry .btn-row { margin-top: 8px; }

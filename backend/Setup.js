@@ -21,7 +21,7 @@ const SCHEMA = {
   Cars: {
     base: true,
     cols: ['registration', 'nickname', 'make', 'model', 'year', 'colour', 'vin', 'country', 'currency', 'distance_unit',
-      'photo_file_id', 'photo_thumb_file_id', 'acquisition_cost', 'acquisition_currency', 'acquisition_date', 'owner_other', 'keeper_other', 'partsouq_url', 'status', 'current_odometer', 'odometer_updated_at', 'reminder_recipients', 'notes'],
+      'photo_file_id', 'photo_thumb_file_id', 'guest_enabled', 'guest_secret', 'acquisition_cost', 'acquisition_currency', 'acquisition_date', 'owner_other', 'keeper_other', 'partsouq_url', 'status', 'current_odometer', 'odometer_updated_at', 'reminder_recipients', 'notes'],
   },
   // Which users own / are the registered keeper of which cars (one row per car, user and role).
   CarPeople: { base: true, cols: ['car_id', 'user_id', 'role'] },
@@ -33,6 +33,8 @@ const SCHEMA = {
       'other_cost', 'other_note', 'part_number', 'quantity', 'unit_cost', 'shipping_cost', 'product_url', 'expiry_date',
       'mileage_unit', 'labour_currency', 'other_currency', 'lump_currency'],
   },
+  // People who scanned a car's QR code: one row per guest name, kept for ever so a name is never reused.
+  Guests: { base: true, cols: ['car_id', 'name', 'name_key', 'token_hash', 'expires_at', 'blocked', 'last_seen'] },
   PartUsage: { base: true, cols: ['purchase_id', 'event_id', 'quantity_used'] },
   Attachments: { base: true, cols: ['car_id', 'entry_id', 'drive_file_id', 'filename', 'mime', 'size'] },
   Tasks: {
@@ -47,7 +49,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 9; // 9: Repair entries become Maintenance (8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 10; // 10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
@@ -64,6 +66,7 @@ function migrateIfNeeded_() {
     ensureSchema_(SpreadsheetApp.openById(props.getProperty('DB_ID')));
     ensureReminderTrigger_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 9) mergeRepairIntoMaintenance_();
+    giveCarsGuestSecrets_();
     props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   } finally {
     lock.releaseLock();
@@ -159,6 +162,13 @@ function mergeRepairIntoMaintenance_() {
     if (e.type === 'Repair') { Db.update('Entries', e._row, { type: 'Maintenance' }); n++; }
   });
   if (n) audit_(null, 'entry_types_merged', 'Entries', '', n + ' Repair entr' + (n === 1 ? 'y' : 'ies') + ' changed to Maintenance');
+}
+
+/** Every car has a secret for its QR code (guest access itself stays off until an admin switches it on). */
+function giveCarsGuestSecrets_() {
+  Db.all('Cars').forEach(function (c) {
+    if (!c.guest_secret) Db.update('Cars', c._row, { guest_secret: newGuestSecret_() });
+  });
 }
 
 /** Create a repeating time trigger for `fn` if one doesn't exist yet. */

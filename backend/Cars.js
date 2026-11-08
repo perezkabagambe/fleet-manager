@@ -38,6 +38,7 @@ function summarizeCar_(c) {
     odometerUpdatedAt: c.odometer_updated_at,
     photoId: c.photo_file_id || '',
     photoThumbId: c.photo_thumb_file_id || '',
+    guestEnabled: isTrue_(c.guest_enabled),
     acquisitionCost: c.acquisition_cost === '' || c.acquisition_cost === undefined ? null : Number(c.acquisition_cost),
     // Older records have no separate currency: the price was in the car's own currency.
     acquisitionCurrency: c.acquisition_currency || c.currency || 'GBP',
@@ -234,7 +235,7 @@ function getCar_(p, ctx) {
   const car = findCar_(cleanStr_(p.id, 64), ctx.user.role === 'admin');
   if (!car) fail_('not_found');
   return {
-    car: summarizeCar_(car),
+    car: Object.assign(summarizeCar_(car), { guestSecret: car.guest_secret || '' }),
     fluids: listFluids_(car.id),
     people: peopleForCar_(car.id, Db.all('CarPeople'), usersById_()),
   };
@@ -266,6 +267,7 @@ function saveCar_(p, ctx) {
     const row = Object.assign({
       id: Utilities.getUuid(), created_at: now, created_by: ctx.user.id, updated_at: now, updated_by: ctx.user.id,
       version: 1, deleted: false, odometer_updated_at: input.current_odometer === '' ? '' : now,
+      guest_enabled: false, guest_secret: newGuestSecret_(),
     }, input);
     Db.insert('Cars', row);
     audit_(ctx.user, 'car_created', 'Car', row.id, 'Added ' + row.registration + ' ' + row.make + ' ' + row.model);

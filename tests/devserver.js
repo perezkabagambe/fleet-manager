@@ -22,6 +22,8 @@ let persona = 'admin';
 const mk = (fields) => env.call('saveCar', { token: tokens.admin, fields }).data.car;
 const car1 = mk({ registration: 'AB12 CDE', make: 'Toyota', model: 'Land Cruiser', year: '2015', vin: 'JTMHV05J604123456', colour: 'White', odometer: '51200', country: 'UK' });
 mk({ registration: 'UBA 123X', make: 'Toyota', model: 'Hilux', year: '2012', odometer: '210450', country: 'UG' });
+env.call('setGuestAccess', { token: tokens.admin, carId: car1.id, enabled: true });
+const guestSecret = env.call('getCar', { token: tokens.admin, id: car1.id }).data.car.guestSecret;
 env.call('saveFluids', { token: tokens.admin, carId: car1.id, fluids: [{ fluid: 'Engine oil', specification: '5W-30 ACEA C3', capacity: '5.5 L' }] });
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
@@ -40,9 +42,15 @@ http.createServer((req, res) => {
     return;
   }
   if (url.startsWith('/__as/')) {
-    persona = url.slice(6) === 'sam' ? 'sam' : 'admin';
+    const who = url.slice(6);
+    persona = who === 'sam' ? 'sam' : who === 'guest' ? 'guest' : 'admin'; // guest = signed out
     res.writeHead(302, { Location: '/' });
     res.end();
+    return;
+  }
+  if (url === '/__guestlink') { // the address the first car's QR code holds
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('http://localhost:' + PORT + '/#/car/' + car1.id + '?g=' + guestSecret);
     return;
   }
   if (url === '/__outbox') { // the emails the backend would have sent, for checking them by eye
@@ -60,7 +68,8 @@ http.createServer((req, res) => {
     const src = fs.readFileSync(path.join(WEB, 'config.js'), 'utf8')
       .replace(/apiUrl: '[^']*'/, "apiUrl: '/api'")
       .replace('__COMMIT__', 'e2e').replace('__BUILT_AT__', 'local');
-    const login = "localStorage.setItem('fleet.session', JSON.stringify({ token: '" + tokens[persona] + "', expiresAt: '2099-01-01T00:00:00Z' }));\n";
+    const login = persona === 'guest' ? "localStorage.removeItem('fleet.session');\n"
+      : "localStorage.setItem('fleet.session', JSON.stringify({ token: '" + tokens[persona] + "', expiresAt: '2099-01-01T00:00:00Z' }));\n";
     res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' });
     res.end(login + src);
     return;

@@ -31,9 +31,16 @@
     appEl.replaceChildren(el('p', { class: 'muted center pad', text: 'Loading…' }));
   }
 
+  // Pages that need no sign-in: the public ones, the guest pages, and a car's QR link for someone not signed in.
+  var GUEST_PATH = /^\/guest\/([0-9a-f-]{8,40})(?:\/add\/(maintenance|purchase))?$/;
+  var SCAN_PATH = /^\/car\/([0-9a-f-]{8,40})$/;
+  function isOpen(r) {
+    return !!(PUBLIC[r.path] || GUEST_PATH.test(r.path) || (r.query.g && SCAN_PATH.test(r.path) && !FleetAuth.hasSession()));
+  }
+
   function route() {
     var r = parseHash();
-    if (!PUBLIC[r.path]) {
+    if (!isOpen(r)) {
       if (!FleetAuth.hasSession()) { go('/login', { next: r.raw }); return; }
       if (!FleetAuth.getUser()) {
         showLoading();
@@ -53,7 +60,13 @@
     var view;
     var m;
     r.params = {};
-    if (r.path === '/') view = Views.fleet;
+    if ((m = GUEST_PATH.exec(r.path))) {
+      r.params.id = m[1]; r.params.type = m[2] || '';
+      view = m[2] ? Views.guestForm : Views.guestHome;
+    } else if (r.query.g && !FleetAuth.hasSession() && (m = SCAN_PATH.exec(r.path))) {
+      r.params.id = m[1];
+      view = Views.guestEntry;
+    } else if (r.path === '/') view = Views.fleet;
     else if (r.path === '/diag') view = viewDiag;
     else if (r.path === '/login') view = Views.login;
     else if (r.path === '/login/verify') view = Views.verify;
@@ -113,7 +126,7 @@
   window.addEventListener('fleet:unauthorized', function () {
     refreshNav();
     var r = parseHash();
-    if (!PUBLIC[r.path]) go('/login', { next: r.raw });
+    if (!isOpen(r)) go('/login', { next: r.raw });
   });
 
   // ---------- footer / version check ----------

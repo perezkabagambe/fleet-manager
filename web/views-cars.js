@@ -95,6 +95,8 @@
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true }));
   }
   function carUrl(id) { return (cfg.siteUrl || location.origin + location.pathname) + '#/car/' + id; }
+  // What the QR code holds: the car's address plus its guest secret (only used if guest access is switched on).
+  function qrLink(car) { return carUrl(car.id) + (car.guestSecret ? '?g=' + car.guestSecret : ''); }
   function entryUrl(carId, entryId) { return carUrl(carId) + '/entry/' + entryId; }
 
   // Miles <-> kilometres, rounded to a whole number. (Money is never converted.) Same maths as the server.
@@ -315,10 +317,11 @@
         ]),
         el('section', { class: 'card' }, [
           el('h2', { text: 'QR label' }),
-          el('p', { class: 'muted', text: 'Stick this on the windscreen or glovebox. Scanning it opens this car (sign-in required).' }),
-          el('img', { class: 'qr', src: qrDataUrl(carUrl(car.id)), alt: 'QR code for ' + car.registration, width: '140', height: '140' }),
+          el('p', { class: 'muted', text: 'Stick this on the windscreen or glovebox. Signed-in people who scan it go to this car. Guest access, if switched on below, lets a garage use it without an account.' }),
+          el('img', { class: 'qr', src: qrDataUrl(qrLink(car)), alt: 'QR code for ' + car.registration, width: '140', height: '140' }),
           el('p', {}, [el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/label', text: 'Print label' })]),
         ]),
+        GuestUI.card(car),
         el('p', { class: 'muted small-text center', text: 'Car details last changed ' + fmtDate(car.updatedAt) }),
         EntryUI.costsCard(car),
         editBottom
@@ -731,12 +734,12 @@
         el('section', { class: 'card no-print' }, [
           backLink('#/car/' + car.id, car.registration),
           el('h1', { text: 'QR label' }),
-          el('p', { class: 'muted', text: 'Print this and stick it on the car. Scanning it opens the car in Fleet Manager (sign-in required).' }),
+          el('p', { class: 'muted', text: 'Print this and stick it on the car. Signed-in people who scan it go to the car in Fleet Manager. If guest access is on for this car, a garage can use it without an account.' }),
           printBtn,
         ]),
         el('div', { class: 'label-wrap' }, [
           el('div', { class: 'label' }, [
-            el('img', { src: qrDataUrl(carUrl(car.id)), alt: 'QR code for ' + car.registration }),
+            el('img', { src: qrDataUrl(qrLink(car)), alt: 'QR code for ' + car.registration }),
             el('div', { class: 'label-reg', text: car.registration }),
             el('div', { class: 'label-car', text: carTitle(car) }),
             el('div', { class: 'label-foot', text: 'Fleet Manager' }),

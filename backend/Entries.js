@@ -112,8 +112,9 @@ function jobCost_(e, usage, purchasesById) {
 
 // ---------- shaping rows for the app ----------
 
-function summarizeEntry_(e) {
+function summarizeEntry_(e, guestNames) {
   return {
+    guestName: guestNames && String(e.created_by).indexOf('guest:') === 0 ? (guestNames[String(e.created_by).slice(6)] || 'Guest') : '',
     id: e.id, carId: e.car_id, type: e.type, title: e.title, notes: e.notes, date: e.date,
     mileage: numOrNull_(e.mileage), mileageUnit: e.mileage_unit || '', vendor: e.vendor, currency: e.currency || 'GBP',
     status: e.status, linkedIssueId: e.linked_issue_id, costMode: e.cost_mode || 'itemised',
@@ -163,8 +164,9 @@ function listEntries_(p, ctx) {
   Db.all('Attachments').forEach(function (a) {
     if (a.car_id === car.id && !isTrue_(a.deleted)) attachments[a.entry_id] = (attachments[a.entry_id] || 0) + 1;
   });
+  const guestNames = guestNamesById_();
   const entries = c.entries.map(function (e) {
-    const s = summarizeEntry_(e);
+    const s = summarizeEntry_(e, guestNames);
     s.attachmentCount = attachments[e.id] || 0;
     if (JOB_TYPES.indexOf(e.type) !== -1) {
       s.jobCost = jobCost_(e, c.usage, c.purchasesById);
@@ -190,7 +192,7 @@ function getEntry_(p, ctx) {
   const car = findCar_(e.car_id, ctx.user.role === 'admin');
   if (!car) fail_('not_found');
   const c = entryContext_(car.id);
-  const out = { entry: summarizeEntry_(e), car: { id: car.id, registration: car.registration, distanceUnit: car.distance_unit || 'mi', currency: car.currency || 'GBP' } };
+  const out = { entry: summarizeEntry_(e, guestNamesById_()), car: { id: car.id, registration: car.registration, distanceUnit: car.distance_unit || 'mi', currency: car.currency || 'GBP' } };
 
   out.attachments = Db.all('Attachments')
     .filter(function (a) { return a.entry_id === e.id && !isTrue_(a.deleted); })

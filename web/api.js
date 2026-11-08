@@ -14,14 +14,18 @@
   }
   ApiError.prototype = Object.create(Error.prototype);
 
-  function call(action, params) {
+  // opts.guestCarId: act as a guest on that car (the guest token is sent instead of any user session).
+  function call(action, params, opts) {
+    opts = opts || {};
     var cfg = window.FLEET_CONFIG;
     if (!cfg.apiUrl) {
       return Promise.reject(new ApiError('not_configured', 'The backend URL has not been set yet.'));
     }
     var payload = Object.assign({ action: action }, params || {});
-    var token = window.FleetAuth && window.FleetAuth.token();
-    if (token) payload.token = token;
+    var guest = opts.guestCarId ? window.FleetGuest.get(opts.guestCarId) : null;
+    var token = guest ? '' : window.FleetAuth && window.FleetAuth.token();
+    if (guest) payload.guestToken = guest.token;
+    else if (token) payload.token = token;
 
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, TIMEOUT_MS);
@@ -51,6 +55,11 @@
             ? new ApiError('timeout', 'The server took too long to respond.')
             : new ApiError('network', 'Could not reach the server.');
         }
+        if (opts.guestCarId && (e.code === 'guest_unauthorized' || e.code === 'guest_disabled')) {
+          // The guest session ended, was blocked, or guest access was switched off for this car.
+          window.FleetGuest.clear(opts.guestCarId);
+          window.dispatchEvent(new CustomEvent('fleet:guest-ended', { detail: { carId: opts.guestCarId, code: e.code } }));
+        }
         if (e.code === 'unauthorized' && token) {
           // The server no longer accepts this session (expired, revoked or signed out elsewhere).
           window.FleetAuth.clear();
@@ -61,5 +70,8 @@
       .finally(function () { clearTimeout(timer); });
   }
 
-  window.FleetApi = { call: call, ApiError: ApiError };
+  /** A call made as a guest on one car. */
+  function callGuest(carId, action, params) { return call(action, params, { guestCarId: carId }); }
+
+  window.FleetApi = { call: call, callGuest: callGuest, ApiError: ApiError };
 })();

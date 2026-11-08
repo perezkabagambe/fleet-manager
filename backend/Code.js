@@ -45,6 +45,19 @@ function actions_() {
     addStandardTasks: { auth: 'user', lock: true, fn: addStandardTasks_ },
     listApprovedUsers: { auth: 'user', fn: listApprovedUsers_ },
     sendMyReminders: { auth: 'user', fn: sendMyReminders_ },
+    setGuestAccess: { auth: 'admin', lock: true, fn: setGuestAccess_ },
+    replaceGuestSecret: { auth: 'admin', lock: true, fn: replaceGuestSecret_ },
+    listGuests: { auth: 'admin', fn: listGuests_ },
+    setGuestBlocked: { auth: 'admin', lock: true, fn: setGuestBlocked_ },
+    guestInfo: { auth: 'none', fn: guestInfo_ },
+    guestJoin: { auth: 'none', lock: true, fn: guestJoin_ },
+    guestMe: { auth: 'guest', fn: guestMe_ },
+    guestListEntries: { auth: 'guest', fn: guestListEntries_ },
+    guestSaveEntry: { auth: 'guest', lock: true, fn: guestSaveEntry_ },
+    guestDeleteEntry: { auth: 'guest', lock: true, fn: guestDeleteEntry_ },
+    guestUploadAttachment: { auth: 'guest', lock: true, fn: guestUploadAttachment_ },
+    guestGetAttachment: { auth: 'guest', fn: guestGetAttachment_ },
+    guestListAttachments: { auth: 'guest', fn: guestListAttachments_ },
     listEntries: { auth: 'user', fn: listEntries_ },
     getEntry: { auth: 'user', fn: getEntry_ },
     listPurchases: { auth: 'user', fn: listPurchases_ },
@@ -90,7 +103,13 @@ function handle_(req) {
     if (req.action !== 'ping') migrateIfNeeded_();
 
     const ctx = {};
-    if (def.auth !== 'none') {
+    if (def.auth === 'guest') {
+      // Guests have their own token; a signed-in user's token is never accepted here, nor a guest's anywhere else.
+      const g = authenticateGuest_(req.guestToken);
+      if (!g) return json_({ ok: false, error: 'guest_unauthorized' });
+      ctx.guest = g;
+      ctx.user = guestUser_(g);
+    } else if (def.auth !== 'none') {
       const a = authenticate_(req.token);
       if (!a) return json_({ ok: false, error: 'unauthorized' });
       if (def.auth === 'admin' && a.user.role !== 'admin') return json_({ ok: false, error: 'forbidden' });
