@@ -31,6 +31,14 @@ function actions_() {
     listUsers: { auth: 'admin', fn: listUsers_ },
     setUserStatus: { auth: 'admin', lock: true, fn: setUserStatus_ },
     setUserRole: { auth: 'admin', lock: true, fn: setUserRole_ },
+    updateMyName: { auth: 'user', lock: true, fn: updateMyName_ },
+    listCars: { auth: 'user', fn: listCars_ },
+    getCar: { auth: 'user', fn: getCar_ },
+    saveCar: { auth: 'user', lock: true, fn: saveCar_ },
+    updateOdometer: { auth: 'user', lock: true, fn: updateOdometer_ },
+    deleteCar: { auth: 'admin', lock: true, fn: deleteCar_ },
+    restoreCar: { auth: 'admin', lock: true, fn: restoreCar_ },
+    saveFluids: { auth: 'user', lock: true, fn: saveFluids_ },
   };
 }
 
@@ -56,6 +64,7 @@ function handle_(req) {
     const def = req && typeof req.action === 'string' && Object.prototype.hasOwnProperty.call(actions, req.action)
       ? actions[req.action] : null;
     if (!def) return json_({ ok: false, error: 'unknown_action' });
+    if (req.action !== 'ping') migrateIfNeeded_();
 
     const ctx = {};
     if (def.auth !== 'none') {

@@ -18,6 +18,17 @@ function listUsers_() {
   return { users: users };
 }
 
+/** Any signed-in user can change their own display name. */
+function updateMyName_(p, ctx) {
+  const name = cleanStr_(p.name, 80);
+  if (!name) fail_('invalid_name');
+  const row = findUserById_(ctx.user.id);
+  if (!row) fail_('not_found');
+  patchUser_(row, { name: name }, ctx.user);
+  audit_(ctx.user, 'name_changed', 'User', row.id, 'Display name changed', { name: row.name }, { name: name });
+  return { user: publicUser_(Object.assign({}, row, { name: name })) };
+}
+
 const STATUS_TRANSITIONS = {
   Pending: ['Approved', 'Rejected'],
   Approved: ['Revoked'],

@@ -105,6 +105,31 @@
     }).catch(function () { /* Google unavailable: email sign-in still works */ });
   }
 
+  // ---------- profile ----------
+  Views.profile = function (ctx, root) {
+    var user = FleetAuth.getUser();
+    var msg = el('div');
+    var name = el('input', { type: 'text', name: 'name', autocomplete: 'name', maxlength: '80', required: true, value: user.name });
+    var btn = el('button', { type: 'submit', class: 'btn', text: 'Save name' });
+    var form = el('form', { novalidate: true }, [UI.field('Your name', name, 'Shown to other users, for example when you edit a car.'), btn]);
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      msg.replaceChildren();
+      UI.busy(btn, 'Saving…', FleetApi.call('updateMyName', { name: name.value }))
+        .then(function (r) {
+          FleetAuth.setUser(Object.assign({}, FleetAuth.getUser(), { name: r.data.user.name }));
+          window.FleetApp.refreshNav();
+          msg.append(UI.notice('ok', 'Saved.'));
+        })
+        .catch(function (e) { msg.append(UI.notice('error', UI.errorText(e))); });
+    });
+    root.replaceChildren(el('section', { class: 'card narrow' }, [
+      el('h1', { text: 'Your profile' }),
+      el('p', { class: 'muted', text: user.email + (user.role === 'admin' ? ' · Administrator' : '') }),
+      msg, form,
+    ]));
+  };
+
   // ---------- request an account ----------
   Views.request = function (ctx, root) {
     var msg = el('div');

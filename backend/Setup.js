@@ -21,7 +21,7 @@ const SCHEMA = {
   Cars: {
     base: true,
     cols: ['registration', 'nickname', 'make', 'model', 'year', 'colour', 'vin', 'country', 'currency', 'distance_unit',
-      'photo_file_id', 'partsouq_url', 'status', 'current_odometer', 'odometer_updated_at', 'reminder_recipients', 'notes'],
+      'photo_file_id', 'photo_thumb_file_id', 'partsouq_url', 'status', 'current_odometer', 'odometer_updated_at', 'reminder_recipients', 'notes'],
   },
   FluidSpecs: { base: true, cols: ['car_id', 'fluid', 'specification', 'capacity', 'notes', 'source', 'verify_flag'] },
   Entries: {
@@ -41,6 +41,29 @@ const SCHEMA = {
   Audit: { base: false, cols: ['timestamp', 'user_id', 'user_email', 'action', 'record_type', 'record_id', 'summary', 'before', 'after'] },
   Settings: { base: false, cols: ['key', 'value'] },
 };
+
+// Bump this whenever SCHEMA changes. The next request after a deploy then adds any
+// missing tabs/columns automatically (additive only), so setup need not be re-run.
+const SCHEMA_VERSION = 2;
+
+/** Add any missing tabs and columns. Never renames or removes anything. */
+function ensureSchema_(ss) {
+  Object.keys(SCHEMA).forEach(function (name) { ensureTab_(ss, name, SCHEMA[name]); });
+}
+
+function migrateIfNeeded_() {
+  const props = props_();
+  if (props.getProperty('SCHEMA_VERSION') === String(SCHEMA_VERSION)) return;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try {
+    if (props.getProperty('SCHEMA_VERSION') === String(SCHEMA_VERSION)) return;
+    ensureSchema_(SpreadsheetApp.openById(props.getProperty('DB_ID')));
+    props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
+  } finally {
+    lock.releaseLock();
+  }
+}
 
 const DEFAULT_SETTINGS = {
   app_timezone: 'Europe/London',
@@ -76,7 +99,8 @@ function setup() {
     DriveApp.getFileById(ss.getId()).moveTo(root);
   }
   ss.setSpreadsheetTimeZone('Europe/London');
-  Object.keys(SCHEMA).forEach(function (name) { ensureTab_(ss, name, SCHEMA[name]); });
+  ensureSchema_(ss);
+  props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   const first = ss.getSheetByName('Sheet1');
   if (first && ss.getSheets().length > 1) ss.deleteSheet(first);
 

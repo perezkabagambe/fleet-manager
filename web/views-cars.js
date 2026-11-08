@@ -1,0 +1,435 @@
+// Fleet list, car page, add/edit form, fluids editor and printable QR label.
+(function () {
+  'use strict';
+
+  var el = UI.el;
+  var Views = (window.Views = window.Views || {});
+  var cfg = window.FLEET_CONFIG;
+
+  var FLUID_TEMPLATE = [
+    'Engine oil', 'Gearbox oil / ATF', 'Front differential oil', 'Rear differential oil', 'Transfer case oil',
+    'Coolant', 'Brake fluid', 'Power steering fluid', 'Washer fluid', 'AC refrigerant',
+  ];
+
+  var carsCache = null; // last fleet list: shown instantly while a fresh copy loads
+
+  // ---------- helpers ----------
+  function num(n) { return n === null || n === undefined ? '–' : Number(n).toLocaleString('en-GB'); }
+  function carTitle(c) { return c.make + ' ' + c.model + (c.year ? ' (' + c.year + ')' : ''); }
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+  function chip(status) {
+    return el('span', { class: 'chip ' + status.toLowerCase().replace(/[^a-z]/g, ''), text: status });
+  }
+  function photo(car, cls) {
+    return el('div', { class: 'photo placeholder ' + (cls || ''), 'aria-hidden': 'true', text: '🚗' });
+  }
+  function loading() { return el('p', { class: 'muted center pad', text: 'Loading…' }); }
+  function backLink(href, text) { return el('a', { class: 'back', href: href, text: '← ' + text }); }
+  function notFound(root) {
+    root.replaceChildren(el('section', { class: 'card' }, [
+      el('h1', { text: 'Car not found' }),
+      el('p', { class: 'muted', text: 'It may have been deleted.' }),
+      el('a', { class: 'btn', href: '#/', text: 'Back to fleet' }),
+    ]));
+  }
+
+  function qrDataUrl(text) {
+    var qr = window.qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true }));
+  }
+  function carUrl(id) { return (cfg.siteUrl || location.origin + location.pathname) + '#/car/' + id; }
+
+  // ---------- fleet ----------
+  Views.fleet = function (ctx, root) {
+    var msg = el('div');
+    var grid = el('div', { class: 'car-grid' });
+    var deletedBox = el('div');
+    root.replaceChildren(el('section', { class: 'card' }, [
+      el('div', { class: 'page-head' }, [
+        el('h1', { text: 'Fleet' }),
+        el('a', { class: 'btn small', href: '#/car/new', text: 'Add car' }),
+      ]),
+      msg, grid, deletedBox,
+    ]));
+
+    function card(c) {
+      return el('a', { class: 'car-card', href: '#/car/' + c.id }, [
+        photo(c),
+        el('div', { class: 'car-card-body' }, [
+          el('div', { class: 'reg', text: c.registration }),
+          el('div', { class: 'muted small-text', text: carTitle(c) }),
+          el('div', { class: 'car-card-foot' }, [
+            chip(c.status),
+            el('span', { class: 'muted small-text', text: c.odometer === null ? '' : num(c.odometer) + ' ' + c.distanceUnit }),
+          ]),
+        ]),
+      ]);
+    }
+
+    function render(data) {
+      grid.replaceChildren.apply(grid, data.cars.length
+        ? data.cars.map(card)
+        : [el('div', { class: 'empty' }, [
+          el('p', { text: 'No cars yet.' }),
+          el('a', { class: 'btn', href: '#/car/new', text: 'Add your first car' }),
+        ])]);
+      deletedBox.replaceChildren();
+      if (data.deleted && data.deleted.length) {
+        var list = data.deleted.map(function (c) {
+          var b = el('button', { type: 'button', class: 'btn small secondary', text: 'Restore' });
+          b.addEventListener('click', function () {
+            UI.busy(b, 'Restoring…', FleetApi.call('restoreCar', { id: c.id }))
+              .then(function () { carsCache = null; Views.fleet(ctx, root); })
+              .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+          });
+          return el('div', { class: 'deleted-row' }, [
+            el('span', { text: c.registration + ' · ' + carTitle(c) }), b,
+          ]);
+        });
+        deletedBox.append(el('details', { class: 'deleted' }, [el('summary', { text: 'Deleted cars (' + data.deleted.length + ')' })].concat(list)));
+      }
+    }
+
+    if (carsCache) render(carsCache); else grid.append(loading());
+    FleetApi.call('listCars').then(function (r) {
+      carsCache = r.data;
+      render(r.data);
+    }).catch(function (e) {
+      if (e.code !== 'unauthorized') msg.replaceChildren(UI.notice('error', UI.errorText(e)));
+      if (!carsCache) grid.replaceChildren();
+    });
+  };
+
+  // ---------- car page ----------
+  Views.car = function (ctx, root) {
+    var id = ctx.params.id;
+    root.replaceChildren(el('section', { class: 'card' }, [loading()]));
+
+    FleetApi.call('getCar', { id: id }).then(function (r) {
+      render(r.data.car, r.data.fluids);
+    }).catch(function (e) {
+      if (e.code === 'not_found') notFound(root);
+      else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e)), backLink('#/', 'Fleet')]));
+    });
+
+    function render(car, fluids) {
+      var msg = el('div');
+
+      // odometer
+      var odoInput = el('input', { type: 'text', inputmode: 'numeric', name: 'odometer', autocomplete: 'off', placeholder: 'New reading' });
+      var odoBtn = el('button', { type: 'submit', class: 'btn small', text: 'Update' });
+      var odoForm = el('form', { class: 'inline-form', novalidate: true }, [
+        el('label', { class: 'sr-only', for: 'odo-input', text: 'New odometer reading in ' + car.distanceUnit }), odoInput, odoBtn,
+      ]);
+      odoInput.id = 'odo-input';
+      function sendOdometer(force) {
+        return FleetApi.call('updateOdometer', { id: car.id, odometer: odoInput.value, forceOdometer: !!force }).then(function () {
+          carsCache = null;
+          Views.car(ctx, root);
+        });
+      }
+      odoForm.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        msg.replaceChildren();
+        UI.busy(odoBtn, 'Saving…', sendOdometer(false)).catch(function (e) {
+          if (e.code === 'odometer_lower' && FleetAuth.isAdmin() &&
+              window.confirm('That is lower than the current reading (' + num(car.odometer) + '). Correct it anyway?')) {
+            UI.busy(odoBtn, 'Saving…', sendOdometer(true)).catch(function (e2) { msg.replaceChildren(UI.notice('error', UI.errorText(e2))); });
+            return;
+          }
+          msg.replaceChildren(UI.notice('error', UI.errorText(e)));
+        });
+      });
+
+      // delete (admin)
+      var deleteBtn = null;
+      if (FleetAuth.isAdmin()) {
+        deleteBtn = el('button', { type: 'button', class: 'btn small danger', text: 'Delete' });
+        deleteBtn.addEventListener('click', function () {
+          if (!window.confirm('Delete ' + car.registration + '? You can restore it later from the fleet page.')) return;
+          UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteCar', { id: car.id }))
+            .then(function () { carsCache = null; FleetApp.go('/'); })
+            .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+        });
+      }
+
+      function detail(label, value) {
+        return value ? [el('dt', { text: label }), el('dd', { text: value })] : [];
+      }
+      var details = [].concat(
+        detail('Make and model', carTitle(car)),
+        detail('Colour', car.colour),
+        detail('VIN / chassis', car.vin),
+        detail('Country', car.country === 'UG' ? 'Uganda' : 'United Kingdom'),
+        detail('Currency', car.currency)
+      );
+
+      var fluidRows = fluids.map(function (f) {
+        return el('li', { class: 'fluid' }, [
+          el('div', { class: 'fluid-name', text: f.fluid }),
+          el('div', { text: [f.specification, f.capacity].filter(Boolean).join(' · ') || '–' }),
+          f.notes ? el('div', { class: 'muted small-text', text: f.notes }) : null,
+          f.needsChecking ? el('span', { class: 'chip pending', text: 'Check against manual' }) : null,
+        ]);
+      });
+
+      root.replaceChildren(
+        el('section', { class: 'card' }, [
+          backLink('#/', 'Fleet'),
+          el('div', { class: 'page-head' }, [
+            el('div', {}, [
+              el('h1', { text: car.registration }),
+              el('div', { class: 'muted', text: [car.nickname, carTitle(car)].filter(Boolean).join(' · ') }),
+            ]),
+            chip(car.status),
+          ]),
+          msg,
+          photo(car, 'big'),
+          el('div', { class: 'btn-row' }, [
+            el('a', { class: 'btn small', href: '#/car/' + car.id + '/edit', text: 'Edit' }),
+            car.partsouqUrl
+              ? el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue' })
+              : null,
+            deleteBtn,
+          ]),
+        ]),
+        el('section', { class: 'card' }, [
+          el('h2', { text: 'Odometer' }),
+          el('div', { class: 'big-number', text: car.odometer === null ? 'Not set' : num(car.odometer) + ' ' + car.distanceUnit }),
+          car.odometerUpdatedAt ? el('div', { class: 'muted small-text', text: 'Updated ' + fmtDate(car.odometerUpdatedAt) }) : null,
+          odoForm,
+        ]),
+        el('section', { class: 'card' }, [
+          el('h2', { text: 'Details' }),
+          el('dl', { class: 'details' }, details),
+          car.notes ? el('p', { class: 'notes', text: car.notes }) : null,
+        ]),
+        el('section', { class: 'card' }, [
+          el('div', { class: 'page-head' }, [
+            el('h2', { text: 'Fluids and specs' }),
+            el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/fluids', text: fluids.length ? 'Edit' : 'Add' }),
+          ]),
+          fluids.length ? el('ul', { class: 'fluids' }, fluidRows) : el('p', { class: 'muted', text: 'No fluid specs recorded yet.' }),
+        ]),
+        el('section', { class: 'card' }, [
+          el('h2', { text: 'QR label' }),
+          el('p', { class: 'muted', text: 'Stick this on the windscreen or glovebox. Scanning it opens this car (sign-in required).' }),
+          el('img', { class: 'qr', src: qrDataUrl(carUrl(car.id)), alt: 'QR code for ' + car.registration, width: '140', height: '140' }),
+          el('p', {}, [el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/label', text: 'Print label' })]),
+        ]),
+        el('section', { class: 'card muted' }, [
+          el('p', { text: 'Issues, repairs, maintenance and costs for this car are coming in the next phases.' }),
+          el('p', { class: 'small-text', text: 'Last changed ' + fmtDate(car.updatedAt) }),
+        ])
+      );
+    }
+  };
+
+  // ---------- add / edit form ----------
+  Views.carForm = function (ctx, root) {
+    var id = ctx.params.id || '';
+    root.replaceChildren(el('section', { class: 'card' }, [loading()]));
+    if (!id) { build(null); return; }
+    FleetApi.call('getCar', { id: id }).then(function (r) { build(r.data.car); }).catch(function (e) {
+      if (e.code === 'not_found') notFound(root);
+      else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e))]));
+    });
+
+    function build(car) {
+      var f = {};
+      var msg = el('div');
+      function text(name, value, attrs) {
+        f[name] = el('input', Object.assign({ type: 'text', name: name, value: value === null || value === undefined ? '' : String(value), autocomplete: 'off' }, attrs || {}));
+        return f[name];
+      }
+      function select(name, options, value) {
+        f[name] = el('select', { name: name }, options.map(function (o) {
+          return el('option', { value: o[0], text: o[1], selected: o[0] === value });
+        }));
+        return f[name];
+      }
+
+      var v = car || { country: 'UK', currency: 'GBP', distanceUnit: 'mi', status: 'Active' };
+      var fields = [
+        UI.field('Registration number *', text('registration', v.registration, { maxlength: '20', autocapitalize: 'characters', required: true })),
+        UI.field('Make *', text('make', v.make, { maxlength: '40', placeholder: 'e.g. Toyota', required: true })),
+        UI.field('Model *', text('model', v.model, { maxlength: '40', placeholder: 'e.g. Land Cruiser', required: true })),
+        UI.field('Year', text('year', v.year, { inputmode: 'numeric', maxlength: '4', placeholder: 'e.g. 2015' })),
+        UI.field('Colour', text('colour', v.colour, { maxlength: '30' })),
+        UI.field('Nickname', text('nickname', v.nickname, { maxlength: '40' }), 'Optional, e.g. "The work truck".'),
+        UI.field('VIN / chassis number', text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 'The 17-character VIN, or the chassis number for Japanese imports.'),
+        UI.field('Country', select('country', [['UK', 'United Kingdom'], ['UG', 'Uganda']], v.country)),
+        UI.field('Currency for costs', select('currency', [['GBP', 'GBP (£)'], ['UGX', 'UGX (USh)'], ['USD', 'USD ($)'], ['EUR', 'EUR (€)']], v.currency)),
+        UI.field('Distance unit', select('distanceUnit', [['mi', 'Miles'], ['km', 'Kilometres']], v.distanceUnit)),
+        UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
+        UI.field('Current odometer', text('odometer', v.odometer === null || v.odometer === undefined ? '' : v.odometer, { inputmode: 'numeric' }), 'Whole miles or km.'),
+        UI.field('PartSouq catalogue link', text('partsouqUrl', v.partsouqUrl, { inputmode: 'url', placeholder: 'https://partsouq.com/…' }), 'Optional. Must be a partsouq.com address.'),
+      ];
+      var notes = el('textarea', { name: 'notes', rows: '4', maxlength: '2000' });
+      notes.value = v.notes || '';
+      f.notes = notes;
+      fields.push(UI.field('Notes', notes));
+
+      if (!car) {
+        f.country.addEventListener('change', function () {
+          var uganda = f.country.value === 'UG';
+          f.currency.value = uganda ? 'UGX' : 'GBP';
+          f.distanceUnit.value = uganda ? 'km' : 'mi';
+        });
+      }
+
+      var btn = el('button', { type: 'submit', class: 'btn block', text: car ? 'Save changes' : 'Add car' });
+      var form = el('form', { novalidate: true }, fields.concat([btn]));
+
+      function collect() {
+        return {
+          registration: f.registration.value, make: f.make.value, model: f.model.value, year: f.year.value, colour: f.colour.value,
+          nickname: f.nickname.value, vin: f.vin.value, country: f.country.value, currency: f.currency.value,
+          distanceUnit: f.distanceUnit.value, status: f.status.value, odometer: f.odometer.value,
+          partsouqUrl: f.partsouqUrl.value, notes: f.notes.value,
+        };
+      }
+
+      function submit(extra) {
+        var payload = Object.assign({ fields: collect() }, car ? { id: car.id, version: car.version } : {}, extra || {});
+        return FleetApi.call('saveCar', payload).then(function (r) {
+          var d = r.data;
+          if (!d.saved) {
+            var lines = d.warnings.map(function (w) { return (w.type === 'vin' ? 'Same VIN as ' : 'Same registration as ') + w.label; }).join('\n');
+            if (window.confirm('Possible duplicate:\n' + lines + '\n\nSave anyway?')) return submit(Object.assign({}, extra, { force: true }));
+            return null;
+          }
+          carsCache = null;
+          FleetApp.go('/car/' + d.car.id);
+          return null;
+        }).catch(function (e) {
+          if (e.code === 'odometer_lower' && FleetAuth.isAdmin() &&
+              window.confirm('That odometer reading is lower than the current one. Correct it anyway?')) {
+            return submit(Object.assign({}, extra, { forceOdometer: true }));
+          }
+          throw e;
+        });
+      }
+
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        msg.replaceChildren();
+        UI.busy(btn, 'Saving…', submit({})).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); window.scrollTo(0, 0); });
+      });
+
+      root.replaceChildren(el('section', { class: 'card' }, [
+        backLink(car ? '#/car/' + car.id : '#/', car ? car.registration : 'Fleet'),
+        el('h1', { text: car ? 'Edit car' : 'Add a car' }),
+        msg, form,
+      ]));
+    }
+  };
+
+  // ---------- fluids editor ----------
+  Views.carFluids = function (ctx, root) {
+    var id = ctx.params.id;
+    root.replaceChildren(el('section', { class: 'card' }, [loading()]));
+    FleetApi.call('getCar', { id: id }).then(function (r) { build(r.data.car, r.data.fluids); }).catch(function (e) {
+      if (e.code === 'not_found') notFound(root);
+      else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e))]));
+    });
+
+    function build(car, fluids) {
+      var rows = fluids.map(function (f) { return Object.assign({}, f); });
+      var msg = el('div');
+      var list = el('div', { class: 'stack' });
+      var datalist = el('datalist', { id: 'fluid-names' }, FLUID_TEMPLATE.map(function (n) { return el('option', { value: n }); }));
+
+      function rowEl(row, i) {
+        function inp(key, label, attrs) {
+          var input = el('input', Object.assign({ type: 'text', value: row[key] || '', autocomplete: 'off' }, attrs || {}));
+          input.addEventListener('input', function () { row[key] = input.value; });
+          return UI.field(label, input);
+        }
+        var check = el('input', { type: 'checkbox' });
+        check.checked = !!row.needsChecking;
+        check.addEventListener('change', function () { row.needsChecking = check.checked; });
+        var remove = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
+        remove.addEventListener('click', function () { rows.splice(i, 1); draw(); });
+        return el('div', { class: 'fluid-edit' }, [
+          inp('fluid', 'Fluid', { list: 'fluid-names', maxlength: '40' }),
+          inp('specification', 'Specification', { maxlength: '120', placeholder: 'e.g. 5W-30 ACEA C2' }),
+          inp('capacity', 'Capacity', { maxlength: '40', placeholder: 'e.g. 6.5 L' }),
+          inp('notes', 'Notes', { maxlength: '200' }),
+          el('label', { class: 'check' }, [check, el('span', { text: 'Check against the manual' })]),
+          remove,
+        ]);
+      }
+
+      function draw() {
+        list.replaceChildren.apply(list, rows.length
+          ? rows.map(rowEl)
+          : [el('p', { class: 'muted', text: 'No fluids yet. Add one, or add the standard set.' })]);
+      }
+
+      var addBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add fluid' });
+      addBtn.addEventListener('click', function () { rows.push({ fluid: '', specification: '', capacity: '', notes: '' }); draw(); });
+      var stdBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add standard fluids' });
+      stdBtn.addEventListener('click', function () {
+        var have = rows.map(function (r) { return (r.fluid || '').toLowerCase(); });
+        FLUID_TEMPLATE.forEach(function (n) {
+          if (have.indexOf(n.toLowerCase()) === -1) rows.push({ fluid: n, specification: '', capacity: '', notes: '' });
+        });
+        draw();
+      });
+      var saveBtn = el('button', { type: 'button', class: 'btn block', text: 'Save fluids' });
+      saveBtn.addEventListener('click', function () {
+        msg.replaceChildren();
+        var payload = rows.filter(function (r) { return (r.fluid || '').trim() || (r.specification || '').trim() || (r.capacity || '').trim(); });
+        UI.busy(saveBtn, 'Saving…', FleetApi.call('saveFluids', { carId: car.id, fluids: payload }))
+          .then(function () { FleetApp.go('/car/' + car.id); })
+          .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); window.scrollTo(0, 0); });
+      });
+
+      draw();
+      root.replaceChildren(el('section', { class: 'card' }, [
+        backLink('#/car/' + car.id, car.registration),
+        el('h1', { text: 'Fluids and specs' }),
+        el('p', { class: 'muted', text: carTitle(car) }),
+        msg, datalist, list,
+        el('div', { class: 'btn-row' }, [addBtn, stdBtn]),
+        saveBtn,
+      ]));
+    }
+  };
+
+  // ---------- printable label ----------
+  Views.carLabel = function (ctx, root) {
+    var id = ctx.params.id;
+    root.replaceChildren(el('section', { class: 'card' }, [loading()]));
+    FleetApi.call('getCar', { id: id }).then(function (r) {
+      var car = r.data.car;
+      var printBtn = el('button', { type: 'button', class: 'btn', text: 'Print label', onclick: function () { window.print(); } });
+      root.replaceChildren(
+        el('section', { class: 'card no-print' }, [
+          backLink('#/car/' + car.id, car.registration),
+          el('h1', { text: 'QR label' }),
+          el('p', { class: 'muted', text: 'Print this and stick it on the car. Scanning it opens the car in Fleet Manager (sign-in required).' }),
+          printBtn,
+        ]),
+        el('div', { class: 'label-wrap' }, [
+          el('div', { class: 'label' }, [
+            el('img', { src: qrDataUrl(carUrl(car.id)), alt: 'QR code for ' + car.registration }),
+            el('div', { class: 'label-reg', text: car.registration }),
+            el('div', { class: 'label-car', text: carTitle(car) }),
+            el('div', { class: 'label-foot', text: 'Fleet Manager' }),
+          ]),
+        ])
+      );
+    }).catch(function (e) {
+      if (e.code === 'not_found') notFound(root);
+      else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e))]));
+    });
+  };
+})();

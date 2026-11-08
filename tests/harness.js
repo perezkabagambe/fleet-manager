@@ -8,14 +8,19 @@ const path = require('path');
 const crypto = require('crypto');
 
 const BACKEND = path.join(__dirname, '..', 'backend');
-const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Code.js', 'Version.js', 'Setup.js'];
+const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'Code.js', 'Version.js', 'Setup.js'];
 
 function makeSheet(header) {
   const rows = [header.slice()];
   return {
     getLastRow: () => rows.length,
     getLastColumn: () => rows[0].length,
+    getMaxRows: () => 1000,
+    getMaxColumns: () => Math.max(rows[0].length, 26),
+    setFrozenRows: () => {},
     getRange: (r, c, nr, nc) => ({
+      setFontWeight() {},
+      setNumberFormat() {},
       getValues: () => {
         const out = [];
         for (let i = 0; i < nr; i++) {
@@ -142,6 +147,7 @@ function createEnv() {
   Object.keys(SCHEMA).forEach((name) => {
     sheets[name] = makeSheet((SCHEMA[name].base ? BASE : []).concat(SCHEMA[name].cols));
   });
+  props.SCHEMA_VERSION = String(vm.runInContext('SCHEMA_VERSION', ctx));
   props.DB_ID = 'db';
   props.LOGS_FOLDER_ID = 'logs';
   props.HASH_SALT = 'test-salt';

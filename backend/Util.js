@@ -106,6 +106,17 @@ function cleanStr_(v, max) {
     .slice(0, max);
 }
 
+/** Like cleanStr_ but keeps line breaks (for notes). */
+function cleanText_(v, max) {
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, max);
+}
+
 /** Lower-cased email, or '' if it doesn't look like one. */
 function normEmail_(v) {
   const e = String(v === null || v === undefined ? '' : v).trim().toLowerCase();

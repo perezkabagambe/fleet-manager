@@ -51,13 +51,20 @@
       }
     }
     var view;
-    if (r.path === '/' ) view = viewHome;
+    var m;
+    r.params = {};
+    if (r.path === '/') view = Views.fleet;
     else if (r.path === '/diag') view = viewDiag;
     else if (r.path === '/login') view = Views.login;
     else if (r.path === '/login/verify') view = Views.verify;
     else if (r.path === '/request') view = Views.request;
+    else if (r.path === '/profile') view = Views.profile;
     else if (r.path === '/admin/users') view = FleetAuth.isAdmin() ? Views.adminUsers : viewForbidden;
-    else view = viewNotFound;
+    else if (r.path === '/car/new') view = Views.carForm;
+    else if ((m = /^\/car\/([0-9a-f-]{8,40})(?:\/(edit|fluids|label))?$/.exec(r.path))) {
+      r.params.id = m[1];
+      view = { edit: Views.carForm, fluids: Views.carFluids, label: Views.carLabel }[m[2]] || Views.car;
+    } else view = viewNotFound;
     view(r, appEl);
     appEl.focus({ preventScroll: true });
     if (!r.query.focus) window.scrollTo(0, 0);
@@ -68,9 +75,9 @@
     var nav = document.getElementById('topnav');
     var user = FleetAuth.getUser();
     var links = [];
-    if (FleetAuth.hasSession()) links.push(el('a', { href: '#/', text: 'Home' }));
+    if (FleetAuth.hasSession()) links.push(el('a', { href: '#/', text: 'Fleet' }));
     if (FleetAuth.isAdmin()) links.push(el('a', { href: '#/admin/users', text: 'Users' }));
-    links.push(el('a', { href: '#/diag', text: 'Diagnostics' }));
+    if (user) links.push(el('a', { href: '#/profile', text: user.name.split(' ')[0] }));
     if (FleetAuth.hasSession()) {
       links.push(el('button', { type: 'button', class: 'navbtn', text: 'Sign out', onclick: signOut }));
     } else {
@@ -123,18 +130,6 @@
   }
 
   // ---------- views ----------
-  function viewHome(r, root) {
-    var user = FleetAuth.getUser();
-    root.replaceChildren(
-      el('section', { class: 'card' }, [
-        el('h1', { text: 'Welcome, ' + user.name }),
-        el('p', { text: 'You are signed in' + (user.role === 'admin' ? ' as an administrator.' : '.') }),
-        el('p', { class: 'muted', text: 'Cars, issues, repairs, maintenance and reminders are coming in the next phases.' }),
-        FleetAuth.isAdmin() ? el('a', { class: 'btn', href: '#/admin/users', text: 'Manage users' }) : null,
-      ])
-    );
-  }
-
   function viewForbidden(r, root) {
     root.replaceChildren(el('section', { class: 'card' }, [
       el('h1', { text: 'Not allowed' }),

@@ -213,3 +213,74 @@ a { color: var(--accent); }
 .prose ul { padding-left: 20px; }
 .prose li { margin: 6px 0; }
 .footer a { text-decoration: underline; }
+
+/* ---------- cars ---------- */
+.topnav { flex-wrap: wrap; }
+.card + .card { margin-top: 12px; }
+.card h2 { font-size: 1.1rem; margin: 0 0 8px; }
+.page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+.page-head h1 { margin: 0; }
+.back { display: inline-block; margin-bottom: 8px; text-decoration: none; min-height: 32px; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.car-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 8px; }
+.car-card { display: block; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; text-decoration: none; color: inherit; background: var(--surface); }
+.car-card:hover, .car-card:focus-visible { border-color: var(--accent); }
+.car-card-body { padding: 10px; }
+.car-card .reg { font-weight: 700; letter-spacing: 0.02em; }
+.car-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.empty { grid-column: 1 / -1; text-align: center; padding: 24px 0; }
+
+.photo { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--bg); display: block; }
+.photo.placeholder { display: flex; align-items: center; justify-content: center; font-size: 2.2rem; opacity: 0.55; }
+.photo.big { border-radius: var(--radius); max-height: 320px; }
+
+.chip { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.chip.active { color: var(--ok); border-color: var(--ok); }
+.chip.offroad, .chip.pending { color: var(--warn-text); background: var(--warn-bg); border-color: transparent; }
+.chip.sold { color: var(--accent); border-color: var(--accent); }
+.chip.scrapped { color: var(--bad); border-color: var(--bad); }
+
+.big-number { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.inline-form { display: flex; gap: 8px; margin-top: 10px; }
+.inline-form input { flex: 1; }
+dl.details { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+dl.details dt { color: var(--muted); }
+dl.details dd { margin: 0; overflow-wrap: anywhere; }
+.notes { white-space: pre-wrap; margin-top: 12px; }
+
+.fluids { list-style: none; margin: 0; padding: 0; }
+.fluid { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.fluid:last-child { border-bottom: 0; }
+.fluid-name { font-weight: 600; }
+.fluid-edit { border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 12px 12px; }
+.fluid-edit .field { margin: 10px 0; }
+.check { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-bottom: 8px; }
+.check input { width: 22px; height: 22px; }
+.deleted { margin-top: 16px; }
+.deleted summary { cursor: pointer; color: var(--muted); min-height: 44px; display: flex; align-items: center; }
+.deleted-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.qr { display: block; margin: 8px 0; background: #fff; padding: 6px; border-radius: 8px; }
+
+/* ---------- printable QR label ---------- */
+.label-wrap { display: flex; justify-content: center; margin-top: 12px; }
+.label { width: 300px; border: 2px solid #000; border-radius: 12px; padding: 16px; text-align: center; background: #fff; color: #000; }
+.label img { width: 100%; height: auto; display: block; }
+.label-reg { font-size: 2rem; font-weight: 800; letter-spacing: 0.06em; margin-top: 8px; }
+.label-car { font-size: 1.1rem; margin-top: 2px; }
+.label-foot { font-size: 0.75rem; margin-top: 8px; color: #444; }
+@media print {
+  body { background: #fff; }
+  .topbar, .footer, .banner, .no-print { display: none !important; }
+  main { padding: 0; max-width: none; }
+  .label-wrap { margin: 0; }
+}
+
+/* ---------- compact header and two-up car cards on phones ---------- */
+.topbar { gap: 4px 12px; padding-top: calc(8px + env(safe-area-inset-top)); padding-bottom: 8px; }
+.topnav a, .navbtn { padding: 8px 10px; font-size: 0.95rem; }
+.topnav { gap: 0; }
+.car-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.photo.placeholder { font-size: 1.8rem; }
+.photo.big.placeholder { font-size: 3rem; }

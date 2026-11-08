@@ -13,3 +13,6 @@ node_modules/
 # Private backend config and deployment id
 backend/Local.js
 .deployment-id
+
+# Local-only test fake backend
+web/dev-mock.js
