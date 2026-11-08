@@ -376,3 +376,17 @@ input[type="date"] {
 .cur-label { display: flex; align-items: center; justify-content: center; min-width: 130px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--muted); }
 
 .top-details { margin-top: 14px; }
+
+/* ---------- compact service history rows: name on the left, every tag on the right ---------- */
+.entry-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.entry-main { flex: 1 1 auto; min-width: 0; }
+.entry-title { margin: 0 0 2px; }
+.entry-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
+.entry-tags { flex: 0 1 auto; max-width: 46%; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px; margin: 0; }
+
+/* ---------- compact service history rows: name on the left, every tag on the right ---------- */
+.entry-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.entry-main { flex: 1 1 auto; min-width: 0; }
+.entry-title { margin: 0 0 2px; }
+.entry-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
+.entry-tags { flex: 0 1 auto; max-width: 46%; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px; margin: 0; }

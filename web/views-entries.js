@@ -88,10 +88,15 @@
       if (e.attachmentCount) tags.push(el('span', { class: 'muted small-text', text: '📎 ' + e.attachmentCount }));
       var cost = costText(e);
       return el('a', { class: 'entry-row', href: '#/car/' + car.id + '/entry/' + e.id }, [
-        el('div', { class: 'entry-top' }, [typeChip(e.type), cost ? el('span', { class: 'entry-cost', text: cost }) : null]),
-        el('div', { class: 'entry-title', text: e.title }),
-        el('div', { class: 'muted small-text', text: meta.join(' · ') }),
-        tags.length ? el('div', { class: 'entry-tags' }, tags) : null,
+        el('div', { class: 'entry-main' }, [
+          el('div', { class: 'entry-title', text: e.title }),
+          el('div', { class: 'entry-meta' }, [
+            el('span', { class: 'muted small-text', text: meta.join(' · ') }),
+            cost ? el('strong', { class: 'entry-cost', text: cost }) : null,
+          ]),
+        ]),
+        // the type, status (Fitted, Resolved...) and attachment count all sit to the right of the name
+        el('div', { class: 'entry-tags' }, [typeChip(e.type)].concat(tags)),
       ]);
     }
 
@@ -121,7 +126,7 @@
     });
 
     return el('section', { class: 'card' }, [
-      el('h2', { text: 'History' }),
+      el('h2', { text: 'Service History' }),
       el('a', { class: 'btn block big', href: '#/car/' + car.id + '/add', text: 'Add entry' }),
       chips, list,
     ]);
@@ -450,7 +455,7 @@
           UI.field('Provider', text('vendor', v.vendor, { maxlength: '80' }), 'Optional, e.g. the testing station or insurer.'),
           mileageField(),
           amountRow('Cost', text('cost', v.cost === null || v.cost === undefined ? '' : v.cost, { inputmode: 'decimal' }), 'Optional.', 'f-cost'),
-          UI.field('New expiry date', text('expiryDate', v.expiryDate, { type: 'date' }), 'Optional. When this runs out next.'),
+          UI.field('New expiry date', text('expiryDate', v.expiryDate, { type: 'date' }), 'Optional. When this runs out next. You\'ll receive email reminders for this.'),
         ];
       } else if (type === 'Purchase') {
         costTotal = el('div', { class: 'job-total' });

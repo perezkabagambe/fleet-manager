@@ -303,7 +303,6 @@
           odoForm,
         ]),
         EntryUI.historyCard(car),
-        EntryUI.costsCard(car),
         el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids and specs' }),
           fluids.length ? el('ul', { class: 'fluids' }, fluidRows) : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' }),
@@ -318,6 +317,7 @@
           el('p', {}, [el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/label', text: 'Print label' })]),
         ]),
         el('p', { class: 'muted small-text center', text: 'Car details last changed ' + fmtDate(car.updatedAt) }),
+        EntryUI.costsCard(car),
         editBottom
       );
     }
