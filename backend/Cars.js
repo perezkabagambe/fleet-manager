@@ -229,7 +229,7 @@ function listFluids_(carId) {
     .map(function (f) {
       return {
         id: f.id, fluid: f.fluid, specification: f.specification, capacity: f.capacity,
-        notes: f.notes, source: f.source, needsChecking: isTrue_(f.verify_flag),
+        notes: f.notes, source: f.source,
       };
     });
 }
@@ -241,7 +241,6 @@ function cleanFluid_(it) {
     capacity: cleanStr_(it.capacity, 40),
     notes: cleanStr_(it.notes, 200),
     source: cleanStr_(it.source, 120),
-    verify_flag: it.needsChecking === true,
   };
   if (!out.fluid) fail_('fluid_name_required');
   return out;

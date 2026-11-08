@@ -175,7 +175,6 @@
           el('div', { class: 'fluid-name', text: f.fluid }),
           el('div', { text: [f.specification, f.capacity].filter(Boolean).join(' · ') || '–' }),
           f.notes ? el('div', { class: 'muted small-text', text: f.notes }) : null,
-          f.needsChecking ? el('span', { class: 'chip pending', text: 'Check against manual' }) : null,
         ]);
       });
 
@@ -363,9 +362,6 @@
           input.addEventListener('input', function () { row[key] = input.value; });
           return UI.field(label, input);
         }
-        var check = el('input', { type: 'checkbox' });
-        check.checked = !!row.needsChecking;
-        check.addEventListener('change', function () { row.needsChecking = check.checked; });
         var remove = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
         remove.addEventListener('click', function () { rows.splice(i, 1); draw(); });
         return el('div', { class: 'fluid-edit' }, [
@@ -373,7 +369,6 @@
           inp('specification', 'Specification', { maxlength: '120', placeholder: 'e.g. 5W-30 ACEA C2' }),
           inp('capacity', 'Capacity', { maxlength: '40', placeholder: 'e.g. 6.5 L' }),
           inp('notes', 'Notes', { maxlength: '200' }),
-          el('label', { class: 'check' }, [check, el('span', { text: 'Check against the manual' })]),
           remove,
         ]);
       }

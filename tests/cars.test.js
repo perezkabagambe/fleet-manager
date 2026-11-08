@@ -191,11 +191,11 @@ test('fluids: add, change, remove; ids stay stable', () => {
   const car = addCar(env, sam).data.car;
   let r = env.call('saveFluids', { token: sam, carId: car.id, fluids: [
     { fluid: 'Engine oil', specification: '5W-30 ACEA C2', capacity: '6.5 L' },
-    { fluid: 'Coolant', specification: 'Toyota Super Long Life', capacity: '8 L', needsChecking: true },
+    { fluid: 'Coolant', specification: 'Toyota Super Long Life', capacity: '8 L' },
   ] });
   assert.equal(r.data.fluids.length, 2);
-  const [oil, coolant] = r.data.fluids;
-  assert.equal(coolant.needsChecking, true);
+  const oil = r.data.fluids[0];
+  assert.equal(r.data.fluids[1].fluid, 'Coolant');
 
   r = env.call('saveFluids', { token: sam, carId: car.id, fluids: [
     { id: oil.id, fluid: 'Engine oil', specification: '0W-20', capacity: '6.5 L' },
