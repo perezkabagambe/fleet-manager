@@ -78,6 +78,77 @@ test('required fields and formats are enforced', () => {
   assert.equal(env.call('listCars', { token: sam }).data.cars.length, 0);
 });
 
+test('acquisition cost and date are optional but validated', () => {
+  const { env, sam } = setup();
+  const none = addCar(env, sam, { registration: 'NOCOST1', vin: '' }).data.car;
+  assert.equal(none.acquisitionCost, null);
+  assert.equal(none.acquisitionDate, '');
+
+  const ok = addCar(env, sam, { registration: 'COST1', vin: '', acquisitionCost: '£4,500.50', acquisitionDate: '2021-03-12' }).data.car;
+  assert.equal(ok.acquisitionCost, 4500.5);
+  assert.equal(ok.acquisitionDate, '2021-03-12');
+  assert.equal(addCar(env, sam, { registration: 'COST2', vin: '', acquisitionCost: '0' }).data.car.acquisitionCost, 0);
+
+  const bad = (fields, code) => assert.equal(addCar(env, sam, Object.assign({ registration: 'BAD' + Math.random(), vin: '' }, fields)).error, code, code);
+  bad({ acquisitionCost: '-5' }, 'invalid_cost');
+  bad({ acquisitionCost: '12.345' }, 'invalid_cost');
+  bad({ acquisitionCost: 'lots' }, 'invalid_cost');
+  bad({ acquisitionCost: '1'.repeat(13) }, 'invalid_cost');
+  bad({ acquisitionDate: '2021-02-30' }, 'invalid_date');
+  bad({ acquisitionDate: '31/02/2021' }, 'invalid_date');
+  bad({ acquisitionDate: '12/13/2021' }, 'invalid_date');
+  bad({ acquisitionDate: '2021-13' }, 'invalid_date');
+  bad({ acquisitionDate: '13/2021' }, 'invalid_date');
+  bad({ acquisitionDate: '1850' }, 'invalid_date');
+  bad({ acquisitionDate: '2999' }, 'invalid_date');
+  bad({ acquisitionDate: 'Mar 2999' }, 'invalid_date');
+  bad({ acquisitionDate: '2999-01-01' }, 'invalid_date');
+  bad({ acquisitionDate: 'next week' }, 'invalid_date');
+  bad({ acquisitionDate: 'Marzipan 2021' }, 'invalid_date');
+  bad({ acquisitionDate: '12 Foo 2021' }, 'invalid_date');
+});
+
+test('acquisition date accepts a year, a month and year, or a full date, and keeps the precision', () => {
+  const { env, sam } = setup();
+  const cases = [
+    ['2021', '2021'],
+    ['Mar 2021', '2021-03'],
+    ['march 2021', '2021-03'],
+    ['Sept 2019', '2019-09'],
+    ['03/2021', '2021-03'],
+    ['3/2021', '2021-03'],
+    ['2021-03', '2021-03'],
+    ['12/03/2021', '2021-03-12'],
+    ['5.4.2020', '2020-04-05'],
+    ['12 March 2021', '2021-03-12'],
+    ['1st Jan 2018', '2018-01-01'],
+    ['2021-03-12', '2021-03-12'],
+    ['  12 Mar, 2021 ', '2021-03-12'],
+  ];
+  cases.forEach(([input, expected], i) => {
+    const r = addCar(env, sam, { registration: 'DATE' + i, vin: '', acquisitionDate: input });
+    assert.equal(r.data.car.acquisitionDate, expected, input);
+  });
+  // day-first (UK) reading: 03/04/2021 is 3 April
+  assert.equal(addCar(env, sam, { registration: 'UKDAY', vin: '', acquisitionDate: '03/04/2021' }).data.car.acquisitionDate, '2021-04-03');
+  // this year and this month are fine, later months of this year are not
+  const now = new Date();
+  assert.equal(addCar(env, sam, { registration: 'THISYR', vin: '', acquisitionDate: String(now.getFullYear()) }).ok, true);
+  assert.equal(addCar(env, sam, { registration: 'NEXTYR', vin: '', acquisitionDate: String(now.getFullYear() + 1) }).error, 'invalid_date');
+});
+
+test('acquisition details can be added later and changes are audited', () => {
+  const { env, sam } = setup();
+  const car = addCar(env, sam).data.car;
+  const r = env.call('saveCar', { token: sam, id: car.id, version: 1, fields: Object.assign({}, CAR, { acquisitionCost: '12000', acquisitionDate: '2019-06-01' }) });
+  assert.equal(r.data.car.acquisitionCost, 12000);
+  assert.equal(r.data.car.acquisitionDate, '2019-06-01');
+  const row = env.sheets.Audit._rows.slice(1).find((x) => x[3] === 'car_updated');
+  assert.match(row[6], /acquisition_cost/);
+  const cleared = env.call('saveCar', { token: sam, id: car.id, version: 2, fields: CAR });
+  assert.equal(cleared.data.car.acquisitionCost, null);
+});
+
 test('PartSouq link must be an https partsouq.com address', () => {
   const { env, sam } = setup();
   ['http://partsouq.com/x', 'https://evil.example/partsouq.com', 'javascript:alert(1)', 'https://partsouq.com.evil.example/', 'https://partsouq.com/a b']
@@ -262,5 +333,5 @@ test('a request after a deploy adds missing columns automatically', () => {
   const r = env.call('listCars', { token: sam });
   assert.equal(r.ok, true);
   assert.ok(env.sheets.Cars._rows[0].includes('photo_thumb_file_id'));
-  assert.equal(env.props.SCHEMA_VERSION, '2');
+  assert.equal(env.props.SCHEMA_VERSION, String(require('vm').runInContext('SCHEMA_VERSION', env.ctx)));
 });

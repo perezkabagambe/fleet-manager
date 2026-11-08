@@ -59,6 +59,8 @@
     invalid_status: 'Please choose a status from the list.',
     invalid_partsouq_url: 'The catalogue link must be a secure partsouq.com address starting with https://.',
     invalid_odometer: 'Please enter the odometer as a whole number.',
+    invalid_cost: 'Please enter the cost as a plain number, such as 4500 or 4500.50.',
+    invalid_date: 'Please enter a real date that is not in the future: a year (2021), a month and year (Mar 2021) or a full date (12/03/2021).',
     odometer_lower: 'The odometer cannot go down. Check the reading, or ask an admin to correct it.',
     conflict: 'Someone else changed this car while you were editing. Go back to the car and try again to see their changes.',
     fluid_name_required: 'Every fluid needs a name.',

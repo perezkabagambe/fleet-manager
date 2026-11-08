@@ -38,6 +38,19 @@
   // ---------- helpers ----------
   function num(n) { return n === null || n === undefined ? '–' : Number(n).toLocaleString('en-GB'); }
   function carTitle(c) { return c.make + ' ' + c.model + (c.year ? ' (' + c.year + ')' : ''); }
+  // The date is stored as YYYY, YYYY-MM or YYYY-MM-DD; show only the precision that is known.
+  function fmtAcquired(s) {
+    if (!s) return '';
+    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var p = s.split('-');
+    if (p.length === 1) return p[0];
+    if (p.length === 2) return months[Number(p[1]) - 1] + ' ' + p[0];
+    return Number(p[2]) + ' ' + months[Number(p[1]) - 1] + ' ' + p[0];
+  }
+  function money(n, currency) {
+    try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency }).format(n); }
+    catch (e) { return currency + ' ' + n; }
+  }
   function fmtDate(iso) {
     if (!iso) return '';
     var d = new Date(iso);
@@ -189,7 +202,9 @@
         detail('Colour', car.colour),
         detail('VIN / chassis', car.vin),
         detail('Country', car.country === 'UG' ? 'Uganda' : 'United Kingdom'),
-        detail('Currency', car.currency)
+        detail('Currency', car.currency),
+        detail('Acquired', fmtAcquired(car.acquisitionDate)),
+        detail('Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? '' : money(car.acquisitionCost, car.currency))
       );
 
       var fluidRows = fluids.map(function (f) {
@@ -278,6 +293,16 @@
 
       var v = car || { country: 'UK', currency: 'GBP', distanceUnit: 'mi', status: 'Active' };
 
+      // Optional purchase price, labelled with whichever currency is currently chosen above.
+      function acquisitionCostField() {
+        var cost = text('acquisitionCost', v.acquisitionCost === null || v.acquisitionCost === undefined ? '' : v.acquisitionCost, { inputmode: 'decimal', id: 'f-cost' });
+        var label = el('label', { for: 'f-cost' });
+        function setLabel() { label.textContent = 'Acquisition cost (' + f.currency.value + ')'; }
+        setLabel();
+        f.currency.addEventListener('change', setLabel);
+        return el('div', { class: 'field' }, [label, cost, el('div', { class: 'hint', text: 'Optional. What you paid for the car, as a number.' })]);
+      }
+
       // Odometer reading with its unit chosen right beside it.
       function odometerField() {
         var odo = text('odometer', v.odometer === null || v.odometer === undefined ? '' : v.odometer, { inputmode: 'numeric', id: 'f-odometer' });
@@ -301,6 +326,8 @@
         UI.field('Currency for costs', select('currency', [['GBP', 'GBP (£)'], ['UGX', 'UGX (USh)'], ['USD', 'USD ($)'], ['EUR', 'EUR (€)']], v.currency)),
         UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
         odometerField(),
+        UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. 2021, Mar 2021 or 12/03/2021' }), 'Optional. A full date, or just the month and year, or just the year.'),
+        acquisitionCostField(),
         UI.field('PartSouq catalogue link', text('partsouqUrl', v.partsouqUrl, { inputmode: 'url', placeholder: 'https://partsouq.com/…' }), 'Optional. Must be a partsouq.com address.'),
       ];
       var notes = el('textarea', { name: 'notes', rows: '4', maxlength: '2000' });
@@ -324,6 +351,7 @@
           registration: f.registration.value, make: f.make.value, model: f.model.value, year: f.year.value, colour: f.colour.value,
           nickname: f.nickname.value, vin: f.vin.value, country: f.country.value, currency: f.currency.value,
           distanceUnit: f.distanceUnit.value, status: f.status.value, odometer: f.odometer.value,
+          acquisitionCost: f.acquisitionCost.value, acquisitionDate: f.acquisitionDate.value,
           partsouqUrl: f.partsouqUrl.value, notes: f.notes.value,
         };
       }

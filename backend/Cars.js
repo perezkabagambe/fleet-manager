@@ -30,6 +30,8 @@ function summarizeCar_(c) {
     odometerUpdatedAt: c.odometer_updated_at,
     photoId: c.photo_file_id,
     photoThumbId: c.photo_thumb_file_id,
+    acquisitionCost: c.acquisition_cost === '' || c.acquisition_cost === undefined ? null : Number(c.acquisition_cost),
+    acquisitionDate: c.acquisition_date || '',
     notes: c.notes,
     version: Number(c.version || 1),
     deleted: isTrue_(c.deleted),
@@ -90,7 +92,58 @@ function parseCarInput_(f) {
   out.partsouq_url = url;
 
   out.current_odometer = parseOdometer_(f.odometer);
+  out.acquisition_cost = parseMoney_(f.acquisitionCost);
+  out.acquisition_date = parseDate_(f.acquisitionDate);
   out.notes = cleanText_(f.notes, 2000);
+  return out;
+}
+
+/** '' (not given) or a non-negative amount with at most 2 decimals, e.g. 4500 or 4500.50. */
+function parseMoney_(raw) {
+  const s = String(raw === null || raw === undefined ? '' : raw).replace(/[£$€,\s]/g, '');
+  if (s === '') return '';
+  if (!/^\d{1,12}(\.\d{1,2})?$/.test(s)) fail_('invalid_cost');
+  return String(Number(s));
+}
+
+const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+
+function monthFromName_(name) {
+  if (name.length < 3) return 0;
+  for (let i = 0; i < 12; i++) {
+    if (MONTH_NAMES[i].indexOf(name) === 0) return i + 1;
+  }
+  return 0;
+}
+
+/**
+ * An approximate or exact date, never in the future. Accepted forms (UK order, day first):
+ *   2021 · Mar 2021 · March 2021 · 03/2021 · 2021-03 · 12/03/2021 · 12 Mar 2021 · 2021-03-12
+ * Stored as YYYY, YYYY-MM or YYYY-MM-DD, so the precision the person knew is kept. '' if not given.
+ */
+function parseDate_(raw) {
+  const s = cleanStr_(raw, 24).toLowerCase().replace(/,/g, '');
+  if (s === '') return '';
+  let y = 0, m = 0, d = 0, g;
+  if ((g = /^(\d{4})$/.exec(s))) { y = +g[1]; }
+  else if ((g = /^(\d{4})-(\d{1,2})$/.exec(s))) { y = +g[1]; m = +g[2]; }
+  else if ((g = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) { y = +g[1]; m = +g[2]; d = +g[3]; }
+  else if ((g = /^(\d{1,2})[\/.-](\d{4})$/.exec(s))) { m = +g[1]; y = +g[2]; }
+  else if ((g = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/.exec(s))) { d = +g[1]; m = +g[2]; y = +g[3]; }
+  else if ((g = /^([a-z]{3,9})\.? (\d{4})$/.exec(s))) { m = monthFromName_(g[1]); y = +g[2]; if (!m) fail_('invalid_date'); }
+  else if ((g = /^(\d{1,2})(?:st|nd|rd|th)? ([a-z]{3,9})\.? (\d{4})$/.exec(s))) { d = +g[1]; m = monthFromName_(g[2]); y = +g[3]; if (!m) fail_('invalid_date'); }
+  else fail_('invalid_date');
+
+  if (y < 1900) fail_('invalid_date');
+  if (m && (m < 1 || m > 12)) fail_('invalid_date');
+  if (d) {
+    const check = new Date(Date.UTC(y, m - 1, d));
+    if (check.getUTCFullYear() !== y || check.getUTCMonth() !== m - 1 || check.getUTCDate() !== d) fail_('invalid_date');
+  }
+  const pad = function (n) { return ('0' + n).slice(-2); };
+  const out = String(y) + (m ? '-' + pad(m) : '') + (d ? '-' + pad(d) : '');
+  const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  if (out > today.slice(0, out.length)) fail_('invalid_date');
   return out;
 }
 
