@@ -109,5 +109,68 @@
     });
   }
 
-  window.UI = { el: el, field: field, notice: notice, errorText: errorText, busy: busy };
+  /** Copy text to the clipboard. Resolves true/false. Falls back to a hidden textarea where the clipboard API is missing. */
+  function copyText(text) {
+    function fallback() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        var ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+      } catch (e) { return false; }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return fallback(); });
+    }
+    return Promise.resolve(fallback());
+  }
+
+  var LINK_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg>';
+  var TICK_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>';
+
+  /**
+   * A button that copies `url`. With a label it is a normal button ("Copy link to this car");
+   * without one it is a small icon-only button. Shows "Copied" for a moment afterwards.
+   */
+  function copyLinkButton(url, opts) {
+    opts = opts || {};
+    var iconOnly = !opts.label;
+    var btn = el('button', {
+      type: 'button',
+      class: iconOnly ? 'copy-icon' : 'btn small secondary copy-link',
+      'aria-label': opts.aria || opts.label || 'Copy link',
+      title: opts.aria || opts.label || 'Copy link',
+    });
+    var icon = el('span', { class: 'copy-glyph' });
+    icon.innerHTML = LINK_ICON;
+    var text = iconOnly ? null : el('span', { text: opts.label });
+    btn.append.apply(btn, [icon, text].filter(Boolean));
+    var timer = null;
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      copyText(url).then(function (ok) {
+        clearTimeout(timer);
+        icon.innerHTML = ok ? TICK_ICON : LINK_ICON;
+        btn.classList.toggle('copied', ok);
+        if (text) text.textContent = ok ? 'Link copied' : 'Could not copy';
+        if (!ok) window.prompt('Copy this link:', url);
+        timer = setTimeout(function () {
+          icon.innerHTML = LINK_ICON;
+          btn.classList.remove('copied');
+          if (text) text.textContent = opts.label;
+        }, 2000);
+      });
+    });
+    return btn;
+  }
+
+  window.UI = { el: el, field: field, notice: notice, errorText: errorText, busy: busy, copyText: copyText, copyLinkButton: copyLinkButton };
 })();

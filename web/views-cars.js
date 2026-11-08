@@ -95,6 +95,7 @@
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true }));
   }
   function carUrl(id) { return (cfg.siteUrl || location.origin + location.pathname) + '#/car/' + id; }
+  function entryUrl(carId, entryId) { return carUrl(carId) + '/entry/' + entryId; }
 
   // Miles <-> kilometres, rounded to a whole number. (Money is never converted.) Same maths as the server.
   var KM_PER_MILE = 1.609344;
@@ -106,7 +107,7 @@
 
   // Shared with the entry screens.
   Views.fmt = {
-    convertDistance: convertDistance,
+    convertDistance: convertDistance, carUrl: carUrl, entryUrl: entryUrl,
     money: money, date: fmtDate, num: num, hostOf: hostOf, chip: chip, loading: loading, backLink: backLink,
     notFound: notFound, currencyOptions: CURRENCY_OPTIONS,
   };
@@ -281,6 +282,7 @@
 
       root.replaceChildren(
         editTop,
+        el('div', { class: 'copy-row' }, [UI.copyLinkButton(carUrl(car.id), { label: 'Copy link to this car' })]),
         el('section', { class: 'card' }, [
           backLink('#/', 'Fleet'),
           el('div', { class: 'page-head' }, [

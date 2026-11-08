@@ -396,3 +396,14 @@ input[type="date"] {
 .chip.s-due_soon { color: var(--warn-text); background: var(--warn-bg); border-color: transparent; }
 .chip.s-ok { color: var(--ok); border-color: var(--ok); }
 .chip.s-paused { color: var(--muted); }
+
+/* ---------- copy-link buttons ---------- */
+.copy-row { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+.copy-link { gap: 8px; }
+.copy-link .copy-glyph, .copy-icon .copy-glyph { display: inline-flex; }
+.copy-icon { flex: 0 0 auto; width: 44px; height: 44px; margin: 4px -8px 0 0; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; }
+.copy-icon:hover, .copy-icon:focus-visible { color: var(--accent); background: var(--bg); }
+.copy-icon.copied, .copy-link.copied { color: var(--ok); }
+.entry-line { display: flex; align-items: flex-start; border-bottom: 1px solid var(--border); }
+.entry-line:last-child { border-bottom: 0; }
+.entry-line .entry-row { flex: 1 1 auto; min-width: 0; border-bottom: 0; }

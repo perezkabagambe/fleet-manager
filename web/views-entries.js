@@ -87,7 +87,7 @@
       if (e.type === 'Purchase') tags.push(el('span', { class: 'chip ' + (e.stockStatus === 'In stock' ? 'active' : e.stockStatus === 'Fitted' ? 'sold' : 'pending'), text: e.stockStatus }));
       if (e.attachmentCount) tags.push(el('span', { class: 'muted small-text', text: '📎 ' + e.attachmentCount }));
       var cost = costText(e);
-      return el('a', { class: 'entry-row', href: '#/car/' + car.id + '/entry/' + e.id }, [
+      var link = el('a', { class: 'entry-row', href: '#/car/' + car.id + '/entry/' + e.id }, [
         el('div', { class: 'entry-main' }, [
           el('div', { class: 'entry-title', text: e.title }),
           el('div', { class: 'entry-meta' }, [
@@ -98,6 +98,8 @@
         // the type, status (Fitted, Resolved...) and attachment count all sit to the right of the name
         el('div', { class: 'entry-tags' }, [typeChip(e.type)].concat(tags)),
       ]);
+      // a small link icon beside each row copies a link straight to that entry
+      return el('div', { class: 'entry-line' }, [link, UI.copyLinkButton(fmt.entryUrl(car.id, e.id), { aria: 'Copy link to ' + e.title })]);
     }
 
     function render() {
@@ -235,7 +237,8 @@
       }
       if (e.type === 'Purchase' && d.stock) statusArea.append(el('span', { class: 'chip ' + (d.stock.status === 'In stock' ? 'active' : d.stock.status === 'Fitted' ? 'sold' : 'pending'), text: d.stock.status }));
 
-      var cards = [el('section', { class: 'card' }, [
+      var cards = [el('div', { class: 'copy-row' }, [UI.copyLinkButton(fmt.entryUrl(carId, e.id), { label: 'Copy link to this ' + BY_TYPE[e.type].label.toLowerCase() })]),
+        el('section', { class: 'card' }, [
         fmt.backLink('#/car/' + carId, car.registration),
         el('div', { class: 'page-head' }, [el('div', {}, [el('h1', { text: e.title }), el('div', { class: 'muted', text: meta.join(' · ') })]), typeChip(e.type)]),
         msg, statusArea,
