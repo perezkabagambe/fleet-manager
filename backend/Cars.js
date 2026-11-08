@@ -273,6 +273,7 @@ function getCarPage_(p, ctx) {
   page.entries = listEntries_(q, ctx).entries;
   page.tasks = listTasks_(q, ctx).tasks;
   page.costs = getCarCosts_(q, ctx);
+  page.documents = carDocuments_(page.car.id);
   return page;
 }
 

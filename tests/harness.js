@@ -8,7 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const BACKEND = path.join(__dirname, '..', 'backend');
-const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'People.js', 'Photos.js', 'Entries.js', 'Attachments.js', 'Guests.js', 'Feedback.js', 'Tasks.js', 'Reminders.js', 'Code.js', 'Version.js', 'Setup.js'];
+const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'People.js', 'Photos.js', 'Entries.js', 'Attachments.js', 'CarDocuments.js', 'Guests.js', 'Feedback.js', 'Tasks.js', 'Reminders.js', 'Code.js', 'Version.js', 'Setup.js'];
 
 function makeSheet(header) {
   const rows = [header.slice()];

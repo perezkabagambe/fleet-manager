@@ -327,6 +327,7 @@
             ? [el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) })]
             : [el('span', { class: 'muted', text: 'No parts catalogue link yet. Tap Edit car to add one.' })]),
         ]),
+        DocumentsUI.card(car, page && page.documents),
         el('section', { class: 'card' }, [
           el('h2', { text: 'QR label' }),
           el('p', { class: 'muted', text: 'Stick this on the windscreen or glovebox. Scanning it opens this car: signed-in people go straight to it, and anyone else can open it as a guest or sign in (unless guest access is switched off below).' }),

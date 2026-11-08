@@ -35,6 +35,8 @@ const SCHEMA = {
   },
   // People who scanned a car's QR code: one row per guest name, kept for ever so a name is never reused.
   Guests: { base: true, cols: ['car_id', 'name', 'name_key', 'token_hash', 'expires_at', 'blocked', 'last_seen'] },
+  // Documents kept against a whole car (logbook, insurance, import papers...); the files live in its Drive folder.
+  CarDocuments: { base: true, cols: ['car_id', 'doc_type', 'note', 'drive_file_id', 'filename', 'mime', 'size'] },
   PartUsage: { base: true, cols: ['purchase_id', 'event_id', 'quantity_used'] },
   Attachments: { base: true, cols: ['car_id', 'entry_id', 'drive_file_id', 'filename', 'mime', 'size'] },
   Tasks: {
@@ -49,7 +51,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 13; // 13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 14; // 14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {

@@ -54,6 +54,7 @@
     invalid_year: 'The year must be a four-digit year, such as 2015.',
     invalid_vin: 'The VIN or chassis number may only contain letters, numbers and hyphens (5 to 25 characters).',
     invalid_country: 'Please choose a location from the list.',
+    invalid_document_type: 'Please choose what kind of document this is.',
     invalid_market: 'Please choose a market from the list.',
     invalid_drive_side: 'Please choose left-hand drive or right-hand drive.',
     invalid_fuel_capacity: 'The fuel capacity must be a number of litres between 1 and 999, such as 87 or 45.5.',

@@ -56,7 +56,7 @@ test('one request reads each table at most once, even when the code asks for it 
   const before = reads(env);
   env.call('getCarPage', { token: sam, id: car.id });
   const after = reads(env);
-  ['Entries', 'Cars', 'Users', 'Attachments', 'PartUsage', 'Tasks', 'CarPeople', 'FluidSpecs', 'Guests'].forEach((t) => {
+  ['Entries', 'Cars', 'Users', 'Attachments', 'CarDocuments', 'PartUsage', 'Tasks', 'CarPeople', 'FluidSpecs', 'Guests'].forEach((t) => {
     assert.ok(after[t] - before[t] <= 1, t + ' read ' + (after[t] - before[t]) + ' times in one request');
   });
 });
