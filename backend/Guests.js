@@ -146,12 +146,13 @@ function guestListEntries_(p, ctx) {
       if (e.car_id !== car.id || isTrue_(e.deleted)) return false;
       return e.type === 'Maintenance' || e.created_by === ctx.user.id; // other people's purchases etc. are never shown
     })
+    // same order as the signed-in history: newest date first, and for the same date the one added last first
+    .sort(function (a, b) { return (b.date || '').localeCompare(a.date || '') || (b.created_at || '').localeCompare(a.created_at || ''); })
     .map(function (e) {
       const s = guestEntryShape_(e, ctx, counts[e.id] || 0);
       s.guestName = e.created_by.indexOf('guest:') === 0 ? (guestNames[e.created_by.slice(6)] || '') : '';
       return s;
-    })
-    .sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    });
   return { entries: entries, car: guestCarPublic_(car) };
 }
 

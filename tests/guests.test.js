@@ -361,3 +361,23 @@ test('the migration switches guest access on for existing cars once, and later s
   env.call('setGuestAccess', { token: admin, carId: car.id, enabled: false });
   assert.equal(env.call('getCar', { token: sam, id: car.id }).data.car.guestEnabled, false, 'an admin\'s choice sticks (the migration does not run again)');
 });
+
+test('a guest sees the maintenance history in the same order as signed-in users', () => {
+  const { env, sam, car, join, as } = setup();
+  const add = (title, date) => env.call('saveEntry', { token: sam, carId: car.id, type: 'Maintenance', fields: { title, date } });
+  add('Old job', '2025-01-10');
+  add('Same day, first', '2025-03-05');
+  add('Newest day', '2025-06-01');
+  env.advance(1000);
+  add('Same day, second', '2025-03-05');
+  env.advance(1000);
+  add('Same day, third', '2025-03-05');
+  const g = join('Bob').data.guestToken;
+  as('guestSaveEntry', g, { type: 'Maintenance', fields: { title: 'Guest job, same day', date: '2025-03-05' } });
+  const staff = env.call('listEntries', { token: sam, carId: car.id }).data.entries.map((e) => e.title);
+  const guest = as('guestListEntries', g).data.entries.map((e) => e.title);
+  assert.deepEqual(guest, staff, 'identical order');
+  assert.equal(guest[0], 'Newest day');
+  assert.equal(guest[1], 'Guest job, same day');
+  assert.equal(guest[guest.length - 1], 'Old job');
+});
