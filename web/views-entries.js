@@ -59,6 +59,9 @@
     return fmt.num(e.mileage) + ' mi';
   }
 
+  // What a file looks like in a list: a camera for photos, a page for PDFs, a paperclip for everything else.
+  function fileIcon(mime) { return mime === 'image/jpeg' ? '📷 ' : mime === 'application/pdf' ? '📄 ' : '📎 '; }
+
   function costText(e) {
     if (e.type === 'Maintenance') return moneyMap(e.jobCost);
     if (e.type === 'Purchase') return fmt.money(e.total, e.currency);
@@ -346,13 +349,13 @@
           : [el('p', { class: 'muted', text: 'Nothing attached.' })]);
       }
       function attachmentRow(a) {
-        var isPdf = a.mime === 'application/pdf';
-        var view = el('button', { type: 'button', class: 'btn small secondary', text: isPdf ? 'Open' : 'View' });
+        var isImage = a.mime === 'image/jpeg';
+        var view = el('button', { type: 'button', class: 'btn small secondary', text: isImage ? 'View' : a.mime === 'application/pdf' ? 'Open' : 'Download' });
         var holder = el('div');
         view.addEventListener('click', function () {
           UI.busy(view, 'Loading…', Photos.fetchAttachment(a.id)).then(function (att) {
             var url = Photos.toBlobUrl(att);
-            if (isPdf) {
+            if (!isImage) { // PDFs and other files are saved or opened by the phone, never shown inside the app
               var link = el('a', { href: url, download: att.filename });
               document.body.append(link); link.click(); link.remove();
             } else {
@@ -376,7 +379,7 @@
           buttons.push(rm);
         }
         return el('div', { class: 'attach-row' }, [
-          el('div', { class: 'attach-name', text: (isPdf ? '📄 ' : '📷 ') + a.filename + ' · ' + kb(a.size) }),
+          el('div', { class: 'attach-name', text: fileIcon(a.mime) + a.filename + ' · ' + kb(a.size) }),
           el('div', { class: 'btn-row' }, buttons), holder,
         ]);
       }
@@ -400,9 +403,9 @@
         el('div', { class: 'btn-row' }, [
           Photos.fileButton('Take photo', 'image/*', true, addFile),
           Photos.fileButton('Choose photo', 'image/*', false, addFile),
-          Photos.fileButton('Add PDF', 'application/pdf', false, addFile),
+          Photos.fileButton('Add file', '', false, addFile),
         ]),
-        el('div', { class: 'hint', text: 'Receipts, invoices, quotes or photos. Photos are shrunk automatically; PDFs can be up to 2.5 MB.' }),
+        el('div', { class: 'hint', text: 'Receipts, invoices, quotes, photos or any other file. Photos are shrunk automatically; other files can be up to 5 MB.' }),
       ]));
 
       cards.push(el('a', { class: 'btn block big edit-bottom', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit ' + BY_TYPE[e.type].label.toLowerCase() }));
@@ -743,14 +746,14 @@
         stagedBox.replaceChildren.apply(stagedBox, staged.map(function (s, i) {
           var rm = el('button', { type: 'button', class: 'linklike', text: 'Remove' });
           rm.addEventListener('click', function () { staged.splice(i, 1); drawStaged(); });
-          return el('div', { class: 'attach-row' }, [el('div', { class: 'attach-name', text: (s.type === 'application/pdf' ? '📄 ' : '📷 ') + s.name }), rm]);
+          return el('div', { class: 'attach-row' }, [el('div', { class: 'attach-name', text: fileIcon(/^image\//.test(s.type || '') ? 'image/jpeg' : s.type === 'application/pdf' ? 'application/pdf' : '') + s.name }), rm]);
         }));
       }
       function stage(file) { staged.push({ file: file, name: file.name || 'photo', type: file.type }); drawStaged(); }
       var attachList = el('div', { class: 'stack' });
       if (existingData && existingData.attachments.length) {
         existingData.attachments.forEach(function (a) {
-          var line = [el('div', { class: 'attach-name', text: (a.mime === 'application/pdf' ? '📄 ' : '📷 ') + a.filename + ' · ' + kb(a.size) })];
+          var line = [el('div', { class: 'attach-name', text: fileIcon(a.mime) + a.filename + ' · ' + kb(a.size) })];
           if (FleetAuth.isAdmin()) {
             var rm = el('button', { type: 'button', class: 'linklike', text: 'Remove' });
             rm.addEventListener('click', function () {
@@ -772,9 +775,9 @@
         el('div', { class: 'btn-row' }, [
           Photos.fileButton('Take photo', 'image/*', true, stage),
           Photos.fileButton('Choose photo', 'image/*', false, stage),
-          Photos.fileButton('Add PDF', 'application/pdf', false, stage),
+          Photos.fileButton('Add file', '', false, stage),
         ]),
-        el('div', { class: 'hint', text: 'Receipts, invoices, quotes or photos of the problem. Photos are shrunk automatically; PDFs can be up to 2.5 MB.' }),
+        el('div', { class: 'hint', text: 'Receipts, invoices, quotes, photos of the problem or any other file. Photos are shrunk automatically; other files can be up to 5 MB.' }),
       ]);
 
       // ----- save -----

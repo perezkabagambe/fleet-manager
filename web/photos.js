@@ -176,15 +176,39 @@
     return el('label', { class: 'btn small secondary file-btn' }, [el('span', { text: label }), input]);
   }
 
-  var MAX_PDF_BYTES = 2500000;
+  var MAX_FILE_BYTES = 5000000; // PDFs and every other kind of file
 
-  /** An attachment for an entry: a photo is shrunk to a JPEG; a PDF is sent as it is (up to 2.5 MB). */
+  /**
+   * An attachment for an entry. A photo is shrunk to a JPEG (with a small thumbnail). A PDF, or any other file
+   * (a Word or Excel file, a text file, a zip...), is sent as it is, up to 5 MB.
+   */
   function prepareAttachment(file) {
-    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) {
-      if (file.size > MAX_PDF_BYTES) return Promise.reject(new FleetApi.ApiError('attachment_too_large', 'PDF too large'));
-      return toBase64(file).then(function (b64) { return { mime: 'application/pdf', data: b64, filename: file.name || 'document.pdf' }; });
+    var name = file.name || '';
+    var isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(name);
+    function asFile() {
+      if (!file.size) return Promise.reject(new FleetApi.ApiError('invalid_attachment', 'Empty file'));
+      if (file.size > MAX_FILE_BYTES) return Promise.reject(new FleetApi.ApiError('attachment_too_large', 'File too large'));
+      return toBase64(file).then(function (b64) {
+        return { mime: isPdf ? 'application/pdf' : 'application/octet-stream', data: b64, filename: name || (isPdf ? 'document.pdf' : 'file') };
+      });
     }
-    return prepare(file).then(function (p) { return { mime: 'image/jpeg', data: p.full, thumb: p.thumb, filename: file.name || 'photo.jpg' }; });
+    if (!isPdf && /^image\//.test(file.type || '')) {
+      return prepare(file).then(function (p) {
+        return { mime: 'image/jpeg', data: p.full, thumb: p.thumb, filename: name || 'photo.jpg' };
+      }).catch(function () { return asFile(); }); // a picture this browser cannot read is kept as it is
+    }
+    return asFile();
+  }
+
+  /** Download an attachment and show it: photos appear inline, everything else is saved/opened as a file. */
+  function fetchAttachment(id) {
+    return FleetApi.call('getAttachment', { id: id }).then(function (r) { return r.data; });
+  }
+  function toBlobUrl(att) {
+    var bin = atob(att.data);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return URL.createObjectURL(new Blob([bytes], { type: att.mime }));
   }
 
   // ---------- small thumbnails of the photos attached to entries ----------
@@ -266,17 +290,6 @@
         if (k.indexOf(ATHUMB_KEY) === 0 || k.indexOf(THUMB_KEY) === 0) localStorage.removeItem(k);
       });
     } catch (e) { /* ignore */ }
-  }
-
-  /** Download an attachment and show it: photos appear inline, PDFs are saved/opened as a file. */
-  function fetchAttachment(id) {
-    return FleetApi.call('getAttachment', { id: id }).then(function (r) { return r.data; });
-  }
-  function toBlobUrl(att) {
-    var bin = atob(att.data);
-    var bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return URL.createObjectURL(new Blob([bytes], { type: att.mime }));
   }
 
   window.Photos = {

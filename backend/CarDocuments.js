@@ -1,6 +1,6 @@
 /**
  * Documents kept against a car as a whole (logbook, insurance, import papers...), as opposed to the
- * photos and invoices attached to one entry. PDFs and JPEG photos only, checked by their first bytes,
+ * photos and invoices attached to one entry. The same file rules as entry attachments apply (see Attachments.js),
  * stored in the car's private Drive folder and served only through getCarDocument after a session check.
  * Any signed-in user can add one; only admins remove one (the file goes to the Drive trash). Guests never see them.
  */
@@ -34,9 +34,10 @@ function uploadCarDocument_(p, ctx) {
   const type = oneOf_(p.type, DOCUMENT_TYPES, '', 'invalid_document_type');
   if (!type) fail_('invalid_document_type');
   const note = cleanStr_(p.note, 200);
-  const mime = cleanStr_(p.mime, 40);
-  const bytes = decodeAttachment_(p.data, mime);
+  const mime = attachmentKind_(cleanStr_(p.mime, 100));
   const filename = safeFilename_(p.filename, mime);
+  if (isBlockedFilename_(filename)) fail_('file_type_not_allowed');
+  const bytes = decodeAttachment_(p.data, mime);
   const file = carFolder_(car.id).createFile(Utilities.newBlob(bytes, mime, 'doc-' + Date.now() + '-' + filename));
   const row = Object.assign(baseColumns_(ctx), {
     car_id: car.id, doc_type: type, note: note, drive_file_id: file.getId(), filename: filename, mime: mime, size: bytes.length,

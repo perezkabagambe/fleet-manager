@@ -92,7 +92,7 @@
         UI.field('Add a document: what kind is it?', typeSel),
         UI.field('Note', noteIn),
         el('div', { class: 'btn-row' }, buttons),
-        el('div', { class: 'hint', text: 'Photos are shrunk automatically; PDFs can be up to 2.5 MB. Only signed-in people can see these, never guests.' }),
+        el('div', { class: 'hint', text: 'Photos are shrunk automatically; PDFs can be up to 5 MB. Only signed-in people can see these, never guests.' }),
       ]),
     ]);
   }

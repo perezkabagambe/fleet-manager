@@ -57,16 +57,17 @@ test('every document type is accepted; others are refused', () => {
   assert.equal(up({ type: undefined }).error, 'invalid_document_type');
 });
 
-test('only real JPEGs and PDFs within the limits are accepted', () => {
+test('JPEGs and PDFs are checked by their first bytes; other files are accepted within the limits', () => {
   const { up, list } = setup();
-  assert.equal(up({ mime: 'image/png', data: jpeg(100) }).error, 'invalid_attachment');
+  assert.equal(up({ mime: 'text/plain', data: Buffer.from('hello').toString('base64'), filename: 'note.txt' }).ok, true, 'any other file');
+  assert.equal(up({ mime: 'application/x-msdownload', data: Buffer.from('MZ').toString('base64'), filename: 'run.exe' }).error, 'file_type_not_allowed');
   assert.equal(up({ mime: 'image/jpeg', data: pdf(100) }).error, 'invalid_photo', 'a PDF pretending to be a JPEG');
   assert.equal(up({ mime: 'application/pdf', data: jpeg(100) }).error, 'invalid_attachment', 'a JPEG pretending to be a PDF');
   assert.equal(up({ data: '' }).error, 'invalid_attachment');
-  assert.equal(up({ data: pdf(2500001) }).error, 'attachment_too_large');
+  assert.equal(up({ data: pdf(5000001) }).error, 'attachment_too_large');
   assert.equal(up({ mime: 'image/jpeg', data: jpeg(1500001) }).error, 'photo_too_large');
-  assert.equal(up({ data: pdf(2500000) }).ok, true, 'exactly at the limit');
-  assert.equal(list().data.documents.length, 1, 'refused files leave nothing behind');
+  assert.equal(up({ data: pdf(5000000) }).ok, true, 'exactly at the limit');
+  assert.equal(list().data.documents.length, 2, 'refused files leave nothing behind (the text file and the PDF at the limit)');
   assert.equal(up({ note: 'x'.repeat(500) }).data.document.note.length, 200);
 });
 

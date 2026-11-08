@@ -396,7 +396,7 @@ test('a car with no costs has an empty summary; deleted cars are admin-only', ()
 
 // ---------- attachments ----------
 
-test('photos and PDFs can be attached; only real JPEGs and PDFs within the limits', () => {
+test('photos, PDFs and other files can be attached, within the limits', () => {
   const { env, sam, add, get, list } = setup();
   const e = add('Maintenance', repair()).data.entry;
   const up = (mime, data, name) => env.call('uploadAttachment', { token: sam, entryId: e.id, mime, data, filename: name });
@@ -408,14 +408,46 @@ test('photos and PDFs can be attached; only real JPEGs and PDFs within the limit
   assert.equal(get(e.id).data.attachments.length, 2);
   assert.equal(list().find((x) => x.id === e.id).attachmentCount, 2);
 
-  assert.equal(up('image/png', jpeg(100), 'x.png').error, 'invalid_attachment');
+  // a JPEG or PDF is checked by its first bytes, whatever it claims
   assert.equal(up('image/jpeg', pdf(100), 'x.jpg').error, 'invalid_photo', 'a PDF pretending to be a JPEG');
   assert.equal(up('application/pdf', jpeg(100), 'x.pdf').error, 'invalid_attachment', 'a JPEG pretending to be a PDF');
   assert.equal(up('application/pdf', '', 'x.pdf').error, 'invalid_attachment');
   assert.equal(up('image/jpeg', jpeg(1500001), 'big.jpg').error, 'photo_too_large');
-  assert.equal(up('application/pdf', pdf(2500001), 'big.pdf').error, 'attachment_too_large');
-  assert.equal(up('application/pdf', pdf(2500000), 'edge.pdf').ok, true, 'exactly at the limit');
+  assert.equal(up('application/pdf', pdf(5000001), 'big.pdf').error, 'attachment_too_large');
+  assert.equal(up('application/pdf', pdf(5000000), 'edge.pdf').ok, true, 'exactly at the limit');
   assert.equal(env.call('uploadAttachment', { token: sam, entryId: 'nope', mime: 'image/jpeg', data: jpeg(100) }).error, 'not_found');
+});
+
+test('any other kind of file can be attached, and is stored as a plain download', () => {
+  const { env, sam, add, get } = setup();
+  const e = add('Maintenance', repair()).data.entry;
+  const bytes = Buffer.from('Part,Price\nPads,30\n');
+  const up = (mime, data, name) => env.call('uploadAttachment', { token: sam, entryId: e.id, mime, data, filename: name });
+  const csv = up('text/csv', bytes.toString('base64'), 'prices.csv');
+  assert.equal(csv.ok, true);
+  assert.equal(csv.data.attachment.filename, 'prices.csv');
+  assert.equal(csv.data.attachment.mime, 'application/octet-stream', 'what the phone claims is not trusted');
+  assert.equal(csv.data.attachment.thumb, false);
+  const word = up('application/vnd.openxmlformats-officedocument.wordprocessingml.document', bytes.toString('base64'), 'Quote.docx');
+  assert.equal(word.data.attachment.mime, 'application/octet-stream');
+  assert.equal(up('', bytes.toString('base64'), '').data.attachment.filename, 'file', 'no name: a plain one');
+  assert.equal(up('text/html', Buffer.from('<script>alert(1)</script>').toString('base64'), 'page.html').data.attachment.mime, 'application/octet-stream', 'web pages are never served as web pages');
+  const back = env.call('getAttachment', { token: sam, id: csv.data.attachment.id }).data;
+  assert.equal(back.mime, 'application/octet-stream');
+  assert.equal(Buffer.from(back.data, 'base64').toString(), bytes.toString());
+  assert.equal(get(e.id).data.attachments.length, 4);
+  assert.equal(up('text/plain', '', 'empty.txt').error, 'invalid_attachment', 'an empty file');
+  assert.equal(up('application/zip', Buffer.alloc(5000001, 1).toString('base64'), 'big.zip').error, 'attachment_too_large');
+  assert.equal(up('application/zip', Buffer.alloc(5000000, 1).toString('base64'), 'edge.zip').ok, true);
+});
+
+test('programs and scripts are refused, however they are named', () => {
+  const { env, sam, add } = setup();
+  const e = add('Issue', issue()).data.entry;
+  const data = Buffer.from('MZ').toString('base64');
+  const up = (name) => env.call('uploadAttachment', { token: sam, entryId: e.id, mime: 'application/octet-stream', data, filename: name });
+  ['setup.exe', 'RUN.BAT', 'x.js', 'a.vbs', 'p.ps1', 'tool.sh', 'App.apk', 'evil.exe.', 'evil.exe ', 'evil.Exe', 'a.jar', 'm.msi'].forEach((n) => assert.equal(up(n).error, 'file_type_not_allowed', n));
+  ['notes.txt', 'exe.pdf', 'jsfile', 'archive.zip', 'sheet.xlsx', 'photo.png', 'script.js.txt'].forEach((n) => assert.equal(up(n).ok, true, n));
 });
 
 test('an entry takes at most 10 attachments', () => {
