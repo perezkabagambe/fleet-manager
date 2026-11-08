@@ -61,6 +61,42 @@ test('one request reads each table at most once, even when the code asks for it 
   });
 });
 
+test('a warm request needs only a couple of round trips to the cache and none to the sheets', cacheOnly, () => {
+  const { env, sam, car, add } = setup();
+  add('Maintenance', { title: 'A', date: D, labourCost: '10' });
+  env.call('getCarPage', { token: sam, id: car.id });
+  env.call('getCarPage', { token: sam, id: car.id }); // everything is now remembered
+  const sheetsBefore = reads(env);
+  const callsBefore = env.state.cacheCalls;
+  const page = env.call('getCarPage', { token: sam, id: car.id });
+  assert.equal(page.ok, true);
+  assert.deepEqual(reads(env), sheetsBefore, 'no sheet was read at all');
+  const calls = env.state.cacheCalls - callsBefore;
+  assert.ok(calls <= 6, 'a handful of cache round trips for the whole page, got ' + calls);
+});
+
+test('a cold table is read from its sheet in a single call', cacheOnly, () => {
+  const { env, sam, car, add } = setup();
+  add('Maintenance', { title: 'A', date: D });
+  env.invalidate();
+  const before = env.sheets.Entries.reads;
+  env.call('listEntries', { token: sam, carId: car.id });
+  assert.equal(env.sheets.Entries.reads - before, 1);
+});
+
+test('a big table with one missing piece is not trusted', cacheOnly, () => {
+  const { env, sam, car, db } = setup();
+  const long = 'y'.repeat(1900);
+  db("(() => { const c = '" + car.id + "'; for (let i = 0; i < 60; i++) Db.insert('Entries', { id: 'b' + i, car_id: c, type: 'Maintenance', title: 'B ' + i, notes: '" + long + "', date: '2025-01-01', deleted: false, version: 1, created_by: 'x', created_at: '2025-01-01T00:00:00Z' }); })()");
+  env.call('listEntries', { token: sam, carId: car.id });
+  const second = Object.keys(env.cache).find((k) => /^db:\d+:Entries:.*:1$/.test(k));
+  assert.ok(second, 'the table is in more than one piece');
+  delete env.cache[second];
+  const entries = env.call('listEntries', { token: sam, carId: car.id }).data.entries;
+  assert.equal(entries.length, 60);
+  assert.ok(entries.every((e) => e.notes === long));
+});
+
 test('rows handed out are private copies: changing one changes nothing for the next caller', () => {
   const { env, car, add, db } = setup();
   add('Maintenance', { title: 'Original', date: D });
@@ -127,14 +163,16 @@ test('guest blocking, switch-off and secret replacement take effect at once with
   assert.equal(env.call('guestInfo', { carId: car.id, secret: fresh }).ok, true);
 });
 
-test('an edit made by hand in the sheet shows up within two minutes, or at once after a schema change', cacheOnly, () => {
+test('an edit made by hand in the sheet shows up within ten minutes, or at once after a schema change', cacheOnly, () => {
   const { env, sam, car, add } = setup();
   add('Maintenance', { title: 'Before', date: D });
   env.call('listEntries', { token: sam, carId: car.id }); // cached
   const col = env.sheets.Entries._rows[0].indexOf('title');
   env.sheets.Entries._rows[1][col] = 'Edited by hand';
   assert.equal(env.call('listEntries', { token: sam, carId: car.id }).data.entries[0].title, 'Before', 'still the remembered copy');
-  env.advance(125 * 1000);
+  env.advance(5 * 60 * 1000);
+  assert.equal(env.call('listEntries', { token: sam, carId: car.id }).data.entries[0].title, 'Before', 'five minutes on: still the remembered copy');
+  env.advance(6 * 60 * 1000);
   assert.equal(env.call('listEntries', { token: sam, carId: car.id }).data.entries[0].title, 'Edited by hand', 'after the time limit');
   env.sheets.Entries._rows[1][col] = 'Edited again';
   env.invalidate();

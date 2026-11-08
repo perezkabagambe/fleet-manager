@@ -200,9 +200,12 @@
       return FleetApi.call('listCars').then(function (r) {
         var first = r.data.cars[0];
         if (!first) return null;
+        var describe = function (res) { return res.ms + ' ms in all, server ' + (res.serverMs === null ? 'unknown' : res.serverMs + ' ms'); };
+        // twice: the first may have to read the sheets, the second shows the everyday speed
         return FleetApi.call('getCarPage', { id: first.id }).then(function (res) {
-          row('Car page (one request)', res.ms + ' ms in all, server ' + (res.serverMs === null ? 'unknown' : res.serverMs + ' ms'));
-        });
+          row('Car page, first time', describe(res));
+          return FleetApi.call('getCarPage', { id: first.id });
+        }).then(function (res) { row('Car page, again', describe(res)); });
       }).catch(function () { row('Car page', 'could not be tested', 'bad'); });
     }
 

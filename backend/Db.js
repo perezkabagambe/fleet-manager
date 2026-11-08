@@ -18,17 +18,18 @@ const Db = (function () {
   //  - tabs holding security records (sessions, login codes) and the audit log are never cached;
   //  - the whole thing can be switched off by setting the script property DB_CACHE to "off".
   const CACHED = { Cars: 1, Entries: 1, Users: 1, CarPeople: 1, FluidSpecs: 1, PartUsage: 1, Attachments: 1, Tasks: 1, Guests: 1 };
-  const CACHE_TTL = 120;
+  const CACHE_TTL = 600;
   // The script cache holds at most 100 KB (bytes, not characters) per value. A character can take up to 3 bytes
   // (£, accented letters, Luganda names), so a piece is at most 30,000 characters.
   const CHUNK = 30000;
   const MAX_CHUNKS = 60;
   let memo = {}; // this request's copy of each table: { header, values }
   let shared = null; // null = not looked up yet this request
+  let prefetched = null; // this request's view of the script cache: { gens: {tab: generation}, first: {tab: first piece} }
 
   function sharedOn_() {
     if (shared === null) {
-      try { shared = props_().getProperty('DB_CACHE') !== 'off'; } catch (e) { shared = false; }
+      try { shared = propsSnapshot_().DB_CACHE !== 'off'; } catch (e) { shared = false; }
     }
     return shared;
   }
@@ -37,50 +38,83 @@ const Db = (function () {
 
   function genKey_(name) { return 'dbgen:' + name; }
 
-  function currentGen_(cache, name) {
-    let g = cache.get(genKey_(name));
-    if (!g) {
-      g = Utilities.getUuid();
-      cache.put(genKey_(name), g, 21600);
-    }
-    return g;
-  }
-
   function dataKey_(name, gen) { return 'db:' + SCHEMA_VERSION + ':' + name + ':' + gen; }
 
-  /** The shared copy of a table, or null. Never throws: any trouble just means "read the sheet". */
-  function fromShared_(name) {
+  /**
+   * One round trip to the script cache for every busy tab: each tab's current generation, and the first piece of
+   * its remembered copy under that generation (a tab that fits in one piece is complete in that one fetch).
+   * Never throws: any trouble just means "read the sheets".
+   */
+  function prefetch_() {
+    if (prefetched) return prefetched;
+    prefetched = { gens: {}, first: {} };
+    if (!sharedOn_()) return prefetched;
     try {
       const cache = CacheService.getScriptCache();
-      const base = dataKey_(name, currentGen_(cache, name));
-      const meta = cache.get(base);
-      if (!meta) return null;
-      const n = Number(meta);
-      if (!(n >= 1 && n <= MAX_CHUNKS)) return null;
+      const names = Object.keys(CACHED);
+      const gens = cache.getAll(names.map(genKey_));
+      const fresh = {};
       const keys = [];
-      for (let i = 0; i < n; i++) keys.push(base + ':' + i);
-      const got = cache.getAll(keys);
-      let json = '';
-      for (let j = 0; j < n; j++) {
-        if (typeof got[keys[j]] !== 'string') return null;
-        json += got[keys[j]];
+      names.forEach(function (n) {
+        const g = gens[genKey_(n)];
+        if (g) {
+          prefetched.gens[n] = g;
+          keys.push(dataKey_(n, g) + ':0');
+        } else {
+          const made = Utilities.getUuid(); // never seen (or evicted): start a new generation, nothing is remembered under it yet
+          fresh[genKey_(n)] = made;
+          prefetched.gens[n] = made;
+        }
+      });
+      if (Object.keys(fresh).length) cache.putAll(fresh, 21600);
+      const got = keys.length ? cache.getAll(keys) : {};
+      names.forEach(function (n) {
+        const first = got[dataKey_(n, prefetched.gens[n]) + ':0'];
+        prefetched.first[n] = typeof first === 'string' ? first : null;
+      });
+    } catch (e) {
+      prefetched = { gens: {}, first: {} };
+    }
+    return prefetched;
+  }
+
+  /** The shared copy of a table, or null. */
+  function fromShared_(name) {
+    try {
+      const p = prefetch_();
+      const gen = p.gens[name];
+      const first = p.first[name];
+      if (!gen || !first) return null;
+      const bar = first.indexOf('|');
+      const n = Number(first.slice(0, bar));
+      if (!(n >= 1 && n <= MAX_CHUNKS)) return null;
+      let json = first.slice(bar + 1);
+      if (n > 1) {
+        const base = dataKey_(name, gen);
+        const keys = [];
+        for (let i = 1; i < n; i++) keys.push(base + ':' + i);
+        const got = CacheService.getScriptCache().getAll(keys);
+        for (let j = 0; j < keys.length; j++) {
+          if (typeof got[keys[j]] !== 'string') return null; // a missing piece: never trust half a table
+          json += got[keys[j]];
+        }
       }
       const t = JSON.parse(json);
       return t && Array.isArray(t.header) && Array.isArray(t.values) ? t : null;
     } catch (e) { return null; }
   }
 
-  function toShared_(name, t, gen) {
+  function toShared_(name, t) {
     try {
+      const gen = prefetch_().gens[name];
+      if (!gen) return;
       const json = JSON.stringify(t);
-      const n = Math.ceil(json.length / CHUNK);
-      if (n < 1 || n > MAX_CHUNKS) return; // too big to keep: it is simply read each time
-      const cache = CacheService.getScriptCache();
+      const n = Math.max(1, Math.ceil(json.length / CHUNK));
+      if (n > MAX_CHUNKS) return; // too big to keep: it is simply read each time
       const base = dataKey_(name, gen);
       const put = {};
-      for (let i = 0; i < n; i++) put[base + ':' + i] = json.slice(i * CHUNK, (i + 1) * CHUNK);
-      put[base] = String(n); // written with the chunks, but only trusted when every chunk is present
-      cache.putAll(put, CACHE_TTL);
+      for (let i = 0; i < n; i++) put[base + ':' + i] = (i === 0 ? n + '|' : '') + json.slice(i * CHUNK, (i + 1) * CHUNK);
+      CacheService.getScriptCache().putAll(put, CACHE_TTL);
     } catch (e) { /* not kept: fine */ }
   }
 
@@ -88,9 +122,12 @@ const Db = (function () {
   function changed_(name) {
     delete memo[name];
     if (!CACHED[name]) return;
+    const made = Utilities.getUuid();
     try {
-      CacheService.getScriptCache().put(genKey_(name), Utilities.getUuid(), 21600);
+      CacheService.getScriptCache().put(genKey_(name), made, 21600);
+      if (prefetched) { prefetched.gens[name] = made; prefetched.first[name] = null; }
     } catch (e) {
+      if (prefetched) { delete prefetched.gens[name]; prefetched.first[name] = null; } // nothing is remembered for it this request
       try { CacheService.getScriptCache().remove(genKey_(name)); } catch (e2) { shared = false; }
     }
   }
@@ -105,6 +142,8 @@ const Db = (function () {
   function resetRequest() {
     memo = {};
     shared = null;
+    prefetched = null;
+    propsSnap_ = null;
   }
 
   // ---------- reading and writing ----------
@@ -141,29 +180,25 @@ const Db = (function () {
     return sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(str_);
   }
 
-  /** Read a table straight from the sheet. */
+  /** Read a table straight from the sheet: one call for the header and every row. */
   function readSheet_(name) {
-    const sh = sheet_(name);
-    const header = header_(sh);
-    const lastRow = sh.getLastRow();
-    const values = lastRow < 2 ? [] : sh.getRange(2, 1, lastRow - 1, header.length).getValues()
-      .map(function (row) { return row.map(str_); });
+    const all = sheet_(name).getDataRange().getValues();
+    if (!all.length) return { header: [], values: [] };
+    const header = all[0].map(str_);
+    const values = all.slice(1).map(function (row) {
+      const out = [];
+      for (let j = 0; j < header.length; j++) out.push(str_(row[j]));
+      return out;
+    });
     return { header: header, values: values };
   }
 
   function table_(name) {
     if (memo[name]) return memo[name];
-    let t = null;
-    let gen = null;
-    if (cacheable_(name)) {
-      t = fromShared_(name);
-      if (!t) {
-        try { gen = currentGen_(CacheService.getScriptCache(), name); } catch (e) { gen = null; }
-      }
-    }
+    let t = cacheable_(name) ? fromShared_(name) : null;
     if (!t) {
       t = readSheet_(name);
-      if (gen) toShared_(name, t, gen);
+      if (cacheable_(name)) toShared_(name, t);
     }
     memo[name] = t;
     return t;

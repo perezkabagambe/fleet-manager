@@ -57,8 +57,8 @@ function ensureSchema_(ss) {
 }
 
 function migrateIfNeeded_() {
+  if (propsSnapshot_().SCHEMA_VERSION === String(SCHEMA_VERSION)) return;
   const props = props_();
-  if (props.getProperty('SCHEMA_VERSION') === String(SCHEMA_VERSION)) return;
   const lock = LockService.getScriptLock();
   lock.waitLock(25000);
   try {

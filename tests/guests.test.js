@@ -213,7 +213,7 @@ test('a guest sees maintenance history and their own entries, and never costs or
   const seen = as('guestListEntries', b).data;
   const titles = seen.entries.map((e) => e.title).sort();
   assert.deepEqual(titles, ['Alice service', 'Big invoice', 'Brake job'], 'maintenance only: no issues, purchases, compliance');
-  const text = JSON.stringify(seen);
+  const text = JSON.stringify(seen, (k, v) => (k === 'id' ? undefined : v)); // ids are random and could contain any digits
   ['999', '777', '54.85', 'Secret purchase', 'Alice wipers', 'Pads', 'Parking sensor', 'MOT passed'].forEach((w) => assert.ok(!text.includes(w), 'leaked: ' + w));
   ['"cost"', 'labour', 'unitCost', 'lumpSumCost', 'jobCost', 'totalCost'].forEach((w) => assert.ok(!text.includes(w), 'cost field leaked: ' + w));
   assert.ok(!/:60[,}]/.test(text), "Alice's own invoice total is hidden from Bert");

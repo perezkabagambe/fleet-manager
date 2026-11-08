@@ -36,6 +36,13 @@ function makeSheet(header) {
         for (let i = 0; i < nr; i++) { rows[r - 1 + i] = rows[r - 1 + i] || []; for (let j = 0; j < nc; j++) rows[r - 1 + i][c - 1 + j] = vals[i][j]; }
       },
     }),
+    getDataRange: () => ({
+      getValues: () => {
+        self.reads++;
+        const width = Math.max(...rows.map((r) => r.length));
+        return rows.map((r) => { const out = r.slice(); while (out.length < width) out.push(''); return out; });
+      },
+    }),
     appendRow: (arr) => rows.push(arr.slice()),
     deleteRow: (n) => rows.splice(n - 1, 1),
     _rows: rows,
@@ -58,7 +65,7 @@ function createEnv() {
   const outbox = [];
   const sleeps = [];
   const files = {};
-  const state = { tokeninfo: null, mailQuota: 100 };
+  const state = { tokeninfo: null, mailQuota: 100, cacheCalls: 0 }; // cacheCalls: round trips to the script cache
   const folders = {};
   const triggers = [];
   let folderCount = 0;
@@ -101,6 +108,7 @@ function createEnv() {
     PropertiesService: {
       getScriptProperties: () => ({
         getProperty: (k) => (k in props ? props[k] : null),
+        getProperties: () => Object.assign({}, props),
         setProperty: (k, v) => { props[k] = String(v); },
         deleteProperty: (k) => { delete props[k]; },
       }),
@@ -108,20 +116,23 @@ function createEnv() {
     CacheService: {
       getScriptCache: () => ({
         get: (k) => {
+          state.cacheCalls++;
           const e = cache[k];
           if (!e) return null;
           if (e.exp < FakeDate.now()) { delete cache[k]; return null; }
           return e.v;
         },
-        put: (k, v, ttl) => { if (state.cacheBroken) throw new Error('cache unavailable'); if (Buffer.byteLength(String(v)) > 100 * 1024) throw new Error('cache value too large: ' + k); cache[k] = { v: String(v), exp: FakeDate.now() + (ttl || 600) * 1000 }; },
+        put: (k, v, ttl) => { state.cacheCalls++; if (state.cacheBroken) throw new Error('cache unavailable'); if (Buffer.byteLength(String(v)) > 100 * 1024) throw new Error('cache value too large: ' + k); cache[k] = { v: String(v), exp: FakeDate.now() + (ttl || 600) * 1000 }; },
         remove: (k) => { if (state.cacheBroken) throw new Error('cache unavailable'); delete cache[k]; },
         getAll: (keys) => {
+          state.cacheCalls++;
           if (state.cacheBroken) throw new Error('cache unavailable');
           const out = {};
           keys.forEach((k) => { const e = cache[k]; if (e && e.exp >= FakeDate.now()) out[k] = e.v; });
           return out;
         },
         putAll: (obj, ttl) => {
+          state.cacheCalls++;
           if (state.cacheBroken) throw new Error('cache unavailable');
           Object.keys(obj).forEach((k) => {
             if (Buffer.byteLength(String(obj[k])) > 100 * 1024) throw new Error('cache value too large: ' + k); // bytes, as the real service counts

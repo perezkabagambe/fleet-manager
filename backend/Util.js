@@ -41,6 +41,15 @@ function randomCode_() {
 }
 
 /** Secret salt kept in Script Properties (never in the repo). Created on first use. */
+// All script properties in one call, once per request (reading them one by one is a round trip each).
+let propsSnap_ = null;
+function propsSnapshot_() {
+  if (!propsSnap_) {
+    try { propsSnap_ = props_().getProperties() || {}; } catch (e) { propsSnap_ = {}; }
+  }
+  return propsSnap_;
+}
+
 let saltMemo_ = null; // read from the properties once per request, not once per hash
 function salt_() {
   if (saltMemo_) return saltMemo_;
