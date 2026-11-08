@@ -68,8 +68,7 @@
     else if ((m = /^\/car\/([0-9a-f-]{8,40})(?:\/(edit|fluids|label|people))?$/.exec(r.path))) {
       r.params.id = m[1];
       view = {
-        edit: Views.carForm, fluids: Views.carFluids, label: Views.carLabel,
-        people: FleetAuth.isAdmin() ? Views.carPeople : viewForbidden,
+        edit: Views.carForm, fluids: Views.carForm, people: Views.carForm, label: Views.carLabel,
       }[m[2]] || Views.car;
     } else view = viewNotFound;
     view(r, appEl);

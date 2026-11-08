@@ -278,34 +278,11 @@
         detail('Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? '' : money(car.acquisitionCost, car.acquisitionCurrency || car.currency))
       );
 
-      // owner/custodian: names from app users, plus any free-text person who is not a user
-      var me = FleetAuth.getUser();
-      var ownerText = el('dd');
-      function showPeople(p) {
-        var names = p.owners.map(function (x) { return x.name; }).concat(car.ownerOther ? [car.ownerOther] : []);
-        ownerText.textContent = names.length ? names.join(', ') : 'Not recorded';
-      }
-      showPeople(people);
-      var ownerBox = el('input', { type: 'checkbox' });
-      var savedOwner = people.owners.some(function (x) { return x.userId === me.id; });
-      ownerBox.checked = savedOwner;
-      ownerBox.addEventListener('change', function () {
-        ownerBox.disabled = true;
-        msg.replaceChildren();
-        FleetApi.call('setMyCarRole', { carId: car.id, owner: ownerBox.checked }).then(function (r) {
-          carsCache = null;
-          savedOwner = ownerBox.checked;
-          showPeople(r.data.people);
-        }).catch(function (e) {
-          ownerBox.checked = savedOwner; // put it back to what the server still has
-          msg.replaceChildren(UI.notice('error', UI.errorText(e)));
-        }).finally(function () { ownerBox.disabled = false; });
-      });
+      // owner/custodian: names from app users, plus any free-text person who is not a user (change them with Edit car)
+      var ownerNames = people.owners.map(function (x) { return x.name; }).concat(car.ownerOther ? [car.ownerOther] : []);
       var peopleCard = el('section', { class: 'card' }, [
         el('h2', { text: 'Owner/Custodian' }),
-        el('dl', { class: 'details' }, [el('dt', { text: 'Owner/Custodian' }), ownerText]),
-        el('label', { class: 'check' }, [ownerBox, el('span', { text: 'I am an owner/custodian of this car' })]),
-        FleetAuth.isAdmin() ? el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/people', text: 'Edit owners/custodians' }) : null,
+        el('p', { class: ownerNames.length ? '' : 'muted', text: ownerNames.length ? ownerNames.join(', ') : 'Not recorded yet.' }),
       ]);
 
       var fluidRows = fluids.map(function (f) {
@@ -330,10 +307,8 @@
           photo(car, 'big', 'full'),
           el('div', { class: 'btn-row' }, [photoPicker.take, photoPicker.choose, removePhotoBtn]),
           photoStatus,
-          el('div', { class: 'btn-row' }, [
-            el('a', { class: 'btn small', href: '#/car/' + car.id + '/edit', text: 'Edit' }),
-            deleteBtn,
-          ]),
+          el('a', { class: 'btn block big edit-main', href: '#/car/' + car.id + '/edit', text: 'Edit car' }),
+          deleteBtn ? el('div', { class: 'btn-row' }, [deleteBtn]) : null,
         ]),
         el('section', { class: 'card' }, [
           el('h2', { text: 'Odometer' }),
@@ -348,14 +323,11 @@
         ]),
         peopleCard,
         el('section', { class: 'card' }, [
-          el('div', { class: 'page-head' }, [
-            el('h2', { text: 'Fluids and specs' }),
-            el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/fluids', text: fluids.length ? 'Edit' : 'Add' }),
-          ]),
-          fluids.length ? el('ul', { class: 'fluids' }, fluidRows) : el('p', { class: 'muted', text: 'No fluid specs recorded yet.' }),
+          el('h2', { text: 'Fluids and specs' }),
+          fluids.length ? el('ul', { class: 'fluids' }, fluidRows) : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' }),
           el('div', { class: 'catalogue' }, car.partsouqUrl
             ? [el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) })]
-            : [el('span', { class: 'muted', text: 'No parts catalogue link yet. ' }), el('a', { href: '#/car/' + car.id + '/edit', text: 'Add one' })]),
+            : [el('span', { class: 'muted', text: 'No parts catalogue link yet. Tap Edit car to add one.' })]),
         ]),
         el('section', { class: 'card' }, [
           el('h2', { text: 'QR label' }),
@@ -371,17 +343,135 @@
     }
   };
 
-  // ---------- add / edit form ----------
+  // ---------- fluids editor (one part of the car form) ----------
+  function fluidsEditor(initial) {
+    var rows = initial.map(function (f) { return Object.assign({}, f); });
+    var list = el('div', { class: 'stack' });
+    var datalist = el('datalist', { id: 'fluid-names' }, FLUID_TEMPLATE.map(function (n) { return el('option', { value: n }); }));
+
+    function rowEl(row, i) {
+      function inp(key, attrs) {
+        var input = el('input', Object.assign({ type: 'text', value: row[key] || '', autocomplete: 'off' }, attrs || {}));
+        input.addEventListener('input', function () { row[key] = input.value; });
+        return input;
+      }
+      var fluidIn = inp('fluid', { list: 'fluid-names', maxlength: '40' });
+      var specIn = inp('specification', { maxlength: '120' });
+      var capIn = inp('capacity', { maxlength: '40' });
+      // The examples follow the fluid name, so a differential oil never suggests an engine oil grade.
+      function showHints() {
+        var h = fluidHint(fluidIn.value);
+        specIn.placeholder = h.spec;
+        capIn.placeholder = h.cap;
+      }
+      fluidIn.addEventListener('input', showHints);
+      showHints();
+      var remove = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
+      remove.addEventListener('click', function () { rows.splice(i, 1); draw(); });
+      return el('div', { class: 'fluid-edit' }, [
+        UI.field('Fluid', fluidIn),
+        UI.field('Specification', specIn),
+        UI.field('Capacity', capIn),
+        UI.field('Notes', inp('notes', { maxlength: '200' })),
+        remove,
+      ]);
+    }
+
+    function draw() {
+      list.replaceChildren.apply(list, rows.length
+        ? rows.map(rowEl)
+        : [el('p', { class: 'muted', text: 'No fluids yet. Add one, or add the standard set.' })]);
+    }
+
+    var addBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add fluid' });
+    addBtn.addEventListener('click', function () { rows.push({ fluid: '', specification: '', capacity: '', notes: '' }); draw(); });
+    var stdBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add standard fluids' });
+    stdBtn.addEventListener('click', function () {
+      var have = rows.map(function (r) { return (r.fluid || '').toLowerCase(); });
+      FLUID_TEMPLATE.forEach(function (n) {
+        if (have.indexOf(n.toLowerCase()) === -1) rows.push({ fluid: n, specification: '', capacity: '', notes: '' });
+      });
+      draw();
+    });
+
+    // Rows with nothing in them are ignored when saving.
+    function payload() {
+      return rows
+        .filter(function (r) { return (r.fluid || '').trim() || (r.specification || '').trim() || (r.capacity || '').trim(); })
+        .map(function (r) { return { id: r.id, fluid: r.fluid || '', specification: r.specification || '', capacity: r.capacity || '', notes: r.notes || '' }; });
+    }
+    var snapshot = JSON.stringify(payload());
+    draw();
+
+    return {
+      node: el('div', {}, [datalist, list, el('div', { class: 'btn-row' }, [addBtn, stdBtn])]),
+      payload: payload,
+      dirty: function () { return JSON.stringify(payload()) !== snapshot; },
+      // After a save the server gives every row its id; keep them so a retry never duplicates a row.
+      markSaved: function (saved) {
+        rows = saved.map(function (f) { return Object.assign({}, f); });
+        snapshot = JSON.stringify(payload());
+        draw();
+      },
+    };
+  }
+
+  // ---------- owner/custodian editor (one part of the car form) ----------
+  // Admins tick any approved user. Everyone else can only tick or untick themselves.
+  function ownersEditor(people, users) {
+    var me = FleetAuth.getUser();
+    if (users) {
+      var boxes = users.map(function (u) {
+        var b = el('input', { type: 'checkbox' });
+        b.checked = people.owners.some(function (x) { return x.userId === u.id; });
+        return { user: u, box: b };
+      });
+      var ids = function () { return boxes.filter(function (x) { return x.box.checked; }).map(function (x) { return x.user.id; }).sort().join(','); };
+      var snap = ids();
+      return {
+        node: el('div', { class: 'stack' }, boxes.map(function (x) {
+          return el('label', { class: 'check' }, [x.box, el('span', { text: x.user.name + ' (' + x.user.email + ')' })]);
+        })),
+        dirty: function () { return ids() !== snap; },
+        save: function (carId) {
+          return FleetApi.call('setCarPeople', {
+            carId: carId, people: boxes.map(function (x) { return { userId: x.user.id, owner: x.box.checked }; }),
+          }).then(function () { snap = ids(); });
+        },
+      };
+    }
+    var meBox = el('input', { type: 'checkbox' });
+    var savedMe = people.owners.some(function (x) { return x.userId === me.id; });
+    meBox.checked = savedMe;
+    var others = people.owners.filter(function (x) { return x.userId !== me.id; }).map(function (x) { return x.name; });
+    return {
+      node: el('div', {}, [
+        el('label', { class: 'check' }, [meBox, el('span', { text: 'I am an owner/custodian of this car' })]),
+        others.length ? el('p', { class: 'muted small-text', text: 'Also: ' + others.join(', ') }) : null,
+      ]),
+      dirty: function () { return meBox.checked !== savedMe; },
+      save: function (carId) {
+        return FleetApi.call('setMyCarRole', { carId: carId, owner: meBox.checked }).then(function () { savedMe = meBox.checked; });
+      },
+    };
+  }
+
+  // ---------- add / edit form: everything about a car in one place ----------
   Views.carForm = function (ctx, root) {
     var id = ctx.params.id || '';
     root.replaceChildren(el('section', { class: 'card' }, [loading()]));
-    if (!id) { build(null); return; }
-    FleetApi.call('getCar', { id: id }).then(function (r) { build(r.data.car); }).catch(function (e) {
+    if (!id) { build(null, [], { owners: [] }, null); return; }
+    var calls = [FleetApi.call('getCar', { id: id })];
+    if (FleetAuth.isAdmin()) calls.push(FleetApi.call('listUsers')); // admins can pick any user as an owner/custodian
+    Promise.all(calls).then(function (res) {
+      var users = res[1] ? res[1].data.users.filter(function (u) { return u.status === 'Approved'; }) : null;
+      build(res[0].data.car, res[0].data.fluids, res[0].data.people || { owners: [] }, users);
+    }).catch(function (e) {
       if (e.code === 'not_found') notFound(root);
       else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e))]));
     });
 
-    function build(car) {
+    function build(car, fluids, people, users) {
       var f = {};
       var msg = el('div');
       function text(name, value, attrs) {
@@ -424,7 +514,8 @@
           el('div', { class: 'hint', text: 'Whole number. Changing the unit does not convert the number.' }),
         ]);
       }
-      var fields = [
+
+      var detailFields = [
         UI.field('Registration number *', text('registration', v.registration, { maxlength: '20', autocapitalize: 'characters', required: true })),
         UI.field('Make *', text('make', v.make, { maxlength: '40', placeholder: 'e.g. Toyota', required: true })),
         UI.field('Model *', text('model', v.model, { maxlength: '40', placeholder: 'e.g. Land Cruiser', required: true })),
@@ -442,21 +533,27 @@
       var notes = el('textarea', { name: 'notes', rows: '4', maxlength: '2000' });
       notes.value = v.notes || '';
       f.notes = notes;
-      fields.push(UI.field('Notes', notes));
+      detailFields.push(UI.field('Notes', notes));
 
-      // For an owner/custodian who is not a user of this app. Users are linked on the car page.
-      fields.push(UI.field('Other owner/custodian', text('ownerOther', v.ownerOther, { maxlength: '80' }), 'Optional. If the owner/custodian is not a user of this app, e.g. a company or a relative.'));
-
-      // New cars: say straight away if it is yours (ticked when you arrive from "Add a new car" on the first-time prompt).
-      var iOwn = null;
-      if (!car) {
+      // Owner/custodian: people who use this app are ticked; anyone else is written in.
+      var ownerFields = [
+        UI.field('Other owner/custodian', text('ownerOther', v.ownerOther, { maxlength: '80' }), 'Optional. If the owner/custodian is not a user of this app, e.g. a company or a relative.'),
+      ];
+      var ownersEd = car ? ownersEditor(people, users) : null;
+      var iOwn = null; // a new car: say straight away if it is yours (ticked when you come from "Add a new car")
+      if (car) {
+        ownerFields.push(el('div', { class: 'field' }, [el('div', { class: 'field-label', text: 'Owners/Custodians using this app' }), ownersEd.node]));
+      } else {
         iOwn = el('input', { type: 'checkbox' });
         iOwn.checked = ctx.query.mine === '1';
-        fields.push(el('label', { class: 'check' }, [iOwn, el('span', { text: 'I own or look after this car' })]));
+        ownerFields.push(el('label', { class: 'check' }, [iOwn, el('span', { text: 'I own or look after this car' })]));
       }
+
+      var fluidsEd = fluidsEditor(fluids);
 
       // New cars can take a photo straight away; existing cars manage it on the car page.
       var chosenPhoto = null;
+      var photoFields = [];
       if (!car) {
         var photoName = el('div', { class: 'muted small-text', role: 'status' });
         var clearPhoto = el('button', { type: 'button', class: 'linklike', text: 'Remove photo', hidden: true });
@@ -470,7 +567,7 @@
           photoName.textContent = '';
           clearPhoto.hidden = true;
         });
-        fields.push(el('div', { class: 'field' }, [
+        photoFields.push(el('div', { class: 'field' }, [
           el('div', { class: 'field-label', text: 'Photo' }),
           el('div', { class: 'btn-row' }, [formPicker.take, formPicker.choose]),
           photoName, clearPhoto,
@@ -484,8 +581,15 @@
         });
       }
 
-      var btn = el('button', { type: 'submit', class: 'btn block', text: car ? 'Save changes' : 'Add car' });
-      var form = el('form', { novalidate: true }, fields.concat([btn]));
+      function section(title, children) {
+        return el('div', { class: 'form-section' }, [el('h2', { text: title })].concat(children));
+      }
+      var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: car ? 'Save changes' : 'Add car' });
+      var form = el('form', { novalidate: true }, [
+        section('Details', detailFields),
+        section('Owner/Custodian', ownerFields),
+        section('Fluids and specs', [fluidsEd.node]),
+      ].concat(photoFields.length ? [section('Photo', photoFields)] : []).concat([btn]));
 
       function collect() {
         return {
@@ -498,36 +602,74 @@
         };
       }
 
-      function submit(extra) {
-        var payload = Object.assign({ fields: collect() }, car ? { id: car.id, version: car.version } : {}, extra || {});
+      // What has been saved so far. If a later step fails, a retry only repeats the steps that did not finish.
+      var state = { carId: car ? car.id : '', version: car ? car.version : 0, snapshot: car ? JSON.stringify(collect()) : '', markedMine: false, photoDone: false };
+      function carDirty() { return !state.carId || JSON.stringify(collect()) !== state.snapshot; }
+
+      function saveCarStep(extra) {
+        if (!carDirty()) return Promise.resolve('skipped');
+        var payload = Object.assign({ fields: collect() }, state.carId ? { id: state.carId, version: state.version } : {}, extra || {});
         return FleetApi.call('saveCar', payload).then(function (r) {
           var d = r.data;
           if (!d.saved) {
             var lines = d.warnings.map(function (w) { return (w.type === 'vin' ? 'Same VIN as ' : 'Same registration as ') + w.label; }).join('\n');
-            if (window.confirm('Possible duplicate:\n' + lines + '\n\nSave anyway?')) return submit(Object.assign({}, extra, { force: true }));
-            return null;
+            if (window.confirm('Possible duplicate:\n' + lines + '\n\nSave anyway?')) return saveCarStep(Object.assign({}, extra, { force: true }));
+            return 'cancelled';
           }
+          state.carId = d.car.id;
+          state.version = d.car.version;
+          state.snapshot = JSON.stringify(collect());
           carsCache = null;
-          var goToCar = function () { FleetApp.go('/car/' + d.car.id); };
-          var photoFile = chosenPhoto;
-          // The car is already saved. If a follow-up step fails, say so on the next screen rather than losing the car.
-          var markMine = iOwn && iOwn.checked
-            ? FleetApi.call('setMyCarRole', { carId: d.car.id, owner: true }).catch(function () {
-              FleetApp.setFlash('error', 'The car was saved, but it could not be marked as yours. You can tick "I am an owner/custodian" on this page.');
-            })
-            : Promise.resolve();
-          return markMine.then(function () {
-            if (!photoFile) { goToCar(); return null; }
-            return Photos.upload(d.car.id, photoFile).then(goToCar, function (e) {
-              FleetApp.setFlash('error', 'The car was saved, but its photo could not be added: ' + UI.errorText(e) + ' You can add it from this page.');
-              goToCar();
-            });
-          });
+          return 'saved';
         }).catch(function (e) {
-          if (e.code === 'odometer_lower' && FleetAuth.isAdmin() &&
-              window.confirm('That odometer reading is lower than the current one. Correct it anyway?')) {
-            return submit(Object.assign({}, extra, { forceOdometer: true }));
+          if (e.code === 'odometer_lower' && !e.asked && FleetAuth.isAdmin()) {
+            e.asked = true;
+            if (window.confirm('That odometer reading is lower than the current one. Correct it anyway?')) {
+              return saveCarStep(Object.assign({}, extra, { forceOdometer: true }));
+            }
           }
+          throw e;
+        });
+      }
+
+      function run() {
+        var done = [];
+        var step = 'the car details';
+        return saveCarStep({}).then(function (res) {
+          if (res === 'cancelled') return 'stop';
+          if (res === 'saved') done.push('car details');
+          if (!fluidsEd.dirty()) return null;
+          step = 'the fluids and specs';
+          return FleetApi.call('saveFluids', { carId: state.carId, fluids: fluidsEd.payload() }).then(function (r) {
+            fluidsEd.markSaved(r.data.fluids);
+            done.push('fluids and specs');
+          });
+        }).then(function (stop) {
+          if (stop === 'stop') return 'stop';
+          step = 'the owner/custodian';
+          if (car) {
+            if (!ownersEd.dirty()) return null;
+            return ownersEd.save(state.carId).then(function () { done.push('owner/custodian'); });
+          }
+          if (iOwn.checked && !state.markedMine) {
+            return FleetApi.call('setMyCarRole', { carId: state.carId, owner: true }).then(function () { state.markedMine = true; });
+          }
+          return null;
+        }).then(function (stop) {
+          if (stop === 'stop') return 'stop';
+          if (car || !chosenPhoto || state.photoDone) return null;
+          step = 'the photo';
+          // The car is already saved, so a failed photo is reported on the next screen instead of blocking.
+          return Photos.upload(state.carId, chosenPhoto).then(function () { state.photoDone = true; }, function (e) {
+            FleetApp.setFlash('error', 'The car was saved, but its photo could not be added: ' + UI.errorText(e) + ' You can add it from this page.');
+          });
+        }).then(function (stop) {
+          if (stop === 'stop') return;
+          carsCache = null;
+          FleetApp.go('/car/' + state.carId);
+        }).catch(function (e) {
+          e.savedParts = done;
+          e.failedStep = step;
           throw e;
         });
       }
@@ -535,93 +677,18 @@
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
         msg.replaceChildren();
-        UI.busy(btn, 'Saving…', submit({})).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); window.scrollTo(0, 0); });
+        UI.busy(btn, 'Saving…', run()).catch(function (e) {
+          var text = (e.savedParts && e.savedParts.length ? 'Saved: ' + e.savedParts.join(', ') + '. ' : '') +
+            'Could not save ' + (e.failedStep || 'the changes') + ': ' + UI.errorText(e);
+          msg.replaceChildren(UI.notice('error', text));
+          window.scrollTo(0, 0);
+        });
       });
 
       root.replaceChildren(el('section', { class: 'card' }, [
         backLink(car ? '#/car/' + car.id : '#/', car ? car.registration : 'Fleet'),
         el('h1', { text: car ? 'Edit car' : 'Add a car' }),
         msg, form,
-      ]));
-    }
-  };
-
-  // ---------- fluids editor ----------
-  Views.carFluids = function (ctx, root) {
-    var id = ctx.params.id;
-    root.replaceChildren(el('section', { class: 'card' }, [loading()]));
-    FleetApi.call('getCar', { id: id }).then(function (r) { build(r.data.car, r.data.fluids); }).catch(function (e) {
-      if (e.code === 'not_found') notFound(root);
-      else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e))]));
-    });
-
-    function build(car, fluids) {
-      var rows = fluids.map(function (f) { return Object.assign({}, f); });
-      var msg = el('div');
-      var list = el('div', { class: 'stack' });
-      var datalist = el('datalist', { id: 'fluid-names' }, FLUID_TEMPLATE.map(function (n) { return el('option', { value: n }); }));
-
-      function rowEl(row, i) {
-        function inp(key, attrs) {
-          var input = el('input', Object.assign({ type: 'text', value: row[key] || '', autocomplete: 'off' }, attrs || {}));
-          input.addEventListener('input', function () { row[key] = input.value; });
-          return input;
-        }
-        var fluidIn = inp('fluid', { list: 'fluid-names', maxlength: '40' });
-        var specIn = inp('specification', { maxlength: '120' });
-        var capIn = inp('capacity', { maxlength: '40' });
-        // The examples follow the fluid name, so a differential oil never suggests an engine oil grade.
-        function showHints() {
-          var h = fluidHint(fluidIn.value);
-          specIn.placeholder = h.spec;
-          capIn.placeholder = h.cap;
-        }
-        fluidIn.addEventListener('input', showHints);
-        showHints();
-        var remove = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
-        remove.addEventListener('click', function () { rows.splice(i, 1); draw(); });
-        return el('div', { class: 'fluid-edit' }, [
-          UI.field('Fluid', fluidIn),
-          UI.field('Specification', specIn),
-          UI.field('Capacity', capIn),
-          UI.field('Notes', inp('notes', { maxlength: '200' })),
-          remove,
-        ]);
-      }
-
-      function draw() {
-        list.replaceChildren.apply(list, rows.length
-          ? rows.map(rowEl)
-          : [el('p', { class: 'muted', text: 'No fluids yet. Add one, or add the standard set.' })]);
-      }
-
-      var addBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add fluid' });
-      addBtn.addEventListener('click', function () { rows.push({ fluid: '', specification: '', capacity: '', notes: '' }); draw(); });
-      var stdBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add standard fluids' });
-      stdBtn.addEventListener('click', function () {
-        var have = rows.map(function (r) { return (r.fluid || '').toLowerCase(); });
-        FLUID_TEMPLATE.forEach(function (n) {
-          if (have.indexOf(n.toLowerCase()) === -1) rows.push({ fluid: n, specification: '', capacity: '', notes: '' });
-        });
-        draw();
-      });
-      var saveBtn = el('button', { type: 'button', class: 'btn block save-gap', text: 'Save fluids' });
-      saveBtn.addEventListener('click', function () {
-        msg.replaceChildren();
-        var payload = rows.filter(function (r) { return (r.fluid || '').trim() || (r.specification || '').trim() || (r.capacity || '').trim(); });
-        UI.busy(saveBtn, 'Saving…', FleetApi.call('saveFluids', { carId: car.id, fluids: payload }))
-          .then(function () { FleetApp.go('/car/' + car.id); })
-          .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); window.scrollTo(0, 0); });
-      });
-
-      draw();
-      root.replaceChildren(el('section', { class: 'card' }, [
-        backLink('#/car/' + car.id, car.registration),
-        el('h1', { text: 'Fluids and specs' }),
-        el('p', { class: 'muted', text: carTitle(car) }),
-        msg, datalist, list,
-        el('div', { class: 'btn-row' }, [addBtn, stdBtn]),
-        saveBtn,
       ]));
     }
   };

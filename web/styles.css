@@ -316,3 +316,10 @@ input[type="file"] { width: 100%; font: inherit; font-size: 16px; padding: 10px 
 
 .field .field-label { font-weight: 600; margin-bottom: 6px; }
 .field .btn-row { margin-top: 0; }
+
+/* ---------- one big Edit button, and the combined edit screen ---------- */
+.btn.big { min-height: 54px; font-size: 1.1rem; }
+.edit-main { margin-top: 14px; }
+.form-section { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); }
+.form-section:first-of-type { margin-top: 8px; padding-top: 0; border-top: 0; }
+.form-section h2 { margin: 0 0 4px; }

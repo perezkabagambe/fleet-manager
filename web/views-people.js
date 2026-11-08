@@ -1,6 +1,5 @@
 // Who owns, or is the custodian of, which cars.
 //  - "My cars" (any user, from the profile page, or an admin editing someone else's cars)
-//  - "Edit owners/custodians" for one car (admins)
 (function () {
   'use strict';
 
@@ -60,49 +59,6 @@
     }).catch(function (e) {
       body.replaceChildren();
       if (e.code !== 'unauthorized') msg.replaceChildren(UI.notice('error', UI.errorText(e)));
-    });
-  };
-
-  // ---------- one car's owners/custodians (admin) ----------
-  Views.carPeople = function (ctx, root) {
-    var carId = ctx.params.id;
-    var msg = el('div');
-    var body = el('div', { class: 'stack' }, [loading()]);
-    root.replaceChildren(el('section', { class: 'card' }, [msg, body]));
-
-    Promise.all([FleetApi.call('getCar', { id: carId }), FleetApi.call('listUsers')]).then(function (res) {
-      var car = res[0].data.car;
-      var people = res[0].data.people;
-      var users = res[1].data.users.filter(function (u) { return u.status === 'Approved'; });
-      var rows = users.map(function (u) {
-        var o = ownerBox(people.owners.some(function (x) { return x.userId === u.id; }), 'Owner/Custodian');
-        return {
-          user: u, box: o.box,
-          node: el('div', { class: 'person-row' }, [
-            el('div', { class: 'person-car' }, [el('div', { text: u.name }), el('div', { class: 'muted small-text', text: u.email })]),
-            o.node,
-          ]),
-        };
-      });
-      var saveBtn = el('button', { type: 'button', class: 'btn block save-gap', text: 'Save' });
-      saveBtn.addEventListener('click', function () {
-        msg.replaceChildren();
-        var list = rows.map(function (x) { return { userId: x.user.id, owner: x.box.checked }; });
-        UI.busy(saveBtn, 'Saving…', FleetApi.call('setCarPeople', { carId: car.id, people: list }))
-          .then(function () { Views.invalidateCars(); FleetApp.go('/car/' + car.id); })
-          .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
-      });
-      body.replaceChildren(
-        el('a', { class: 'back', href: '#/car/' + car.id, text: '← ' + car.registration }),
-        el('h1', { text: 'Owners/Custodians' }),
-        el('p', { class: 'muted', text: car.make + ' ' + car.model + '. Choose who owns or looks after it. For people who are not app users, use the "Other owner/custodian" box when editing the car.' }),
-        el('div', { class: 'stack' }, rows.map(function (x) { return x.node; })),
-        saveBtn
-      );
-    }).catch(function (e) {
-      body.replaceChildren();
-      if (e.code === 'not_found') msg.replaceChildren(UI.notice('error', 'That car could not be found.'));
-      else if (e.code !== 'unauthorized') msg.replaceChildren(UI.notice('error', UI.errorText(e)));
     });
   };
 })();
