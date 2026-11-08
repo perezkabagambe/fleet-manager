@@ -132,7 +132,7 @@
     }
 
     return el('section', { class: 'card' }, [
-      el('h2', { text: 'Service History' }),
+      el('h2', { text: 'Service & Issues Log' }),
       el('a', { class: 'btn block big', href: '#/car/' + car.id + '/add', text: 'Add entry' }),
       chips, list,
     ]);

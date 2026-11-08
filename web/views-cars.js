@@ -320,7 +320,7 @@
           car.odometerUpdatedAt ? el('div', { class: 'muted small-text', text: 'Updated ' + fmtDate(car.odometerUpdatedAt) }) : null,
           odoForm,
         ]), car.odometer === null ? 'Not set' : num(car.odometer) + ' ' + car.distanceUnit),
-        collapsible('Service History', EntryUI.historyCard(car, page && page.entries), page && page.entries ? countText(page.entries.length, 'entry', 'entries') : ''),
+        collapsible('Service & Issues Log', EntryUI.historyCard(car, page && page.entries), page && page.entries ? countText(page.entries.length, 'entry', 'entries') : ''),
         collapsible('Reminders', RemindersUI.card(car, page && page.tasks), page && page.tasks ? reminderHint(page.tasks) : ''),
         collapsible('Fluids and specs', el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids and specs' }),
