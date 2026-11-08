@@ -389,7 +389,7 @@
         });
         draw();
       });
-      var saveBtn = el('button', { type: 'button', class: 'btn block', text: 'Save fluids' });
+      var saveBtn = el('button', { type: 'button', class: 'btn block save-gap', text: 'Save fluids' });
       saveBtn.addEventListener('click', function () {
         msg.replaceChildren();
         var payload = rows.filter(function (r) { return (r.fluid || '').trim() || (r.specification || '').trim() || (r.capacity || '').trim(); });

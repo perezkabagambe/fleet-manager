@@ -288,3 +288,5 @@ dl.details dd { margin: 0; overflow-wrap: anywhere; }
 .odo-row { display: flex; gap: 8px; }
 .odo-row input { flex: 1; min-width: 0; }
 .odo-row select { width: auto; min-width: 130px; }
+
+.save-gap { margin-top: 28px; }
