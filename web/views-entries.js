@@ -360,7 +360,28 @@
         ]);
       }
       drawAttachments();
-      cards.push(el('section', { class: 'card' }, [el('h2', { text: 'Photos and documents' }), attBox]));
+      // Add straight from here: no need to open Edit first. (Removing is on each row, for admins.)
+      function addFile(file) {
+        msg.replaceChildren(UI.notice('ok', 'Adding ' + (file.name || 'the file') + '…'));
+        return Photos.prepareAttachment(file).then(function (a) {
+          return FleetApi.call('uploadAttachment', { entryId: e.id, mime: a.mime, data: a.data, filename: a.filename });
+        }).then(function (r) {
+          Views.invalidateCars();
+          d.attachments.push(r.data.attachment);
+          drawAttachments();
+          msg.replaceChildren(UI.notice('ok', 'Added.'));
+        }).catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
+      }
+      cards.push(el('section', { class: 'card' }, [
+        el('h2', { text: 'Photos and documents' }),
+        attBox,
+        el('div', { class: 'btn-row' }, [
+          Photos.fileButton('Take photo', 'image/*', true, addFile),
+          Photos.fileButton('Choose photo', 'image/*', false, addFile),
+          Photos.fileButton('Add PDF', 'application/pdf', false, addFile),
+        ]),
+        el('div', { class: 'hint', text: 'Receipts, invoices, quotes or photos. Photos are shrunk automatically; PDFs can be up to 2.5 MB.' }),
+      ]));
 
       cards.push(el('a', { class: 'btn block big edit-bottom', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit ' + BY_TYPE[e.type].label.toLowerCase() }));
       root.replaceChildren.apply(root, cards);
