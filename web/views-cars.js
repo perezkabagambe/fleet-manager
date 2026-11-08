@@ -267,6 +267,8 @@
         detail('Make and model', carTitle(car)),
         detail('Colour', car.colour),
         detail('VIN / chassis', car.vin),
+        detail('Engine code', car.engineCode),
+        detail('Gearbox code', car.gearboxCode),
         detail('Country', car.country === 'UG' ? 'Uganda' : 'United Kingdom'),
         detail('Acquired', fmtAcquired(car.acquisitionDate)),
         detail('Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? '' : money(car.acquisitionCost, car.acquisitionCurrency || car.currency))
@@ -524,6 +526,8 @@
         UI.field('Colour', text('colour', v.colour, { maxlength: '30' })),
         UI.field('Nickname', text('nickname', v.nickname, { maxlength: '40' }), 'Optional, e.g. "The work truck".'),
         UI.field('VIN / chassis number', text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 'The 17-character VIN, or the chassis number for Japanese imports.'),
+        UI.field('Engine code', text('engineCode', v.engineCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. 1GR-FE. Often stamped on the engine or listed in the handbook.'),
+        UI.field('Gearbox code', text('gearboxCode', v.gearboxCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. A750F. Useful when ordering gearbox parts or oil.'),
         UI.field('Country', select('country', [['UK', 'United Kingdom'], ['UG', 'Uganda']], v.country)),
         UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
         odometerField(),
@@ -622,7 +626,7 @@
       function collect() {
         return {
           registration: f.registration.value, make: f.make.value, model: f.model.value, year: f.year.value, colour: f.colour.value,
-          nickname: f.nickname.value, vin: f.vin.value, country: f.country.value,
+          nickname: f.nickname.value, vin: f.vin.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, country: f.country.value,
           distanceUnit: f.distanceUnit.value, status: f.status.value, odometer: f.odometer.value,
           acquisitionCost: f.acquisitionCost.value, acquisitionCurrency: f.acquisitionCurrency.value, acquisitionDate: f.acquisitionDate.value,
           partsouqUrl: f.partsouqUrl.value, notes: f.notes.value,

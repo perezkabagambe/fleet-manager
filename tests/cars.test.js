@@ -78,6 +78,23 @@ test('required fields and formats are enforced', () => {
   assert.equal(env.call('listCars', { token: sam }).data.cars.length, 0);
 });
 
+test('engine code and gearbox code are optional, trimmed, length-capped and can be edited', () => {
+  const { env, sam } = setup();
+  const none = addCar(env, sam, { registration: 'NOCODE1', vin: '' }).data.car;
+  assert.equal(none.engineCode, '');
+  assert.equal(none.gearboxCode, '');
+  const c = addCar(env, sam, { registration: 'CODE1', vin: '', engineCode: '  1GR-FE  ', gearboxCode: 'A750F' }).data.car;
+  assert.equal(c.engineCode, '1GR-FE');
+  assert.equal(c.gearboxCode, 'A750F');
+  assert.equal(addCar(env, sam, { registration: 'CODE2', vin: '', engineCode: 'X'.repeat(80) }).data.car.engineCode.length, 30);
+  const edited = env.call('saveCar', { token: sam, id: c.id, version: c.version, fields: Object.assign({}, CAR, { registration: 'CODE1', vin: '', engineCode: '2.0 TDI', gearboxCode: '' }) });
+  assert.equal(edited.data.car.engineCode, '2.0 TDI');
+  assert.equal(edited.data.car.gearboxCode, '');
+  const got = env.call('getCar', { token: sam, id: c.id }).data.car;
+  assert.equal(got.engineCode, '2.0 TDI');
+  assert.equal(env.call('listCars', { token: sam }).data.cars.find((x) => x.id === c.id).engineCode, '2.0 TDI');
+});
+
 test('acquisition cost and date are optional but validated', () => {
   const { env, sam } = setup();
   const none = addCar(env, sam, { registration: 'NOCOST1', vin: '' }).data.car;

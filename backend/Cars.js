@@ -29,6 +29,8 @@ function summarizeCar_(c) {
     year: c.year ? Number(c.year) : null,
     colour: c.colour,
     vin: c.vin,
+    engineCode: c.engine_code || '',
+    gearboxCode: c.gearbox_code || '',
     country: c.country || 'UK',
     currency: c.currency || 'GBP',
     distanceUnit: c.distance_unit || 'mi',
@@ -93,6 +95,8 @@ function parseCarInput_(f, existing) {
   const vin = cleanStr_(f.vin, 30).toUpperCase().replace(/\s+/g, '');
   if (vin && !/^[A-Z0-9-]{5,25}$/.test(vin)) fail_('invalid_vin');
   out.vin = vin;
+  out.engine_code = cleanStr_(f.engineCode, 30);
+  out.gearbox_code = cleanStr_(f.gearboxCode, 30);
 
   out.country = oneOf_(f.country, COUNTRIES, 'UK', 'invalid_country');
   // The car has no fixed "currency for costs": every cost carries its own. This is only the

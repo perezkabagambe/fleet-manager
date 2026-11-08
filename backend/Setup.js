@@ -20,7 +20,7 @@ const SCHEMA = {
   Sessions: { base: false, cols: ['hash', 'user_id', 'created_at', 'last_seen', 'expires_at', 'revoked'] },
   Cars: {
     base: true,
-    cols: ['registration', 'nickname', 'make', 'model', 'year', 'colour', 'vin', 'country', 'currency', 'distance_unit',
+    cols: ['registration', 'nickname', 'make', 'model', 'year', 'colour', 'vin', 'engine_code', 'gearbox_code', 'country', 'currency', 'distance_unit',
       'photo_file_id', 'photo_thumb_file_id', 'guest_enabled', 'guest_secret', 'acquisition_cost', 'acquisition_currency', 'acquisition_date', 'owner_other', 'keeper_other', 'partsouq_url', 'status', 'current_odometer', 'odometer_updated_at', 'reminder_recipients', 'notes'],
   },
   // Which users own / are the registered keeper of which cars (one row per car, user and role).
@@ -49,7 +49,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 11; // 11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 12; // 12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
