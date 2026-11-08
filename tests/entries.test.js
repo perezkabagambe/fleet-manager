@@ -474,37 +474,28 @@ test('entry changes are audited, and the schema migration adds the expiry column
 
 // ---------- mileage unit and a currency for each cost ----------
 
-test('a reading carries its own unit (miles or km), defaulting to the car\'s', () => {
+test('readings are always in miles, whatever unit is sent', () => {
   const { add, get } = setup();
   const def = add('Issue', issue({ mileage: '51000' })).data.entry;
-  assert.equal(def.mileageUnit, 'mi', 'the car is in miles');
-  const km = add('Issue', issue({ mileage: '82000', mileageUnit: 'km' })).data.entry;
-  assert.equal(km.mileageUnit, 'km');
-  assert.equal(get(km.id).data.entry.mileageUnit, 'km');
-  const none = add('Issue', issue({ mileage: '', mileageUnit: 'km' })).data.entry;
+  assert.equal(def.mileageUnit, 'mi');
+  const sent = add('Issue', issue({ mileage: '82000', mileageUnit: 'km' })).data.entry;
+  assert.equal(sent.mileageUnit, 'mi');
+  assert.equal(sent.mileage, 82000, 'the number is kept as typed');
+  assert.equal(get(sent.id).data.entry.mileageUnit, 'mi');
+  const none = add('Issue', issue({ mileage: '' })).data.entry;
   assert.equal(none.mileageUnit, '', 'no reading, no unit');
-  assert.equal(add('Issue', issue({ mileage: '5', mileageUnit: 'furlongs' })).error, 'invalid_unit');
 });
 
-test('a reading in the other unit is converted into the car\'s unit when it raises the odometer', () => {
+test('a reading that is higher than the odometer raises it when asked, and is never converted', () => {
   const { env, sam, car, add } = setup();
   const odo = () => env.call('getCar', { token: sam, id: car.id }).data.car.odometer;
-  // the car is in miles at 50,000. 90,000 km is 55,923 miles (rounded)
-  assert.equal(add('Issue', issue({ mileage: '90000', mileageUnit: 'km' })).data.odometerUpdated, undefined, 'not unless asked');
+  assert.equal(add('Issue', issue({ mileage: '90000' })).data.odometerUpdated, undefined, 'not unless asked');
   assert.equal(odo(), 50000);
-  assert.equal(add('Issue', issue({ mileage: '90000', mileageUnit: 'km' }), { updateOdometer: true }).data.odometerUpdated, true);
-  assert.equal(odo(), 55923);
-  // 40,000 km is about 24,855 miles: lower than the odometer, so it is left alone
-  assert.equal(add('Issue', issue({ mileage: '40000', mileageUnit: 'km' }), { updateOdometer: true }).data.odometerUpdated, undefined);
-  assert.equal(odo(), 55923);
-  // a reading already in the car's unit works as before
-  assert.equal(add('Issue', issue({ mileage: '56000', mileageUnit: 'mi' }), { updateOdometer: true }).data.odometerUpdated, true);
-  assert.equal(odo(), 56000);
-  // the entry itself keeps what was typed
-  const e = add('Issue', issue({ mileage: '100000', mileageUnit: 'km' })).data.entry;
-  assert.equal(e.mileage, 100000);
-  assert.equal(e.mileageUnit, 'km');
-  assert.ok(env.sheets.Audit._rows.slice(1).some((r) => /converted from 90000 km/.test(r[6])));
+  assert.equal(add('Issue', issue({ mileage: '90000' }), { updateOdometer: true }).data.odometerUpdated, true);
+  assert.equal(odo(), 90000);
+  assert.equal(add('Issue', issue({ mileage: '40000' }), { updateOdometer: true }).data.odometerUpdated, undefined, 'lower: left alone');
+  assert.equal(odo(), 90000);
+  assert.ok(env.sheets.Audit._rows.slice(1).some((r) => /to 90000 mi/.test(r[6])));
 });
 
 test('distance conversion is exact enough, symmetric on whole numbers, and never touches money', () => {
@@ -552,7 +543,7 @@ test('when no separate currency is given, every cost uses the entry currency', (
   assert.deepEqual(get(e.id).data.jobCost, { UGX: 120 });
 });
 
-test('entries saved before these fields existed still work (they fall back to the entry currency and the car unit)', () => {
+test('entries saved before these fields existed still work (they fall back to the entry currency, and miles)', () => {
   const { env, sam, car, add, get, list } = setup();
   const e = add('Maintenance', repair({ currency: 'GBP', labourCost: '90', otherCost: '10', mileage: '50100' })).data.entry;
   // simulate an old row: the new columns were empty
@@ -561,7 +552,7 @@ test('entries saved before these fields existed still work (they fall back to th
   ['labour_currency', 'other_currency', 'lump_currency', 'mileage_unit'].forEach((k) => { row[header.indexOf(k)] = ''; });
   assert.deepEqual(get(e.id).data.jobCost, { GBP: 100 });
   assert.equal(get(e.id).data.entry.labourCurrency, 'GBP');
-  assert.equal(get(e.id).data.entry.mileageUnit, '', 'the app shows the car\'s unit for old readings');
+  assert.equal(get(e.id).data.entry.mileageUnit, 'mi', 'old readings are in miles');
   const costs = env.call('getCarCosts', { token: sam, carId: car.id }).data.currencies;
   assert.deepEqual(costs[0].categories, { labour: 90, other: 10 });
   assert.ok(list().find((x) => x.id === e.id));

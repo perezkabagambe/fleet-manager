@@ -51,7 +51,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 14; // 14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 15; // 15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
@@ -70,6 +70,7 @@ function migrateIfNeeded_() {
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 9) mergeRepairIntoMaintenance_();
     giveCarsGuestSecrets_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 11) switchOnGuestAccessEverywhere_();
+    if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 15) convertEverythingToMiles_();
     Db.invalidateAll(); // the sheets were changed directly: nothing remembered about them can be trusted
     props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   } finally {
@@ -173,6 +174,40 @@ function mergeRepairIntoMaintenance_() {
 function switchOnGuestAccessEverywhere_() {
   Db.all('Cars').forEach(function (c) {
     if (!isTrue_(c.guest_enabled)) Db.update('Cars', c._row, { guest_enabled: true });
+  });
+}
+
+/**
+ * One-off (version 15): every distance in the app is in miles from now on. Anything stored in kilometres is
+ * converted: a car's odometer, its entries' readings and its reminders' distances. Money is never touched.
+ */
+function convertEverythingToMiles_() {
+  const kmCars = {};
+  Db.all('Cars').forEach(function (c) {
+    if (c.distance_unit === 'km') {
+      kmCars[c.id] = true;
+      const patch = { distance_unit: 'mi' };
+      if (c.current_odometer !== '') patch.current_odometer = String(convertDistance_(c.current_odometer, 'km', 'mi'));
+      Db.update('Cars', c._row, patch);
+    } else if (c.distance_unit !== 'mi') {
+      Db.update('Cars', c._row, { distance_unit: 'mi' });
+    }
+  });
+  Db.all('Entries').forEach(function (e) {
+    if (e.mileage === '') return;
+    const unit = e.mileage_unit || (kmCars[e.car_id] ? 'km' : 'mi');
+    const patch = { mileage_unit: 'mi' };
+    if (unit === 'km') patch.mileage = String(convertDistance_(e.mileage, 'km', 'mi'));
+    if (unit !== 'km' && e.mileage_unit === 'mi') return;
+    Db.update('Entries', e._row, patch);
+  });
+  Db.all('Tasks').forEach(function (t) {
+    if (!kmCars[t.car_id]) return;
+    const patch = {};
+    ['interval_distance', 'lead_distance', 'due_distance', 'last_done_distance'].forEach(function (k) {
+      if (t[k] !== '') patch[k] = String(convertDistance_(t[k], 'km', 'mi'));
+    });
+    if (Object.keys(patch).length) Db.update('Tasks', t._row, patch);
   });
 }
 

@@ -50,11 +50,11 @@ test('any user can add a car; values are normalised', () => {
   assert.deepEqual(list.deleted, []);
 });
 
-test('Uganda cars default to UGX and km', () => {
+test('Uganda cars default to UGX, and every car is in miles', () => {
   const { env, sam } = setup();
   const c = addCar(env, sam, { country: 'UG', registration: 'UBA 123X' }).data.car;
   assert.equal(c.currency, 'UGX');
-  assert.equal(c.distanceUnit, 'km');
+  assert.equal(c.distanceUnit, 'mi');
 });
 
 test('required fields and formats are enforced', () => {
@@ -70,7 +70,6 @@ test('required fields and formats are enforced', () => {
   bad({ vin: 'no good!' }, 'invalid_vin');
   bad({ country: 'FR' }, 'invalid_country');
   bad({ currency: 'XYZ' }, 'invalid_currency');
-  bad({ distanceUnit: 'parsecs' }, 'invalid_unit');
   bad({ status: 'Stolen' }, 'invalid_status');
   bad({ odometer: '-5' }, 'invalid_odometer');
   bad({ odometer: '12.5' }, 'invalid_odometer');
@@ -317,21 +316,57 @@ test('lowering the odometer through the edit form follows the same rule', () => 
   assert.equal(r.error, 'odometer_lower');
 });
 
-test('switching a car between miles and km converts the odometer, and the check compares like with like', () => {
+test('the odometer is always in miles, whatever unit is sent', () => {
   const { env, sam } = setup();
-  const car = addCar(env, sam, { odometer: '50000', distanceUnit: 'mi' }).data.car;
-  const save = (version, fields) => env.call('saveCar', { token: sam, id: car.id, version, fields: Object.assign({}, CAR, fields) });
-  // miles -> km: the form sends the converted figure (50,000 mi = 80,467 km); it must not look like a drop
-  let r = save(1, { odometer: '80467', distanceUnit: 'km' });
-  assert.equal(r.ok, true, r.error);
-  assert.equal(r.data.car.odometer, 80467);
-  assert.equal(r.data.car.distanceUnit, 'km');
-  // switching back needs a figure that is not lower than the same distance in the old unit (80,467 km is about 50,000 mi)
-  assert.equal(save(2, { odometer: '40000', distanceUnit: 'mi' }).error, 'odometer_lower', '40,000 mi is below 80,467 km');
-  r = save(2, { odometer: '50000', distanceUnit: 'mi' });
-  assert.equal(r.ok, true, r.error);
-  assert.equal(r.data.car.odometer, 50000);
+  const car = addCar(env, sam, { odometer: '50000', distanceUnit: 'km' }).data.car;
+  assert.equal(car.distanceUnit, 'mi');
+  assert.equal(car.odometer, 50000, 'the number is kept as typed, not converted');
+  const r = env.call('saveCar', { token: sam, id: car.id, version: 1, fields: Object.assign({}, CAR, { odometer: '60000', distanceUnit: 'km' }) });
   assert.equal(r.data.car.distanceUnit, 'mi');
+  assert.equal(r.data.car.odometer, 60000);
+  assert.equal(env.call('saveCar', { token: sam, id: car.id, version: 2, fields: Object.assign({}, CAR, { odometer: '59000' }) }).error, 'odometer_lower', 'still cannot go down');
+});
+
+test('the move to miles converts what was stored in kilometres, once', () => {
+  const { env, sam, admin } = setup();
+  const vm = require('vm');
+  const kmCar = addCar(env, sam, { registration: 'UG 1', odometer: '80467' }).data.car;
+  const miCar = addCar(env, sam, { registration: 'UK 1', vin: '', odometer: '1000' }).data.car;
+  const e1 = env.call('saveEntry', { token: sam, carId: kmCar.id, type: 'Issue', fields: { title: 'Rattle', date: '2025-03-01', mileage: '80467' } }).data.entry;
+  const e2 = env.call('saveEntry', { token: sam, carId: miCar.id, type: 'Issue', fields: { title: 'Squeak', date: '2025-03-01', mileage: '900' } }).data.entry;
+  env.call('saveTask', { token: sam, carId: kmCar.id, fields: { name: 'Oil', intervalMonths: '6', intervalDistance: '10000', dueDate: '2099-01-01', dueDistance: '90000', leadDistance: '500' } });
+  // wind the sheets back to how they were before: the first car in kilometres, with unit-less old rows
+  const set = (sheet, id, vals) => {
+    const header = env.sheets[sheet]._rows[0];
+    const row = env.sheets[sheet]._rows.find((r) => r[header.indexOf('id')] === id);
+    Object.keys(vals).forEach((k) => { row[header.indexOf(k)] = vals[k]; });
+  };
+  set('Cars', kmCar.id, { distance_unit: 'km' });
+  set('Entries', e1.id, { mileage_unit: 'km' });
+  set('Entries', e2.id, { mileage_unit: '' });
+  const taskRow = env.sheets.Tasks._rows.find((r, i) => i > 0 && r[env.sheets.Tasks._rows[0].indexOf('car_id')] === kmCar.id);
+  assert.ok(taskRow);
+  env.invalidate();
+  env.props.SCHEMA_VERSION = '14';
+
+  const got = env.call('getCar', { token: sam, id: kmCar.id }).data.car;
+  assert.equal(got.distanceUnit, 'mi');
+  assert.equal(got.odometer, 50000, '80,467 km is 50,000 miles');
+  assert.equal(env.call('getEntry', { token: sam, id: e1.id }).data.entry.mileage, 50000);
+  assert.equal(env.call('getEntry', { token: sam, id: e1.id }).data.entry.mileageUnit, 'mi');
+  const other = env.call('getEntry', { token: sam, id: e2.id }).data.entry;
+  assert.equal(other.mileage, 900, 'a miles car is left as it was');
+  assert.equal(other.mileageUnit, 'mi');
+  assert.equal(env.call('getCar', { token: sam, id: miCar.id }).data.car.odometer, 1000);
+  const task = env.call('listTasks', { token: sam, carId: kmCar.id }).data.tasks[0];
+  assert.equal(task.intervalDistance, 6214, '10,000 km');
+  assert.equal(task.dueDistance, 55923, '90,000 km');
+  assert.equal(task.leadDistance, 311, '500 km');
+  assert.equal(env.props.SCHEMA_VERSION, String(vm.runInContext('SCHEMA_VERSION', env.ctx)));
+  // it does not run a second time
+  env.call('listCars', { token: sam });
+  assert.equal(env.call('getCar', { token: sam, id: kmCar.id }).data.car.odometer, 50000);
+  assert.ok(admin);
 });
 
 // ---------- delete / restore ----------

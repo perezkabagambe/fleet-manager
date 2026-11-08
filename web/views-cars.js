@@ -103,17 +103,9 @@
   function qrLink(car) { return carUrl(car.id) + (car.guestSecret ? '?g=' + car.guestSecret : ''); }
   function entryUrl(carId, entryId) { return carUrl(carId) + '/entry/' + entryId; }
 
-  // Miles <-> kilometres, rounded to a whole number. (Money is never converted.) Same maths as the server.
-  var KM_PER_MILE = 1.609344;
-  function convertDistance(value, from, to) {
-    var n = Number(value);
-    if (!isFinite(n) || from === to) return n;
-    return Math.round(from === 'mi' ? n * KM_PER_MILE : n / KM_PER_MILE);
-  }
-
   // Shared with the entry screens.
   Views.fmt = {
-    convertDistance: convertDistance, carUrl: carUrl, entryUrl: entryUrl,
+    carUrl: carUrl, entryUrl: entryUrl,
     money: money, date: fmtDate, num: num, hostOf: hostOf, chip: chip, loading: loading, backLink: backLink,
     notFound: notFound, currencyOptions: CURRENCY_OPTIONS,
   };
@@ -139,7 +131,7 @@
           el('div', { class: 'muted small-text', text: carTitle(c) }),
           el('div', { class: 'car-card-foot' }, [
             chip(c.status),
-            el('span', { class: 'muted small-text', text: c.odometer === null ? '' : num(c.odometer) + ' ' + c.distanceUnit }),
+            el('span', { class: 'muted small-text', text: c.odometer === null ? '' : num(c.odometer) + ' mi' }),
           ]),
           mine && mine.owner ? el('div', { class: 'mine' }, [el('span', { class: 'chip sold', text: 'Yours' })]) : null,
         ]),
@@ -226,7 +218,7 @@
       var odoInput = el('input', { type: 'text', inputmode: 'numeric', name: 'odometer', autocomplete: 'off', placeholder: 'New reading' });
       var odoBtn = el('button', { type: 'submit', class: 'btn small', text: 'Update' });
       var odoForm = el('form', { class: 'inline-form', novalidate: true }, [
-        el('label', { class: 'sr-only', for: 'odo-input', text: 'New odometer reading in ' + car.distanceUnit }), odoInput, odoBtn,
+        el('label', { class: 'sr-only', for: 'odo-input', text: 'New odometer reading in miles' }), odoInput, odoBtn,
       ]);
       odoInput.id = 'odo-input';
       function sendOdometer(force) {
@@ -316,10 +308,10 @@
         ]),
         collapsible('Odometer', el('section', { class: 'card' }, [
           el('h2', { text: 'Odometer' }),
-          el('div', { class: 'big-number', text: car.odometer === null ? 'Not set' : num(car.odometer) + ' ' + car.distanceUnit }),
+          el('div', { class: 'big-number', text: car.odometer === null ? 'Not set' : num(car.odometer) + ' mi' }),
           car.odometerUpdatedAt ? el('div', { class: 'muted small-text', text: 'Updated ' + fmtDate(car.odometerUpdatedAt) }) : null,
           odoForm,
-        ]), car.odometer === null ? 'Not set' : num(car.odometer) + ' ' + car.distanceUnit),
+        ]), car.odometer === null ? 'Not set' : num(car.odometer) + ' mi'),
         collapsible('Service & Issues Log', EntryUI.historyCard(car, page && page.entries), page && page.entries ? countText(page.entries.length, 'entry', 'entries') : ''),
         collapsible('Reminders', RemindersUI.card(car, page && page.tasks), page && page.tasks ? reminderHint(page.tasks) : ''),
         collapsible('Fluids and specs', el('section', { class: 'card' }, [
@@ -486,7 +478,7 @@
         return f[name];
       }
 
-      var v = car || { country: 'UK', currency: 'GBP', distanceUnit: 'mi', status: 'Active' };
+      var v = car || { country: 'UK', currency: 'GBP', status: 'Active' };
 
       // Optional purchase price with its own currency, which can differ from the car's running-cost currency.
       function acquisitionCostField() {
@@ -504,25 +496,13 @@
         ]);
       }
 
-      // Odometer reading with its unit chosen right beside it.
+      // Odometer reading, always in miles.
       function odometerField() {
         var odo = text('odometer', v.odometer === null || v.odometer === undefined ? '' : v.odometer, { inputmode: 'numeric', id: 'f-odometer' });
-        var unit = select('distanceUnit', [['mi', 'Miles'], ['km', 'Kilometres']], v.distanceUnit);
-        unit.setAttribute('aria-label', 'Distance unit');
-        // Switching the unit converts the number for you. It always converts from what was last typed, so flipping back and forth never drifts.
-        var base = { unit: v.distanceUnit, value: odo.value };
-        var note = el('div', { class: 'hint', text: 'Whole number. If you switch the unit, the number is converted for you.' });
-        odo.addEventListener('input', function () { base = { unit: unit.value, value: odo.value }; note.textContent = 'Whole number. If you switch the unit, the number is converted for you.'; });
-        unit.addEventListener('change', function () {
-          var n = Number(String(base.value).replace(/[,\s]/g, ''));
-          if (String(base.value).trim() === '' || !isFinite(n)) return;
-          odo.value = String(convertDistance(n, base.unit, unit.value));
-          note.textContent = unit.value === base.unit ? 'Whole number.' : 'Converted from ' + num(n) + ' ' + base.unit + '.';
-        });
         return el('div', { class: 'field' }, [
-          el('label', { for: 'f-odometer', text: 'Current odometer' }),
-          el('div', { class: 'odo-row' }, [odo, unit]),
-          note,
+          el('label', { for: 'f-odometer', text: 'Current odometer (miles)' }),
+          odo,
+          el('div', { class: 'hint', text: 'Whole number, in miles.' }),
         ]);
       }
 
@@ -539,7 +519,7 @@
         UI.field('Market', select('market', [['', 'Not recorded']].concat(MARKETS.map(function (m) { return [m, m]; })), v.market), 'The market the car was built and sold for, e.g. European or Japanese (JDM).'),
         UI.field('Drive side', select('driveSide', [['', 'Not recorded'], ['LHD', 'Left-hand drive (LHD)'], ['RHD', 'Right-hand drive (RHD)']], v.driveSide)),
         UI.field('Fuel capacity (litres)', text('fuelCapacity', v.fuelCapacity === null || v.fuelCapacity === undefined ? '' : v.fuelCapacity, { inputmode: 'decimal', maxlength: '6', placeholder: 'e.g. 87' }), 'Optional. The size of the fuel tank.'),
-        UI.field('Location', select('country', [['UK', 'United Kingdom'], ['UG', 'Uganda']], v.country), 'Where the car is based. It sets the usual currency and miles or km.'),
+        UI.field('Location', select('country', [['UK', 'United Kingdom'], ['UG', 'Uganda']], v.country), 'Where the car is based. It sets the usual currency for its costs.'),
         UI.field('Date imported', text('importDate', v.importDate, { maxlength: '24', placeholder: 'e.g. 2021, Mar 2021 or 12/03/2021' }), 'Optional. A full date, or just the month and year, or just the year.'),
         UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
         odometerField(),
@@ -618,12 +598,6 @@
         el('div', { class: 'hint', text: 'Take a photo with your camera, or choose one from your gallery.' }),
       ];
 
-      if (!car) {
-        f.country.addEventListener('change', function () {
-          f.distanceUnit.value = f.country.value === 'UG' ? 'km' : 'mi';
-        });
-      }
-
       function section(title, children) {
         return el('div', { class: 'form-section' }, [el('h2', { text: title })].concat(children));
       }
@@ -640,7 +614,7 @@
           registration: f.registration.value, make: f.make.value, model: f.model.value, year: f.year.value, colour: f.colour.value,
           nickname: f.nickname.value, vin: f.vin.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, country: f.country.value,
           market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value, importDate: f.importDate.value,
-          distanceUnit: f.distanceUnit.value, status: f.status.value, odometer: f.odometer.value,
+          status: f.status.value, odometer: f.odometer.value,
           acquisitionCost: f.acquisitionCost.value, acquisitionCurrency: f.acquisitionCurrency.value, acquisitionDate: f.acquisitionDate.value,
           partsouqUrl: f.partsouqUrl.value, notes: f.notes.value,
           ownerOther: f.ownerOther.value,

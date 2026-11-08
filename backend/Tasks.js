@@ -6,24 +6,24 @@
  * logged. Logging a Maintenance entry against it (or a Compliance renewal with its new expiry date) moves the
  * due date/distance forward by the repeat interval and clears the reminder.
  *
- * Distances are kept in the car's own unit (entries in the other unit are converted). Any approved user can add,
+ * Distances are always in miles. Any approved user can add,
  * edit and pause reminders; only admins delete them.
  */
 
 const TASK_KINDS = ['maintenance', 'compliance'];
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// Sensible starting points (all editable). Distances are given for each unit.
+// Sensible starting points (all editable). Distances are in miles.
 const STANDARD_TASKS = [
-  { name: 'Engine oil and filter', months: 6, km: 10000, mi: 6000 },
-  { name: 'General service', months: 12, km: 20000, mi: 12000 },
+  { name: 'Engine oil and filter', months: 6, mi: 6000 },
+  { name: 'General service', months: 12, mi: 12000 },
   { name: 'Tyre inspection', months: 3 },
-  { name: 'Coolant change', months: 24, km: 40000, mi: 25000 },
+  { name: 'Coolant change', months: 24, mi: 25000 },
   { name: 'Brake fluid change', months: 24 },
-  { name: 'Air filter', months: 12, km: 20000, mi: 12000 },
-  { name: 'Cabin filter', months: 12, km: 15000, mi: 10000 },
-  { name: 'Spark plugs', months: 48, km: 60000, mi: 36000 },
-  { name: 'Gearbox oil', months: 48, km: 60000, mi: 36000 },
+  { name: 'Air filter', months: 12, mi: 12000 },
+  { name: 'Cabin filter', months: 12, mi: 10000 },
+  { name: 'Spark plugs', months: 48, mi: 36000 },
+  { name: 'Gearbox oil', months: 48, mi: 36000 },
   { name: 'Battery check', months: 12 },
 ];
 
@@ -70,7 +70,7 @@ function plural_(n, word) {
 
 /** Work out where a task stands today, and how to say it. */
 function describeTask_(t, car, today) {
-  const unit = car.distance_unit || 'mi';
+  const unit = 'mi';
   const odo = car.current_odometer === '' || car.current_odometer === undefined ? null : Number(car.current_odometer);
   const dueDist = t.due_distance === '' || t.due_distance === undefined ? null : Number(t.due_distance);
   const daysLeft = t.due_date ? daysBetween_(today, t.due_date) : null;
@@ -118,8 +118,8 @@ function summarizeTask_(t, car, today) {
     assignees: t.assignees ? String(t.assignees).split(',').filter(Boolean) : [],
     active: isTrue_(t.active), pausedReason: t.paused_reason || '',
     status: d.status, daysLeft: d.daysLeft, distanceLeft: d.distanceLeft, text: d.text,
-    repeatText: intervalText_(t, car.distance_unit || 'mi'),
-    distanceUnit: car.distance_unit || 'mi', version: Number(t.version || 1),
+    repeatText: intervalText_(t, 'mi'),
+    distanceUnit: 'mi', version: Number(t.version || 1),
   };
 }
 
@@ -158,7 +158,6 @@ function parseAssignees_(raw) {
 }
 
 function parseTaskInput_(f, car, existing) {
-  const unit = car.distance_unit || 'mi';
   const out = {};
   out.name = cleanStr_(f.name, 80);
   if (!out.name) fail_('name_required');
@@ -166,7 +165,7 @@ function parseTaskInput_(f, car, existing) {
   out.interval_months = parseIntBetween_(f.intervalMonths, 1, 240, 'invalid_interval');
   out.interval_distance = parseIntBetween_(f.intervalDistance, 1, MAX_ODOMETER, 'invalid_interval');
   out.lead_days = parseIntBetween_(f.leadDays, 0, 365, 'invalid_lead') || (out.kind === 'compliance' ? '28' : '14');
-  out.lead_distance = parseIntBetween_(f.leadDistance, 0, 100000, 'invalid_lead') || (unit === 'km' ? '500' : '300');
+  out.lead_distance = parseIntBetween_(f.leadDistance, 0, 100000, 'invalid_lead') || '300';
   out.due_date = parseFullDate_(f.dueDate, true);
   out.due_distance = parseIntBetween_(f.dueDistance, 0, MAX_ODOMETER, 'invalid_odometer');
   out.last_done_date = parseFullDate_(f.lastDoneDate, false);
@@ -200,7 +199,7 @@ function listTasks_(p, ctx) {
   const tasks = liveTasks_(car.id).map(function (t) { return summarizeTask_(t, car, today); }).sort(function (a, b) {
     return (STATUS_ORDER[a.status] - STATUS_ORDER[b.status]) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999') || a.name.localeCompare(b.name);
   });
-  return { tasks: tasks, distanceUnit: car.distance_unit || 'mi' };
+  return { tasks: tasks, distanceUnit: 'mi' };
 }
 
 /** Names of approved users, so anyone can pick who gets a reminder. */
@@ -259,17 +258,16 @@ function deleteTask_(p, ctx) {
 function addStandardTasks_(p, ctx) {
   const car = findCar_(cleanStr_(p.carId, 64), false);
   if (!car) fail_('not_found');
-  const unit = car.distance_unit || 'mi';
   const today = todayIso_();
   const have = liveTasks_(car.id);
   const odo = car.current_odometer === '' ? null : Number(car.current_odometer);
   let added = 0;
   STANDARD_TASKS.forEach(function (s) {
     if (have.some(function (t) { return sameName_(t.name, s.name); })) return;
-    const dist = s[unit];
+    const dist = s.mi;
     const row = Object.assign(baseColumns_(ctx), {
       car_id: car.id, kind: 'maintenance', name: s.name, interval_months: String(s.months), interval_distance: dist ? String(dist) : '',
-      lead_days: '14', lead_distance: unit === 'km' ? '500' : '300',
+      lead_days: '14', lead_distance: '300',
       due_date: addMonths_(today, s.months), due_distance: dist && odo !== null ? String(odo + dist) : '',
       assignees: '', active: true, last_reminded_at: '',
     });
@@ -287,9 +285,8 @@ function addStandardTasks_(p, ctx) {
  * Moves the next due date / distance forward and clears the reminder. Returns the updated task row.
  */
 function completeTask_(task, car, done, ctx) {
-  const carUnit = car.distance_unit || 'mi';
   let lastDist = '';
-  if (done.mileage !== '' && done.mileage !== undefined) lastDist = convertDistance_(done.mileage, done.unit || carUnit, carUnit);
+  if (done.mileage !== '' && done.mileage !== undefined) lastDist = Number(done.mileage);
   else if (car.current_odometer !== '' && car.current_odometer !== undefined) lastDist = Number(car.current_odometer);
 
   const patch = { last_done_date: done.date, last_done_distance: lastDist === '' ? '' : String(lastDist), last_reminded_at: '' };
@@ -306,18 +303,18 @@ function completeTask_(task, car, done, ctx) {
   Object.assign(patch, { updated_at: nowIso_(), updated_by: ctx.user.id, version: Number(task.version || 1) + 1 });
   Db.update('Tasks', task._row, patch);
   audit_(ctx.user, 'task_completed', 'Task', task.id, car.registration + ': "' + task.name + '" done on ' + done.date +
-    (patch.due_date ? ', next due ' + patch.due_date : '') + (patch.due_distance ? ' / ' + patch.due_distance + ' ' + carUnit : ''));
+    (patch.due_date ? ', next due ' + patch.due_date : '') + (patch.due_distance ? ' / ' + patch.due_distance + ' mi' : ''));
   return Object.assign({}, task, patch);
 }
 
 /** A compliance renewal with an expiry date keeps a reminder for it: reuse the one with that name, or create it. */
 function ensureComplianceTask_(entry, car, ctx, explicitTask) {
-  const done = { date: entry.date, mileage: entry.mileage, unit: entry.mileage_unit, expiryDate: entry.expiry_date };
+  const done = { date: entry.date, mileage: entry.mileage, expiryDate: entry.expiry_date };
   let task = explicitTask || liveTasks_(car.id).filter(function (t) { return t.kind === 'compliance' && sameName_(t.name, entry.title); })[0];
   if (task) return completeTask_(task, car, done, ctx);
   const row = Object.assign(baseColumns_(ctx), {
     car_id: car.id, kind: 'compliance', name: cleanStr_(entry.title, 80), interval_months: '', interval_distance: '',
-    lead_days: '28', lead_distance: (car.distance_unit || 'mi') === 'km' ? '500' : '300', due_date: entry.expiry_date, due_distance: '',
+    lead_days: '28', lead_distance: '300', due_date: entry.expiry_date, due_distance: '',
     last_done_date: entry.date, last_done_distance: '', assignees: '', active: true, last_reminded_at: '',
   });
   Db.insert('Tasks', row);

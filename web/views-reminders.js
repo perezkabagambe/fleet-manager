@@ -93,7 +93,7 @@
     });
 
     function build(car, users, task) {
-      var unit = car.distanceUnit || 'mi';
+      var unit = 'miles';
       var t = task || { kind: 'maintenance', assignees: [], active: true };
       var f = {};
       var msg = el('div');
@@ -128,7 +128,7 @@
           num('intervalMonths', t.intervalMonths, 'Repeats every (months)', 'Leave blank if it does not repeat by date.'),
           num('intervalDistance', t.intervalDistance, 'Or every (' + unit + ')', 'Leave blank if it does not repeat by distance. If you set both, whichever comes first.'),
           num('leadDays', t.leadDays || '', 'Start reminding me this many days ahead', 'Default 14 (28 for renewals).'),
-          num('leadDistance', t.leadDistance || '', 'And this many ' + unit + ' ahead', 'Default ' + (unit === 'km' ? '500' : '300') + '.'),
+          num('leadDistance', t.leadDistance || '', 'And this many ' + unit + ' ahead', 'Default 300.'),
         ]),
         el('div', { class: 'form-section' }, [
           el('h2', { text: 'When is it next due?' }),

@@ -44,7 +44,7 @@ function guestCarFor_(carId, secret) {
 }
 
 function guestCarPublic_(car) {
-  return { id: car.id, registration: car.registration, make: car.make, model: car.model, year: car.year ? Number(car.year) : null, colour: car.colour, distanceUnit: car.distance_unit || 'mi', country: car.country || 'UK' };
+  return { id: car.id, registration: car.registration, make: car.make, model: car.model, year: car.year ? Number(car.year) : null, colour: car.colour, distanceUnit: 'mi', country: car.country || 'UK' };
 }
 
 // ---------- public actions ----------
@@ -116,7 +116,7 @@ function guestEntryShape_(e, ctx, attachmentCount) {
   const mine = e.created_by === ctx.user.id;
   const out = {
     id: e.id, type: e.type, title: e.title, notes: e.notes, date: e.date, vendor: e.vendor,
-    mileage: numOrNull_(e.mileage), mileageUnit: e.mileage_unit || '', mine: mine,
+    mileage: numOrNull_(e.mileage), mileageUnit: e.mileage === '' ? '' : 'mi', mine: mine,
     attachmentCount: mine ? attachmentCount : 0,
   };
   if (mine) {

@@ -9,12 +9,11 @@ const COUNTRIES = ['UK', 'UG'];
 const MARKETS = ['European', 'UK', 'Japanese (JDM)', 'North American', 'Middle East (GCC)', 'Australian', 'African', 'Asian', 'Other'];
 const DRIVE_SIDES = ['LHD', 'RHD'];
 const CURRENCIES = ['GBP', 'UGX', 'USD', 'KES', 'EUR'];
-const DISTANCE_UNITS = ['mi', 'km'];
 const CAR_STATUSES = ['Active', 'Sold', 'Scrapped', 'Off-road'];
 const MAX_ODOMETER = 9999999;
 const KM_PER_MILE = 1.609344;
 
-/** Convert a distance between 'mi' and 'km', rounded to a whole number. Currencies are never converted. */
+/** Convert a distance between 'mi' and 'km', rounded to a whole number. Only the one-off move to miles uses this now. Currencies are never converted. */
 function convertDistance_(value, from, to) {
   const n = Number(value);
   if (!isFinite(n) || from === to) return n;
@@ -39,7 +38,7 @@ function summarizeCar_(c) {
     importDate: c.import_date || '',
     fuelCapacity: c.fuel_capacity === '' || c.fuel_capacity === undefined ? null : Number(c.fuel_capacity),
     currency: c.currency || 'GBP',
-    distanceUnit: c.distance_unit || 'mi',
+    distanceUnit: 'mi',
     partsouqUrl: c.partsouq_url,
     status: c.status || 'Active',
     odometer: c.current_odometer === '' ? null : Number(c.current_odometer),
@@ -113,7 +112,7 @@ function parseCarInput_(f, existing) {
   // starting default for new costs. It is not asked for, so an edit keeps whatever the car has.
   const defaultCurrency = out.country === 'UG' ? 'UGX' : 'GBP';
   out.currency = oneOf_(f.currency, CURRENCIES, existing && existing.currency ? existing.currency : defaultCurrency, 'invalid_currency');
-  out.distance_unit = oneOf_(f.distanceUnit, DISTANCE_UNITS, out.country === 'UG' ? 'km' : 'mi', 'invalid_unit');
+  out.distance_unit = 'mi'; // every distance in the app is in miles
   out.status = oneOf_(f.status, CAR_STATUSES, 'Active', 'invalid_status');
 
   // Any secure link to a parts catalogue (PartSouq is the usual one). The column keeps its original name, partsouq_url.
@@ -192,7 +191,7 @@ function parseDate_(raw, allowFuture) {
   return out;
 }
 
-/** '' (not set) or a whole number of miles/km. */
+/** '' (not set) or a whole number of miles. */
 /** Fuel tank size in litres: optional, up to one decimal place. */
 function parseFuelCapacity_(raw) {
   const s = String(raw === null || raw === undefined ? '' : raw).replace(/[,\s]/g, '').replace(/l(itres?)?$/i, '');
@@ -291,12 +290,7 @@ function saveCar_(p, ctx) {
   const input = parseCarInput_(p.fields || {}, existing);
   const dupes = findDuplicates_(input, existing ? existing.id : '');
   if (dupes.length && !p.force) return { saved: false, warnings: dupes };
-  // If the car's unit is being switched, compare the new reading with the old one converted into the new unit.
-  const oldUnit = existing ? (existing.distance_unit || 'mi') : input.distance_unit;
-  const comparable = existing && oldUnit !== input.distance_unit && existing.current_odometer !== ''
-    ? Object.assign({}, existing, { current_odometer: String(convertDistance_(existing.current_odometer, oldUnit, input.distance_unit)) })
-    : existing;
-  checkOdometer_(comparable, input.current_odometer, p, ctx);
+  checkOdometer_(existing, input.current_odometer, p, ctx);
 
   const now = nowIso_();
   if (!existing) {

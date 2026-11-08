@@ -54,12 +54,9 @@
     if (entries && entries.length) lastCurrency[carId] = entries[0].currency; // newest first
   };
 
-  // A reading is shown in the car's own unit. If it was entered in the other unit, the original is shown in brackets.
-  function mileageText(e, car) {
-    var carUnit = car.distanceUnit || 'mi';
-    var unit = e.mileageUnit || carUnit;
-    if (unit === carUnit) return fmt.num(e.mileage) + ' ' + carUnit;
-    return fmt.num(fmt.convertDistance(e.mileage, unit, carUnit)) + ' ' + carUnit + ' (' + fmt.num(e.mileage) + ' ' + unit + ')';
+  // Readings are always in miles.
+  function mileageText(e) {
+    return fmt.num(e.mileage) + ' mi';
   }
 
   function costText(e) {
@@ -445,23 +442,17 @@
       var odoRow = el('label', { class: 'check', hidden: true }, [odoCheck, odoText]);
       function mileageField() {
         var m = text('mileage', v.mileage === null || v.mileage === undefined ? '' : v.mileage, { inputmode: 'numeric', id: 'f-mileage' });
-        var carUnit = car.distanceUnit || 'mi';
-        var unit = select('mileageUnit', [['mi', 'Miles'], ['km', 'Kilometres']], (existing && existing.mileageUnit) || carUnit);
-        unit.setAttribute('aria-label', 'Distance unit');
-        // The car's odometer is offered a rise whatever unit the reading is in; a reading in the other unit is converted for the car.
+        // The car's odometer is offered a rise whenever the reading is higher than what it shows now.
         function check() {
           var reading = num0(m.value);
-          var converted = fmt.convertDistance(reading, unit.value, carUnit);
-          odoRow.hidden = !(reading > 0 && converted > Number(car.odometer || 0));
-          odoText.textContent = 'Update the car\'s odometer to ' + fmt.num(converted) + ' ' + carUnit +
-            (unit.value !== carUnit ? ' (converted from ' + fmt.num(reading) + ' ' + unit.value + ')' : '');
+          odoRow.hidden = !(reading > 0 && reading > Number(car.odometer || 0));
+          odoText.textContent = 'Update the car\'s odometer to ' + fmt.num(reading) + ' mi';
         }
         m.addEventListener('input', check);
-        unit.addEventListener('change', check);
         check();
         return el('div', { class: 'field' }, [
-          el('label', { for: 'f-mileage', text: 'Mileage' }),
-          el('div', { class: 'odo-row' }, [m, unit]),
+          el('label', { for: 'f-mileage', text: 'Mileage (miles)' }),
+          m,
           odoRow,
         ]);
       }
@@ -738,7 +729,7 @@
         var fields = {};
         ['title', 'date', 'mileage', 'vendor', 'notes', 'status', 'cost', 'expiryDate', 'partNumber', 'quantity', 'unitCost', 'shippingCost',
           'productUrl', 'lumpSumCost', 'labourCost', 'labourNote', 'labourHours', 'otherCost', 'otherNote', 'linkedIssueId',
-          'mileageUnit', 'labourCurrency', 'otherCurrency', 'lumpCurrency'].forEach(function (k) {
+          'labourCurrency', 'otherCurrency', 'lumpCurrency'].forEach(function (k) {
           if (f[k]) fields[k] = f[k].value;
         });
         // the entry's main currency: for maintenance it follows the labour (or the invoice total)

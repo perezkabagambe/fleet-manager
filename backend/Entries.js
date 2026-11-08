@@ -116,7 +116,7 @@ function summarizeEntry_(e, guestNames) {
   return {
     guestName: guestNames && String(e.created_by).indexOf('guest:') === 0 ? (guestNames[String(e.created_by).slice(6)] || 'Guest') : '',
     id: e.id, carId: e.car_id, type: e.type, title: e.title, notes: e.notes, date: e.date,
-    mileage: numOrNull_(e.mileage), mileageUnit: e.mileage_unit || '', vendor: e.vendor, currency: e.currency || 'GBP',
+    mileage: numOrNull_(e.mileage), mileageUnit: e.mileage === '' ? '' : 'mi', vendor: e.vendor, currency: e.currency || 'GBP',
     status: e.status, linkedIssueId: e.linked_issue_id, costMode: e.cost_mode || 'itemised',
     lumpSumCost: numOrNull_(e.lump_sum_cost), lumpCurrency: e.lump_currency || e.currency || 'GBP',
     labourCost: numOrNull_(e.labour_cost), labourCurrency: e.labour_currency || e.currency || 'GBP', labourNote: e.labour_note,
@@ -195,7 +195,7 @@ function getEntry_(p, ctx) {
   const car = findCar_(e.car_id, ctx.user.role === 'admin');
   if (!car) fail_('not_found');
   const c = entryContext_(car.id);
-  const out = { entry: summarizeEntry_(e, guestNamesById_()), car: { id: car.id, registration: car.registration, distanceUnit: car.distance_unit || 'mi', currency: car.currency || 'GBP' } };
+  const out = { entry: summarizeEntry_(e, guestNamesById_()), car: { id: car.id, registration: car.registration, distanceUnit: 'mi', currency: car.currency || 'GBP' } };
 
   out.attachments = Db.all('Attachments')
     .filter(function (a) { return a.entry_id === e.id && !isTrue_(a.deleted); })
@@ -266,8 +266,7 @@ function parseEntryInput_(f, type, car) {
   if (!date) fail_('date_required');
   out.date = date;
   out.mileage = parseOdometer_(f.mileage);
-  // The reading's own unit (miles or km). It is only kept when there is a reading.
-  out.mileage_unit = out.mileage === '' ? '' : oneOf_(f.mileageUnit, DISTANCE_UNITS, car.distance_unit || 'mi', 'invalid_unit');
+  out.mileage_unit = out.mileage === '' ? '' : 'mi'; // readings are always in miles
   out.vendor = cleanStr_(f.vendor, 80);
   out.currency = oneOf_(f.currency, CURRENCIES, car.currency || (car.country === 'UG' ? 'UGX' : 'GBP'), 'invalid_currency');
 
@@ -419,16 +418,12 @@ function saveEntry_(p, ctx) {
       extras.issueResolved = true;
     }
   }
-  // The reading may be in the other unit (km on a miles car): convert it into the car's unit.
-  const carUnit = car.distance_unit || 'mi';
   if (p.updateOdometer === true && input.mileage !== '') {
-    const readingUnit = input.mileage_unit || carUnit;
-    const reading = convertDistance_(input.mileage, readingUnit, carUnit);
+    const reading = Number(input.mileage);
     if (reading > Number(car.current_odometer || 0)) {
       const patch = touch_(car, ctx, { current_odometer: String(reading), odometer_updated_at: now });
       Db.update('Cars', car._row, patch);
-      audit_(ctx.user, 'odometer_updated', 'Car', car.id, car.registration + ': ' + (car.current_odometer || 'not set') + ' to ' + reading + ' ' + carUnit +
-        (readingUnit !== carUnit ? ' (converted from ' + input.mileage + ' ' + readingUnit + ')' : '') + ' (from ' + type.toLowerCase() + ')');
+      audit_(ctx.user, 'odometer_updated', 'Car', car.id, car.registration + ': ' + (car.current_odometer || 'not set') + ' to ' + reading + ' mi (from ' + type.toLowerCase() + ')');
       car.current_odometer = String(reading); // so the reminder below is worded from the new reading
       extras.odometerUpdated = true;
     }
@@ -436,7 +431,7 @@ function saveEntry_(p, ctx) {
 
   let updatedTask = null;
   if (type === 'Maintenance' && linkedTask && !existing) {
-    updatedTask = completeTask_(linkedTask, car, { date: input.date, mileage: input.mileage, unit: input.mileage_unit }, ctx);
+    updatedTask = completeTask_(linkedTask, car, { date: input.date, mileage: input.mileage }, ctx);
   } else if (type === 'Compliance' && input.expiry_date) {
     updatedTask = ensureComplianceTask_(row, car, ctx, linkedTask);
   }

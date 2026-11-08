@@ -16,7 +16,7 @@
   function dateText(iso) { return iso ? fmt().date(iso) : ''; }
 
   function mileageText(e) {
-    return e.mileage === null || e.mileage === undefined ? '' : fmt().num(e.mileage) + ' ' + (e.mileageUnit || '');
+    return e.mileage === null || e.mileage === undefined ? '' : fmt().num(e.mileage) + ' mi';
   }
 
   // ---------- 1. the page a scan lands on (before a name is given) ----------
@@ -222,10 +222,7 @@
         fields.push(
           UI.field('What was done? *', text('title', '', { maxlength: '120', required: true, placeholder: 'e.g. Oil and filter change' })),
           UI.field('Date *', text('date', today, { type: 'date', max: today, required: true })),
-          UI.field('Mileage', el('div', { class: 'odo-row' }, [
-            text('mileage', '', { inputmode: 'numeric', placeholder: 'Optional' }),
-            select('mileageUnit', [['mi', 'Miles'], ['km', 'Kilometres']], car.distanceUnit || 'mi'),
-          ])),
+          UI.field('Mileage (miles)', text('mileage', '', { inputmode: 'numeric', placeholder: 'Optional' })),
           UI.field('Garage or who did the work', text('vendor', '', { maxlength: '80', placeholder: me.name }), 'Optional.'),
           moneyField('Total cost', text('totalCost', '', { inputmode: 'decimal', placeholder: 'Optional' }), currency('totalCurrency'), 'Optional. Only you and the car\'s team can see it.')
         );

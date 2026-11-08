@@ -66,7 +66,7 @@ function afterText_(task, car) {
   if (task.kind === 'compliance') {
     return 'Once you record the renewal with its new expiry date, Fleet Manager will remind you again before that date.';
   }
-  const every = intervalText_(task, car.distance_unit || 'mi');
+  const every = intervalText_(task, 'mi');
   return every
     ? 'Once you record it, Fleet Manager will remind you again in ' + every + '.'
     : 'Once you record it, this reminder is cleared.';
@@ -85,7 +85,7 @@ function sendDigestEmail_(entry) {
     const car = i.car;
     const link = logLink_(t);
     const label = t.kind === 'compliance' ? 'Record the renewal' : 'Log this maintenance';
-    const last = t.last_done_date ? 'Last done ' + fmtDateText_(t.last_done_date) + (t.last_done_distance ? ' at ' + thousands_(Number(t.last_done_distance)) + ' ' + (car.distance_unit || 'mi') : '') + '.' : '';
+    const last = t.last_done_date ? 'Last done ' + fmtDateText_(t.last_done_date) + (t.last_done_distance ? ' at ' + thousands_(Number(t.last_done_distance)) + ' ' + ('mi') : '') + '.' : '';
     const colour = i.desc.status === 'overdue' ? '#b3261e' : '#6b4a00';
     html += '<div style="border:1px solid #d9e0e6;border-radius:10px;padding:12px 14px;margin:14px 0">' +
       '<div style="font-weight:700;font-size:16px">' + esc_(t.name) + '</div>' +

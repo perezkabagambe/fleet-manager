@@ -118,7 +118,7 @@ test('the first due date comes from the interval: from now, or from when it was 
   assert.equal(oneOff.intervalMonths, null);
 });
 
-test('heads-up defaults: 14 days / 300 mi for maintenance, 28 days for compliance, 500 km for a km car', () => {
+test('heads-up defaults: 14 days / 300 mi for maintenance, 28 days for compliance', () => {
   const { task } = setup();
   const m = task({ name: 'Oil', intervalMonths: '6' }).data.task;
   assert.equal(m.leadDays, 14);
@@ -128,8 +128,6 @@ test('heads-up defaults: 14 days / 300 mi for maintenance, 28 days for complianc
   const own = task({ name: 'Tyres', intervalMonths: '3', leadDays: '0', leadDistance: '1000' }).data.task;
   assert.equal(own.leadDays, 0, 'zero is allowed');
   assert.equal(own.leadDistance, 1000);
-  const km = setup({ registration: 'UBA 1', distanceUnit: 'km', odometer: '80000' });
-  assert.equal(km.task({ name: 'Oil', intervalMonths: '6' }).data.task.leadDistance, 500);
 });
 
 // ---------- status ----------
@@ -184,7 +182,7 @@ test('the list shows the most urgent first', () => {
 
 // ---------- standard reminders ----------
 
-test('standard reminders are added once, count from today, and use the car\'s unit', () => {
+test('standard reminders are added once, count from today, and are in miles', () => {
   const { env, sam, car, tasks } = setup({ odometer: '50000' });
   const first = env.call('addStandardTasks', { token: sam, carId: car.id });
   assert.equal(first.data.added, 10);
@@ -195,10 +193,6 @@ test('standard reminders are added once, count from today, and use the car\'s un
   assert.equal(oil.dueDistance, 56000);
   assert.ok(tasks().every((t) => t.status === 'ok'), 'none start overdue');
   assert.equal(tasks().find((t) => t.name === 'Tyre inspection').intervalDistance, null, 'date-only ones have no distance');
-
-  const km = setup({ registration: 'KM 1', distanceUnit: 'km', odometer: '80000' });
-  km.env.call('addStandardTasks', { token: km.sam, carId: km.car.id });
-  assert.equal(km.tasks().find((t) => t.name === 'Engine oil and filter').intervalDistance, 10000, 'kilometres');
 });
 
 test('a renamed standard reminder is not added a second time', () => {
@@ -228,11 +222,11 @@ test('logging maintenance against a reminder moves the next due date and distanc
   assert.ok(sam && car);
 });
 
-test('the reading may be in km on a miles car; with no reading the odometer is used', () => {
+test('the reading is in miles; with no reading the odometer is used', () => {
   const { task, entry, tasks } = setup({ odometer: '50000' });
   const t = task({ name: 'Oil', intervalMonths: '6', intervalDistance: '6000', dueDate: day(5) }).data.task;
-  entry('Maintenance', { title: 'Oil change', date: '2025-03-01', mileage: '90000', mileageUnit: 'km' }, { taskId: t.id });
-  assert.equal(tasks()[0].lastDoneDistance, 55923, '90,000 km in miles');
+  entry('Maintenance', { title: 'Oil change', date: '2025-03-01', mileage: '55923', mileageUnit: 'km' }, { taskId: t.id });
+  assert.equal(tasks()[0].lastDoneDistance, 55923, 'a unit sent by an old phone is ignored');
   assert.equal(tasks()[0].dueDistance, 61923);
 
   const u = task({ name: 'Tyres', intervalMonths: '3', intervalDistance: '10000', dueDate: day(5) }).data.task;
