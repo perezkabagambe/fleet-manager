@@ -466,3 +466,8 @@ details.collapsible[open] > summary .collapse-hint { display: none; }
 .head-with-thumb > div:last-child { min-width: 0; }
 .top-thumb[hidden] { display: none; }
 .thumb-box.entry-thumb { width: 72px; height: 72px; }
+
+/* Entry reference numbers */
+.ref-line { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.ref-badge { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95rem; font-weight: 600; letter-spacing: 0.02em; padding: 2px 8px; border: 1px solid var(--border); border-radius: 6px; }
+.copy-value { font-size: 0.9rem; }

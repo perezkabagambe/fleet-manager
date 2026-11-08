@@ -188,6 +188,22 @@
     return Promise.resolve(fallback());
   }
 
+  /** A small button that copies a short value (such as an entry's reference) and says "Copied" for a moment. */
+  function copyValueButton(value, label) {
+    var btn = el('button', { type: 'button', class: 'linklike copy-value', text: 'Copy', 'aria-label': label || 'Copy ' + value });
+    var timer = null;
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      copyText(value).then(function (ok) {
+        clearTimeout(timer);
+        btn.textContent = ok ? 'Copied' : 'Could not copy';
+        timer = setTimeout(function () { btn.textContent = 'Copy'; }, 1800);
+      });
+    });
+    return btn;
+  }
+
   var LINK_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg>';
   var TICK_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>';
@@ -229,5 +245,5 @@
     return btn;
   }
 
-  window.UI = { el: el, field: field, notice: notice, errorText: errorText, busy: busy, confirm: confirmDialog, editToggle: editToggle, copyText: copyText, copyLinkButton: copyLinkButton };
+  window.UI = { el: el, field: field, notice: notice, errorText: errorText, busy: busy, copyValueButton: copyValueButton, confirm: confirmDialog, editToggle: editToggle, copyText: copyText, copyLinkButton: copyLinkButton };
 })();

@@ -31,7 +31,7 @@ const SCHEMA = {
     cols: ['car_id', 'type', 'title', 'notes', 'date', 'mileage', 'cost', 'currency', 'vendor', 'status',
       'linked_issue_id', 'task_id', 'cost_mode', 'lump_sum_cost', 'labour_cost', 'labour_note', 'labour_hours',
       'other_cost', 'other_note', 'part_number', 'quantity', 'unit_cost', 'shipping_cost', 'product_url', 'expiry_date',
-      'mileage_unit', 'labour_currency', 'other_currency', 'lump_currency'],
+      'mileage_unit', 'labour_currency', 'other_currency', 'lump_currency', 'ref'],
   },
   // People who scanned a car's QR code: one row per guest name, kept for ever so a name is never reused.
   Guests: { base: true, cols: ['car_id', 'name', 'name_key', 'token_hash', 'expires_at', 'blocked', 'last_seen'] },
@@ -51,7 +51,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 16; // 16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 17; // 17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
@@ -71,6 +71,7 @@ function migrateIfNeeded_() {
     giveCarsGuestSecrets_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 11) switchOnGuestAccessEverywhere_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 15) convertEverythingToMiles_();
+    if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 17) numberExistingEntries_();
     Db.invalidateAll(); // the sheets were changed directly: nothing remembered about them can be trusted
     props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   } finally {
@@ -209,6 +210,13 @@ function convertEverythingToMiles_() {
     });
     if (Object.keys(patch).length) Db.update('Tasks', t._row, patch);
   });
+}
+
+/** One-off (version 17): give every existing entry (deleted ones too, so a number is never reused) a reference, oldest first. */
+function numberExistingEntries_() {
+  const rows = Db.all('Entries').filter(function (e) { return !e.ref && REF_LETTERS[e.type]; })
+    .sort(function (a, b) { return String(a.created_at).localeCompare(String(b.created_at)) || (a._row - b._row); });
+  rows.forEach(function (e) { Db.update('Entries', e._row, { ref: nextEntryRef_(e.type) }); });
 }
 
 /** Every car has a secret for its QR code. */

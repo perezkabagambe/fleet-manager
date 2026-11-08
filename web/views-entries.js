@@ -76,7 +76,7 @@
     var editing = false; // the section's Edit button shows an Edit button on every row
 
     function row(e) {
-      var meta = [dateText(e.date)];
+      var meta = [e.ref, dateText(e.date)].filter(Boolean); // the reference first, e.g. M-0042
       if (e.mileage !== null) meta.push(mileageText(e, car));
       if (e.vendor) meta.push(e.vendor);
       var tags = [];
@@ -272,7 +272,7 @@
       var cards = [el('div', { class: 'copy-row' }, [UI.copyLinkButton(fmt.entryUrl(carId, e.id), { label: 'Copy link to this entry' })]),
         el('section', { class: 'card' }, [
         fmt.backLink('#/car/' + carId, car.registration),
-        el('div', { class: 'page-head' }, [el('div', { class: 'head-with-thumb' }, [topThumb, el('div', {}, [el('h1', { text: e.title }), el('div', { class: 'muted', text: meta.join(' · ') })])]), el('div', { class: 'entry-tags' }, [typeChip(e.type), e.guestName ? GuestUI.chip(e) : null])]),
+        el('div', { class: 'page-head' }, [el('div', { class: 'head-with-thumb' }, [topThumb, el('div', {}, [el('h1', { text: e.title }), el('div', { class: 'muted', text: meta.join(' · ') }), e.ref ? el('div', { class: 'ref-line' }, [el('span', { class: 'ref-badge', text: e.ref }), UI.copyValueButton(e.ref, 'Copy reference ' + e.ref)]) : null])]), el('div', { class: 'entry-tags' }, [typeChip(e.type), e.guestName ? GuestUI.chip(e) : null])]),
         msg, statusArea,
         d.reminder ? el('p', { class: 'muted small-text' }, [el('span', { text: 'Reminder: ' }), el('a', { href: '#/car/' + carId + '/reminder/' + d.reminder.id, text: d.reminder.name })]) : null,
         el('a', { class: 'btn block big edit-top', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit ' + BY_TYPE[e.type].label.toLowerCase() }),

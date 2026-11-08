@@ -445,6 +445,89 @@ test('attachments are read back through the record, and only admins remove them'
   assert.equal(env.call('deleteAttachment', { token: admin, id: a.id }).error, 'not_found');
 });
 
+// ---------- reference numbers ----------
+
+test('every entry gets a reference: a letter for its type and a running number for that type', () => {
+  const { add, get, list } = setup();
+  const i1 = add('Issue', issue()).data.entry;
+  const m1 = add('Maintenance', repair()).data.entry;
+  const p1 = add('Purchase', purchase()).data.entry;
+  const c1 = add('Compliance', { title: 'MOT passed', date: D1, expiryDate: '2099-03-01' }).data.entry;
+  const i2 = add('Issue', issue({ title: 'Second issue' })).data.entry;
+  const m2 = add('Maintenance', repair({ title: 'Second job' })).data.entry;
+  assert.deepEqual([i1.ref, m1.ref, p1.ref, c1.ref, i2.ref, m2.ref], ['I-0001', 'M-0001', 'P-0001', 'C-0001', 'I-0002', 'M-0002']);
+  assert.equal(get(m2.id).data.entry.ref, 'M-0002', 'the detail carries it');
+  assert.equal(list().find((e) => e.id === m1.id).ref, 'M-0001', 'and so does the list');
+});
+
+test('a reference never changes when the entry is edited, and is not taken from the request', () => {
+  const { env, sam, add, get } = setup();
+  const e = add('Issue', issue()).data.entry;
+  env.call('saveEntry', { token: sam, id: e.id, version: e.version, fields: Object.assign(issue({ title: 'Renamed' }), { ref: 'I-9999' }), ref: 'I-9999' });
+  assert.equal(get(e.id).data.entry.ref, 'I-0001');
+  assert.equal(get(e.id).data.entry.title, 'Renamed');
+});
+
+test('a reference is never reused, even after the entry is deleted', () => {
+  const { env, admin, add } = setup();
+  const a = add('Issue', issue()).data.entry;
+  const b = add('Issue', issue({ title: 'Another' })).data.entry;
+  assert.equal(env.call('deleteEntry', { token: admin, id: b.id }).ok, true);
+  assert.equal(add('Issue', issue({ title: 'Third' })).data.entry.ref, 'I-0003', 'the deleted I-0002 is not handed out again');
+  assert.equal(a.ref, 'I-0001');
+});
+
+test('references stay unique even if the stored counter is lost', () => {
+  const { env, add } = setup();
+  add('Maintenance', repair());
+  add('Maintenance', repair({ title: 'Two' }));
+  env.props.REF_M = '0';   // as if the property had been wiped
+  assert.equal(add('Maintenance', repair({ title: 'Three' })).data.entry.ref, 'M-0003');
+  env.props.REF_M = '50';  // or is ahead: it is never moved back
+  assert.equal(add('Maintenance', repair({ title: 'Four' })).data.entry.ref, 'M-0051');
+});
+
+test('parts bought together with a job are numbered as purchases, and the numbering is shared by every car', () => {
+  const { env, sam, car, add, list } = setup();
+  const j = add('Maintenance', repair({ title: 'Brake job' }), { parts: [{ name: 'Pads', quantity: '1', unitCost: '30' }, { name: 'Discs', quantity: '2', unitCost: '40' }] }).data.entry;
+  const bought = list().filter((e) => e.type === 'Purchase').map((e) => e.ref).sort();
+  assert.deepEqual(bought, ['P-0001', 'P-0002']);
+  const other = env.call('saveCar', { token: sam, fields: Object.assign({}, CAR, { registration: 'ZZ99 ZZZ' }) }).data.car;
+  const next = env.call('saveEntry', { token: sam, carId: other.id, type: 'Purchase', fields: purchase() }).data.entry;
+  assert.equal(next.ref, 'P-0003', 'a different car continues the same count');
+  assert.equal(j.ref, 'M-0001');
+  assert.ok(car);
+});
+
+test('past 9,999 a reference simply gets longer', () => {
+  const { env, add } = setup();
+  env.props.REF_I = '9998';
+  assert.equal(add('Issue', issue()).data.entry.ref, 'I-9999');
+  assert.equal(add('Issue', issue({ title: 'More' })).data.entry.ref, 'I-10000');
+});
+
+test('the move to reference numbers numbers the existing entries oldest first, deleted ones included', () => {
+  const { env, sam, admin, car, add, get } = setup();
+  const a = add('Issue', issue({ title: 'First' })).data.entry;
+  env.advance(1000);
+  const b = add('Maintenance', repair({ title: 'Second' })).data.entry;
+  env.advance(1000);
+  const c = add('Issue', issue({ title: 'Third' })).data.entry;
+  env.call('deleteEntry', { token: admin, id: c.id });
+  // wind back to before: no references anywhere, no counters
+  const header = env.sheets.Entries._rows[0];
+  const col = header.indexOf('ref');
+  env.sheets.Entries._rows.forEach((r, i) => { if (i > 0) r[col] = ''; });
+  delete env.props.REF_I; delete env.props.REF_M;
+  env.invalidate();
+  env.props.SCHEMA_VERSION = '16';
+  assert.equal(get(a.id).data.entry.ref, 'I-0001');
+  assert.equal(get(b.id).data.entry.ref, 'M-0001');
+  assert.equal(env.sheets.Entries._rows.find((r) => r[0] === c.id)[col], 'I-0002', 'a deleted entry keeps its number');
+  assert.equal(add('Issue', issue({ title: 'New' })).data.entry.ref, 'I-0003', 'new ones carry on after the old');
+  assert.ok(sam && car);
+});
+
 test('the first photo on an entry becomes its thumbnail; PDFs and later photos do not', () => {
   const { env, sam, car, add, get, list } = setup();
   const e = add('Maintenance', repair()).data.entry;

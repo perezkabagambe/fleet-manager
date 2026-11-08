@@ -341,6 +341,17 @@ test('a guest can only add so much in an hour', () => {
   assert.equal(as('guestSaveEntry', g, { type: 'Maintenance', fields: job({ title: 'Too many' }) }).error, 'try_later');
 });
 
+test('entries added by a guest get a reference too, from the same running numbers as staff entries', () => {
+  const { env, join, as, staffAdd } = setup();
+  const first = staffAdd('Maintenance', job({ title: 'Staff job' })).data.entry;
+  assert.equal(first.ref, 'M-0001');
+  const g = join('Pat').data.guestToken;
+  assert.equal(as('guestSaveEntry', g, { type: 'Maintenance', fields: job({ title: 'Guest job' }) }).ok, true);
+  const header = env.sheets.Entries._rows[0];
+  const row = env.sheets.Entries._rows.find((r) => r[header.indexOf('title')] === 'Guest job');
+  assert.equal(row[header.indexOf('ref')], 'M-0002');
+});
+
 test('older cars are given a QR secret by the migration', () => {
   const { env, sam, car, admin } = setup();
   const col = env.sheets.Cars._rows[0].indexOf('guest_secret');

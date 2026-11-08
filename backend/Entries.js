@@ -14,6 +14,37 @@
  */
 
 const ENTRY_TYPES = ['Issue', 'Maintenance', 'Compliance', 'Purchase'];
+
+// ---------- reference numbers ----------
+// Every entry has a short reference that is unique across the whole app: a letter for its type and a running
+// number for that type, like M-0042 (Maintenance), I-0017 (Issue), P-0123 (Purchase), C-0008 (Compliance).
+// A reference never changes and is never reused, even after the entry is deleted.
+const REF_LETTERS = { Maintenance: 'M', Issue: 'I', Purchase: 'P', Compliance: 'C' };
+
+function refNumber_(ref, letter) {
+  const m = /^([MIPC])-(\d+)$/.exec(String(ref || ''));
+  return m && m[1] === letter ? Number(m[2]) : 0;
+}
+
+function formatRef_(letter, n) {
+  return letter + '-' + (n < 10000 ? ('000' + n).slice(-4) : String(n));
+}
+
+/**
+ * The next reference for an entry type. The last number used is kept in the script properties, and every existing
+ * entry (deleted ones too) is checked as well, so even if the counter were ever lost no reference is handed out twice.
+ * Always called inside the script lock (every action that creates an entry holds it).
+ */
+function nextEntryRef_(type) {
+  const letter = REF_LETTERS[type];
+  if (!letter) return '';
+  const key = 'REF_' + letter;
+  let top = Number(props_().getProperty(key) || 0);
+  Db.all('Entries').forEach(function (e) { top = Math.max(top, refNumber_(e.ref, letter)); });
+  const next = top + 1;
+  props_().setProperty(key, String(next));
+  return formatRef_(letter, next);
+}
 const ISSUE_STATUSES = ['Not resolved', 'In-work', 'Resolved', 'Ignored'];
 const JOB_TYPES = ['Maintenance'];
 const MAX_PARTS = 30;
@@ -115,7 +146,7 @@ function jobCost_(e, usage, purchasesById) {
 function summarizeEntry_(e, guestNames) {
   return {
     guestName: guestNames && String(e.created_by).indexOf('guest:') === 0 ? (guestNames[String(e.created_by).slice(6)] || 'Guest') : '',
-    id: e.id, carId: e.car_id, type: e.type, title: e.title, notes: e.notes, date: e.date,
+    id: e.id, ref: e.ref || '', carId: e.car_id, type: e.type, title: e.title, notes: e.notes, date: e.date,
     mileage: numOrNull_(e.mileage), mileageUnit: e.mileage === '' ? '' : 'mi', vendor: e.vendor, currency: e.currency || 'GBP',
     status: e.status, linkedIssueId: e.linked_issue_id, costMode: e.cost_mode || 'itemised',
     lumpSumCost: numOrNull_(e.lump_sum_cost), lumpCurrency: e.lump_currency || e.currency || 'GBP',
@@ -407,7 +438,7 @@ function saveEntry_(p, ctx) {
     row = Object.assign({}, existing, patch);
     audit_(ctx.user, 'entry_updated', 'Entry', existing.id, type + ' "' + input.title + '" on ' + car.registration + ': ' + (Object.keys(after).join(', ') || 'parts'), before, after);
   } else {
-    row = Object.assign(baseColumns_(ctx), { car_id: car.id, type: type }, input);
+    row = Object.assign(baseColumns_(ctx), { car_id: car.id, type: type, ref: nextEntryRef_(type) }, input);
     Db.insert('Entries', row);
     audit_(ctx.user, 'entry_created', 'Entry', row.id, type + ' "' + input.title + '" added to ' + car.registration);
   }
@@ -455,7 +486,7 @@ function applyParts_(event, plan, car, ctx) {
   const use = Object.assign({}, plan.use);
   plan.create.forEach(function (n) {
     const purchase = Object.assign(baseColumns_(ctx), {
-      car_id: car.id, type: 'Purchase', title: n.name, notes: 'Bought for ' + event.type.toLowerCase() + ' "' + event.title + '"',
+      car_id: car.id, type: 'Purchase', ref: nextEntryRef_('Purchase'), title: n.name, notes: 'Bought for ' + event.type.toLowerCase() + ' "' + event.title + '"',
       date: event.date, vendor: n.vendor, currency: n.currency, part_number: n.partNumber,
       quantity: String(n.quantity), unit_cost: n.unitCost, shipping_cost: n.shipping,
     });
