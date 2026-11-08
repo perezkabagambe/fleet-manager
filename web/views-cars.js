@@ -120,12 +120,7 @@
             chip(c.status),
             el('span', { class: 'muted small-text', text: c.odometer === null ? '' : num(c.odometer) + ' ' + c.distanceUnit }),
           ]),
-          mine && (mine.owner || mine.keeper)
-            ? el('div', { class: 'mine' }, [
-              mine.owner ? el('span', { class: 'chip sold', text: 'Owner' }) : null,
-              mine.keeper ? el('span', { class: 'chip sold', text: 'Keeper' }) : null,
-            ])
-            : null,
+          mine && mine.owner ? el('div', { class: 'mine' }, [el('span', { class: 'chip sold', text: 'Yours' })]) : null,
         ]),
       ]);
     }
@@ -138,7 +133,7 @@
       var skip = el('button', { type: 'button', class: 'btn small secondary', text: 'Not now' });
       var box = el('div', { class: 'prompt' }, [
         el('strong', { text: 'Do you own or look after any of these cars?' }),
-        el('p', { class: 'muted small-text', text: 'Tell us which ones you own or are the registered keeper of.' }),
+        el('p', { class: 'muted small-text', text: 'Tell us which ones you own or are the custodian of.' }),
         el('div', { class: 'btn-row' }, [
           el('a', { class: 'btn small', href: '#/profile/cars', text: 'Choose my cars' }), skip,
         ]),
@@ -190,7 +185,7 @@
     root.replaceChildren(el('section', { class: 'card' }, [loading()]));
 
     FleetApi.call('getCar', { id: id }).then(function (r) {
-      render(r.data.car, r.data.fluids, r.data.people || { owners: [], keepers: [] });
+      render(r.data.car, r.data.fluids, r.data.people || { owners: [] });
     }).catch(function (e) {
       if (e.code === 'not_found') notFound(root);
       else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e)), backLink('#/', 'Fleet')]));
@@ -288,51 +283,34 @@
         detail('Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? '' : money(car.acquisitionCost, car.acquisitionCurrency || car.currency))
       );
 
-      // owner / registered keeper: names from app users, plus any free-text person who is not a user
+      // owner/custodian: names from app users, plus any free-text person who is not a user
       var me = FleetAuth.getUser();
-      var peopleText = {
-        owner: el('dd'), keeper: el('dd'),
-      };
+      var ownerText = el('dd');
       function showPeople(p) {
-        var owners = p.owners.map(function (x) { return x.name; }).concat(car.ownerOther ? [car.ownerOther] : []);
-        var keepers = p.keepers.map(function (x) { return x.name; }).concat(car.keeperOther ? [car.keeperOther] : []);
-        peopleText.owner.textContent = owners.length ? owners.join(', ') : 'Not recorded';
-        peopleText.keeper.textContent = keepers.length ? keepers.join(', ') : 'Not recorded';
+        var names = p.owners.map(function (x) { return x.name; }).concat(car.ownerOther ? [car.ownerOther] : []);
+        ownerText.textContent = names.length ? names.join(', ') : 'Not recorded';
       }
       showPeople(people);
       var ownerBox = el('input', { type: 'checkbox' });
-      var keeperBox = el('input', { type: 'checkbox' });
-      var saved = {
-        owner: people.owners.some(function (x) { return x.userId === me.id; }),
-        keeper: people.keepers.some(function (x) { return x.userId === me.id; }),
-      };
-      ownerBox.checked = saved.owner;
-      keeperBox.checked = saved.keeper;
-      function saveMine() {
-        ownerBox.disabled = keeperBox.disabled = true;
+      var savedOwner = people.owners.some(function (x) { return x.userId === me.id; });
+      ownerBox.checked = savedOwner;
+      ownerBox.addEventListener('change', function () {
+        ownerBox.disabled = true;
         msg.replaceChildren();
-        FleetApi.call('setMyCarRole', { carId: car.id, owner: ownerBox.checked, keeper: keeperBox.checked }).then(function (r) {
+        FleetApi.call('setMyCarRole', { carId: car.id, owner: ownerBox.checked }).then(function (r) {
           carsCache = null;
-          saved = { owner: ownerBox.checked, keeper: keeperBox.checked };
+          savedOwner = ownerBox.checked;
           showPeople(r.data.people);
         }).catch(function (e) {
-          // Put the tick boxes back to what the server still has.
-          ownerBox.checked = saved.owner;
-          keeperBox.checked = saved.keeper;
+          ownerBox.checked = savedOwner; // put it back to what the server still has
           msg.replaceChildren(UI.notice('error', UI.errorText(e)));
-        }).finally(function () { ownerBox.disabled = keeperBox.disabled = false; });
-      }
-      ownerBox.addEventListener('change', saveMine);
-      keeperBox.addEventListener('change', saveMine);
+        }).finally(function () { ownerBox.disabled = false; });
+      });
       var peopleCard = el('section', { class: 'card' }, [
-        el('h2', { text: 'Owner and keeper' }),
-        el('dl', { class: 'details' }, [
-          el('dt', { text: 'Owner' }), peopleText.owner,
-          el('dt', { text: 'Registered keeper' }), peopleText.keeper,
-        ]),
-        el('label', { class: 'check' }, [ownerBox, el('span', { text: 'I own this car' })]),
-        el('label', { class: 'check' }, [keeperBox, el('span', { text: 'I am the registered keeper' })]),
-        FleetAuth.isAdmin() ? el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/people', text: 'Edit owners and keepers' }) : null,
+        el('h2', { text: 'Owner/Custodian' }),
+        el('dl', { class: 'details' }, [el('dt', { text: 'Owner/Custodian' }), ownerText]),
+        el('label', { class: 'check' }, [ownerBox, el('span', { text: 'I am an owner/custodian of this car' })]),
+        FleetAuth.isAdmin() ? el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/people', text: 'Edit owners/custodians' }) : null,
       ]);
 
       var fluidRows = fluids.map(function (f) {
@@ -359,9 +337,6 @@
           photoStatus,
           el('div', { class: 'btn-row' }, [
             el('a', { class: 'btn small', href: '#/car/' + car.id + '/edit', text: 'Edit' }),
-            car.partsouqUrl
-              ? el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Catalogue: ' + hostOf(car.partsouqUrl) })
-              : null,
             deleteBtn,
           ]),
         ]),
@@ -383,6 +358,9 @@
             el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/fluids', text: fluids.length ? 'Edit' : 'Add' }),
           ]),
           fluids.length ? el('ul', { class: 'fluids' }, fluidRows) : el('p', { class: 'muted', text: 'No fluid specs recorded yet.' }),
+          el('div', { class: 'catalogue' }, car.partsouqUrl
+            ? [el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) })]
+            : [el('span', { class: 'muted', text: 'No parts catalogue link yet. ' }), el('a', { href: '#/car/' + car.id + '/edit', text: 'Add one' })]),
         ]),
         el('section', { class: 'card' }, [
           el('h2', { text: 'QR label' }),
@@ -471,9 +449,8 @@
       f.notes = notes;
       fields.push(UI.field('Notes', notes));
 
-      // For an owner or registered keeper who is not a user of this app. Users are linked on the car page.
-      fields.push(UI.field('Other owner', text('ownerOther', v.ownerOther, { maxlength: '80' }), 'Optional. If the owner is not a user of this app, e.g. a company or a relative.'));
-      fields.push(UI.field('Other registered keeper', text('keeperOther', v.keeperOther, { maxlength: '80' }), 'Optional. If the registered keeper is not a user of this app.'));
+      // For an owner/custodian who is not a user of this app. Users are linked on the car page.
+      fields.push(UI.field('Other owner/custodian', text('ownerOther', v.ownerOther, { maxlength: '80' }), 'Optional. If the owner/custodian is not a user of this app, e.g. a company or a relative.'));
 
       // New cars can take a photo straight away; existing cars manage it on the car page.
       var photoInput = null;
@@ -498,7 +475,7 @@
           distanceUnit: f.distanceUnit.value, status: f.status.value, odometer: f.odometer.value,
           acquisitionCost: f.acquisitionCost.value, acquisitionCurrency: f.acquisitionCurrency.value, acquisitionDate: f.acquisitionDate.value,
           partsouqUrl: f.partsouqUrl.value, notes: f.notes.value,
-          ownerOther: f.ownerOther.value, keeperOther: f.keeperOther.value,
+          ownerOther: f.ownerOther.value,
         };
       }
 

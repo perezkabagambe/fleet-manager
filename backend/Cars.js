@@ -35,7 +35,6 @@ function summarizeCar_(c) {
     acquisitionCurrency: c.acquisition_currency || c.currency || 'GBP',
     acquisitionDate: c.acquisition_date || '',
     ownerOther: c.owner_other || '',
-    keeperOther: c.keeper_other || '',
     notes: c.notes,
     version: Number(c.version || 1),
     deleted: isTrue_(c.deleted),
@@ -109,9 +108,9 @@ function parseCarInput_(f, existing) {
     : oneOf_(f.acquisitionCurrency, CURRENCIES, out.currency, 'invalid_currency');
   out.acquisition_date = parseDate_(f.acquisitionDate);
   out.notes = cleanText_(f.notes, 2000);
-  // An owner or registered keeper who is not an app user (a company, a relative...). Free text.
+  // An owner/custodian who is not an app user (a company, a relative...). Free text.
+  // (The old keeper_other column is left untouched and unused.)
   out.owner_other = cleanStr_(f.ownerOther, 80);
-  out.keeper_other = cleanStr_(f.keeperOther, 80);
   return out;
 }
 
@@ -202,12 +201,11 @@ function findDuplicates_(input, excludeId) {
 function listCars_(p, ctx) {
   const all = Db.all('Cars');
   const byReg = function (a, b) { return a.registration.localeCompare(b.registration); };
-  // Which cars this user owns / is the registered keeper of, so the fleet screen can badge them.
+  // Which cars this user owns / is custodian of, so the fleet screen can badge them.
   const mine = {};
   Db.all('CarPeople').forEach(function (r) {
     if (r.user_id !== ctx.user.id || isTrue_(r.deleted)) return;
-    mine[r.car_id] = mine[r.car_id] || { owner: false, keeper: false };
-    mine[r.car_id][r.role] = true;
+    mine[r.car_id] = { owner: true };
   });
   return {
     mine: mine,

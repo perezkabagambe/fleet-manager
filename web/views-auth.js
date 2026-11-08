@@ -129,7 +129,7 @@
       msg, form,
       el('hr', { class: 'rule' }),
       el('h2', { text: 'My cars' }),
-      el('p', { class: 'muted', text: 'Say which cars you own or are the registered keeper of.' }),
+      el('p', { class: 'muted', text: 'Say which cars you own or look after.' }),
       el('a', { class: 'btn secondary', href: '#/profile/cars', text: 'Choose my cars' }),
     ]));
   };
