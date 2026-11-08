@@ -256,6 +256,18 @@
       }
 
       var v = car || { country: 'UK', currency: 'GBP', distanceUnit: 'mi', status: 'Active' };
+
+      // Odometer reading with its unit chosen right beside it.
+      function odometerField() {
+        var odo = text('odometer', v.odometer === null || v.odometer === undefined ? '' : v.odometer, { inputmode: 'numeric', id: 'f-odometer' });
+        var unit = select('distanceUnit', [['mi', 'Miles'], ['km', 'Kilometres']], v.distanceUnit);
+        unit.setAttribute('aria-label', 'Distance unit');
+        return el('div', { class: 'field' }, [
+          el('label', { for: 'f-odometer', text: 'Current odometer' }),
+          el('div', { class: 'odo-row' }, [odo, unit]),
+          el('div', { class: 'hint', text: 'Whole number. Changing the unit does not convert the number.' }),
+        ]);
+      }
       var fields = [
         UI.field('Registration number *', text('registration', v.registration, { maxlength: '20', autocapitalize: 'characters', required: true })),
         UI.field('Make *', text('make', v.make, { maxlength: '40', placeholder: 'e.g. Toyota', required: true })),
@@ -266,9 +278,8 @@
         UI.field('VIN / chassis number', text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 'The 17-character VIN, or the chassis number for Japanese imports.'),
         UI.field('Country', select('country', [['UK', 'United Kingdom'], ['UG', 'Uganda']], v.country)),
         UI.field('Currency for costs', select('currency', [['GBP', 'GBP (£)'], ['UGX', 'UGX (USh)'], ['USD', 'USD ($)'], ['EUR', 'EUR (€)']], v.currency)),
-        UI.field('Distance unit', select('distanceUnit', [['mi', 'Miles'], ['km', 'Kilometres']], v.distanceUnit)),
         UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
-        UI.field('Current odometer', text('odometer', v.odometer === null || v.odometer === undefined ? '' : v.odometer, { inputmode: 'numeric' }), 'Whole miles or km.'),
+        odometerField(),
         UI.field('PartSouq catalogue link', text('partsouqUrl', v.partsouqUrl, { inputmode: 'url', placeholder: 'https://partsouq.com/…' }), 'Optional. Must be a partsouq.com address.'),
       ];
       var notes = el('textarea', { name: 'notes', rows: '4', maxlength: '2000' });

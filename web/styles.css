@@ -284,3 +284,7 @@ dl.details dd { margin: 0; overflow-wrap: anywhere; }
 .car-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .photo.placeholder { font-size: 1.8rem; }
 .photo.big.placeholder { font-size: 3rem; }
+
+.odo-row { display: flex; gap: 8px; }
+.odo-row input { flex: 1; min-width: 0; }
+.odo-row select { width: auto; min-width: 130px; }
