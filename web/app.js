@@ -9,7 +9,8 @@
   var Views = (window.Views = window.Views || {});
 
   // Pages anyone can open without signing in.
-  var PUBLIC = { '/login': 1, '/login/verify': 1, '/request': 1, '/diag': 1 };
+  var PUBLIC = { '/login': 1, '/login/verify': 1, '/request': 1, '/diag': 1, '/feedback': 1 };
+  var lastPage = ''; // the screen before the feedback form, so the report can say where it was sent from
 
   // ---------- routing ----------
   function parseHash() {
@@ -60,6 +61,7 @@
     var view;
     var m;
     r.params = {};
+    if (r.path !== '/feedback') lastPage = r.path; // path only: never the query, which can hold a guest secret
     if ((m = GUEST_PATH.exec(r.path))) {
       r.params.id = m[1]; r.params.type = m[2] || '';
       view = m[2] ? Views.guestForm : Views.guestHome;
@@ -71,6 +73,7 @@
     else if (r.path === '/login') view = Views.login;
     else if (r.path === '/login/verify') view = Views.verify;
     else if (r.path === '/request') view = Views.request;
+    else if (r.path === '/feedback') view = Views.feedback;
     else if (r.path === '/profile') view = Views.profile;
     else if (r.path === '/profile/cars') view = Views.userCars;
     else if (r.path === '/admin/users') view = FleetAuth.isAdmin() ? Views.adminUsers : viewForbidden;
@@ -274,6 +277,7 @@
   window.FleetApp = {
     go: go,
     refreshNav: refreshNav,
+    previousPage: function () { return lastPage; },
     setFlash: function (kind, text) { flash = { kind: kind, text: text }; },
     takeFlash: function () { var f = flash; flash = null; return f; },
   };

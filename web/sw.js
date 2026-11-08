@@ -22,6 +22,7 @@ const SHELL = [
   'views-entries.js',
   'views-reminders.js',
   'views-guest.js',
+  'views-feedback.js',
   'app.js',
   'manifest.webmanifest',
   'icons/icon.svg',

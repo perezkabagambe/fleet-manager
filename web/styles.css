@@ -415,3 +415,6 @@ input[type="date"] {
 .guest-row { width: 100%; }
 .guest-notes { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; }
 .guest-entry .btn-row { margin-top: 8px; }
+
+/* ---------- report a bug / request a feature ---------- */
+.footer .feedback-link { flex-basis: 100%; text-align: center; font-weight: 600; color: var(--accent); padding: 6px 0; }

@@ -49,6 +49,8 @@ function actions_() {
     replaceGuestSecret: { auth: 'admin', lock: true, fn: replaceGuestSecret_ },
     listGuests: { auth: 'admin', fn: listGuests_ },
     setGuestBlocked: { auth: 'admin', lock: true, fn: setGuestBlocked_ },
+    sendFeedback: { auth: 'user', fn: sendFeedback_ },
+    guestSendFeedback: { auth: 'guest', fn: guestSendFeedback_ },
     guestInfo: { auth: 'none', fn: guestInfo_ },
     guestJoin: { auth: 'none', lock: true, fn: guestJoin_ },
     guestMe: { auth: 'guest', fn: guestMe_ },

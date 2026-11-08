@@ -1,18 +1,20 @@
 /** Outgoing email. All dynamic text is HTML-escaped. Sent as the app's Google account. */
 
-function sendMail_(to, subject, html, text) {
+function sendMail_(to, subject, html, text, options) {
   try {
     if (MailApp.getRemainingDailyQuota() < 1) {
       console.error('email quota exhausted');
       return false;
     }
-    MailApp.sendEmail({
+    const message = {
       to: to,
       subject: String(subject).replace(/[\r\n]+/g, ' '),
       htmlBody: html,
       body: text,
       name: 'Fleet Manager',
-    });
+    };
+    if (options && options.replyTo) message.replyTo = options.replyTo;
+    MailApp.sendEmail(message);
     return true;
   } catch (e) {
     console.error('email failed: ' + (e && e.message));

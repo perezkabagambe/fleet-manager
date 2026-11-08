@@ -89,6 +89,7 @@
     invalid_lead: 'The heads-up must be a whole number of days or miles/km.',
     task_needs_due: 'Give it a next due date or distance, or a repeat so one can be worked out.',
     duplicate_task: 'This car already has a reminder with that name.',
+    email_failed: 'Your message could not be emailed just now. Please try again in a little while.',
     guest_unavailable: 'Guest access is not available for this car. If you have an account, please sign in instead.',
     guest_name_required: 'Please enter your name or your garage\'s name (at least two letters or numbers).',
     guest_name_taken: 'That name is already in use. Please add something to make it your own, such as your town: "Bob\'s Garage, Entebbe".',

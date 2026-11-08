@@ -27,6 +27,12 @@
       var g = readAll()[carId];
       return g && g.token && Date.parse(g.expiresAt) > Date.now() ? g : null;
     },
+    /** Any current guest session on this phone, as { carId, token, expiresAt, name }, or null. */
+    any: function () {
+      var all = readAll();
+      var id = Object.keys(all).filter(function (k) { return all[k] && all[k].token && Date.parse(all[k].expiresAt) > Date.now(); })[0];
+      return id ? Object.assign({ carId: id }, all[id]) : null;
+    },
     save: function (carId, g) {
       var all = readAll();
       all[carId] = { token: g.token, expiresAt: g.expiresAt, name: g.name };
