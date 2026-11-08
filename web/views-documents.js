@@ -23,7 +23,7 @@
       msg.replaceChildren();
       var type = typeSel.value, note = noteIn.value;
       var work = Photos.prepareAttachment(file).then(function (a) {
-        return FleetApi.call('uploadCarDocument', { carId: car.id, type: type, note: note, mime: a.mime, data: a.data, filename: a.filename });
+        return FleetApi.call('uploadCarDocument', { carId: car.id, type: type, note: note, mime: a.mime, data: a.data, filename: a.filename }, { timeoutMs: 240000 });
       }).then(function () {
         noteIn.value = '';
         msg.replaceChildren(UI.notice('ok', 'Document added.'));

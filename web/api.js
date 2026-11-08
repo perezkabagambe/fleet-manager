@@ -84,6 +84,7 @@
   }
 
   // opts.guestCarId: act as a guest on that car (the guest token is sent instead of any user session).
+  // opts.timeoutMs: how long to wait (the default suits normal requests; a big file upload is given longer).
   function call(action, params, opts) {
     opts = opts || {};
     var cfg = window.FLEET_CONFIG;
@@ -97,7 +98,7 @@
     else if (token) payload.token = token;
 
     var controller = new AbortController();
-    var timer = setTimeout(function () { controller.abort(); }, TIMEOUT_MS);
+    var timer = setTimeout(function () { controller.abort(); }, opts.timeoutMs || TIMEOUT_MS);
     var started = performance.now();
 
     return fetch(cfg.apiUrl, {

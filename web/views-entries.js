@@ -59,6 +59,9 @@
     return fmt.num(e.mileage) + ' mi';
   }
 
+  // A big file can take a minute or more to send, so uploads wait much longer than a normal request.
+  var UPLOAD_TIMEOUT_MS = 240000;
+
   // What a file looks like in a list: a camera for photos, a page for PDFs, a paperclip for everything else.
   function fileIcon(mime) { return mime === 'image/jpeg' ? '📷 ' : mime === 'application/pdf' ? '📄 ' : '📎 '; }
 
@@ -386,9 +389,9 @@
       drawAttachments();
       // Add straight from here: no need to open Edit first. (Removing is on each row, for admins.)
       function addFile(file) {
-        msg.replaceChildren(UI.notice('ok', 'Adding ' + (file.name || 'the file') + '…'));
+        msg.replaceChildren(UI.notice('ok', 'Adding ' + (file.name || 'the file') + '…' + (file.size > 1000000 ? ' A big file can take a minute or more.' : '')));
         return Photos.prepareAttachment(file).then(function (a) {
-          return FleetApi.call('uploadAttachment', { entryId: e.id, mime: a.mime, data: a.data, thumb: a.thumb, filename: a.filename });
+          return FleetApi.call('uploadAttachment', { entryId: e.id, mime: a.mime, data: a.data, thumb: a.thumb, filename: a.filename }, { timeoutMs: UPLOAD_TIMEOUT_MS });
         }).then(function (r) {
           Views.invalidateCars();
           d.attachments.push(r.data.attachment);
@@ -807,7 +810,7 @@
           if (i >= staged.length) return Promise.resolve();
           var s = staged[i];
           return Photos.prepareAttachment(s.file).then(function (a) {
-            return FleetApi.call('uploadAttachment', { entryId: entryId, mime: a.mime, data: a.data, thumb: a.thumb, filename: a.filename });
+            return FleetApi.call('uploadAttachment', { entryId: entryId, mime: a.mime, data: a.data, thumb: a.thumb, filename: a.filename }, { timeoutMs: UPLOAD_TIMEOUT_MS });
           }).then(function () { i++; return next(); }, function (e) {
             uploadFailed = true;
             FleetApp.setFlash('error', 'The entry was saved, but "' + s.name + '" could not be attached: ' + UI.errorText(e) + ' You can add it with Edit.');
