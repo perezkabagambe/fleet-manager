@@ -165,5 +165,41 @@
     };
   }
 
-  window.Photos = { prepare: prepare, upload: upload, get: get, element: element, picker: picker };
+  /** One labelled file button. `capture` opens the camera directly on a phone. */
+  function fileButton(label, accept, capture, onFile) {
+    var input = el('input', Object.assign({ type: 'file', accept: accept, class: 'file-input' }, capture ? { capture: 'environment' } : {}));
+    input.addEventListener('change', function () {
+      var file = input.files && input.files[0];
+      input.value = '';
+      if (file) onFile(file);
+    });
+    return el('label', { class: 'btn small secondary file-btn' }, [el('span', { text: label }), input]);
+  }
+
+  var MAX_PDF_BYTES = 2500000;
+
+  /** An attachment for an entry: a photo is shrunk to a JPEG; a PDF is sent as it is (up to 2.5 MB). */
+  function prepareAttachment(file) {
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) {
+      if (file.size > MAX_PDF_BYTES) return Promise.reject(new FleetApi.ApiError('attachment_too_large', 'PDF too large'));
+      return toBase64(file).then(function (b64) { return { mime: 'application/pdf', data: b64, filename: file.name || 'document.pdf' }; });
+    }
+    return prepare(file).then(function (p) { return { mime: 'image/jpeg', data: p.full, filename: file.name || 'photo.jpg' }; });
+  }
+
+  /** Download an attachment and show it: photos appear inline, PDFs are saved/opened as a file. */
+  function fetchAttachment(id) {
+    return FleetApi.call('getAttachment', { id: id }).then(function (r) { return r.data; });
+  }
+  function toBlobUrl(att) {
+    var bin = atob(att.data);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return URL.createObjectURL(new Blob([bytes], { type: att.mime }));
+  }
+
+  window.Photos = {
+    prepare: prepare, upload: upload, get: get, element: element, picker: picker,
+    fileButton: fileButton, prepareAttachment: prepareAttachment, fetchAttachment: fetchAttachment, toBlobUrl: toBlobUrl,
+  };
 })();

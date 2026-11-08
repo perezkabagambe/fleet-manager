@@ -93,11 +93,8 @@ function parseCarInput_(f, existing) {
   out.distance_unit = oneOf_(f.distanceUnit, DISTANCE_UNITS, out.country === 'UG' ? 'km' : 'mi', 'invalid_unit');
   out.status = oneOf_(f.status, CAR_STATUSES, 'Active', 'invalid_status');
 
-  // Any secure link to a parts catalogue (PartSouq is the usual one). https only, a real host name,
-  // no embedded passwords. The column keeps its original name, partsouq_url.
-  const url = String(f.partsouqUrl === null || f.partsouqUrl === undefined ? '' : f.partsouqUrl).trim();
-  if (url && !/^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}(:\d{1,5})?([\/?#][^\s<>"']*)?$/i.test(url)) fail_('invalid_catalogue_url');
-  if (url.length > 500) fail_('invalid_catalogue_url');
+  // Any secure link to a parts catalogue (PartSouq is the usual one). The column keeps its original name, partsouq_url.
+  const url = parseHttpsUrl_(f.partsouqUrl, 'invalid_catalogue_url');
   out.partsouq_url = url;
 
   out.current_odometer = parseOdometer_(f.odometer);
@@ -112,6 +109,14 @@ function parseCarInput_(f, existing) {
   // (The old keeper_other column is left untouched and unused.)
   out.owner_other = cleanStr_(f.ownerOther, 80);
   return out;
+}
+
+/** '' or a secure https link with a real host name and no embedded password; otherwise the given error. */
+function parseHttpsUrl_(raw, errorCode) {
+  const url = String(raw === null || raw === undefined ? '' : raw).trim();
+  if (!url) return '';
+  if (url.length > 500 || !/^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}(:\d{1,5})?([\/?#][^\s<>"']*)?$/i.test(url)) fail_(errorCode);
+  return url;
 }
 
 /** '' (not given) or a non-negative amount with at most 2 decimals, e.g. 4500 or 4500.50. */
@@ -136,8 +141,9 @@ function monthFromName_(name) {
  * An approximate or exact date, never in the future. Accepted forms (UK order, day first):
  *   2021 · Mar 2021 · March 2021 · 03/2021 · 2021-03 · 12/03/2021 · 12 Mar 2021 · 2021-03-12
  * Stored as YYYY, YYYY-MM or YYYY-MM-DD, so the precision the person knew is kept. '' if not given.
+ * Dates in the future are rejected unless allowFuture is true (e.g. an expiry date).
  */
-function parseDate_(raw) {
+function parseDate_(raw, allowFuture) {
   const s = cleanStr_(raw, 24).toLowerCase().replace(/,/g, '');
   if (s === '') return '';
   let y = 0, m = 0, d = 0, g;
@@ -159,7 +165,7 @@ function parseDate_(raw) {
   const pad = function (n) { return ('0' + n).slice(-2); };
   const out = String(y) + (m ? '-' + pad(m) : '') + (d ? '-' + pad(d) : '');
   const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
-  if (out > today.slice(0, out.length)) fail_('invalid_date');
+  if (!allowFuture && out > today.slice(0, out.length)) fail_('invalid_date');
   return out;
 }
 

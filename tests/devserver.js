@@ -1,0 +1,62 @@
+'use strict';
+// Local end-to-end test server: serves web/ and answers POST /api with the REAL backend code
+// (running against in-memory stand-ins for Sheets, Drive and Mail). Nothing here touches Google.
+//   node tests/devserver.js        then open http://localhost:8124/
+// /__as/admin or /__as/sam switches who you are signed in as.
+
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const { createEnv } = require('./harness');
+
+const PORT = 8124;
+const WEB = path.join(__dirname, '..', 'web');
+const env = createEnv();
+
+env.seedUser({ name: 'Perez Kabagambe', email: 'perez@example.com', role: 'admin' });
+env.seedUser({ name: 'Sam', email: 'sam@example.com', role: 'user' });
+const tokens = { admin: env.signInAs('perez@example.com'), sam: env.signInAs('sam@example.com') };
+let persona = 'admin';
+
+// A little starting data
+const mk = (fields) => env.call('saveCar', { token: tokens.admin, fields }).data.car;
+const car1 = mk({ registration: 'AB12 CDE', make: 'Toyota', model: 'Land Cruiser', year: '2015', vin: 'JTMHV05J604123456', colour: 'White', odometer: '51200', country: 'UK' });
+mk({ registration: 'UBA 123X', make: 'Toyota', model: 'Hilux', year: '2012', odometer: '210450', country: 'UG' });
+env.call('saveFluids', { token: tokens.admin, carId: car1.id, fluids: [{ fluid: 'Engine oil', specification: '5W-30 ACEA C3', capacity: '5.5 L' }] });
+
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
+
+http.createServer((req, res) => {
+  const url = req.url.split('?')[0];
+  if (req.method === 'POST' && url === '/api') {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      let out;
+      try { out = env.ctx.doPost({ postData: { contents: body } }).getContent(); } catch (e) { out = JSON.stringify({ ok: false, error: 'server_error' }); console.error(e); }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(out);
+    });
+    return;
+  }
+  if (url.startsWith('/__as/')) {
+    persona = url.slice(6) === 'sam' ? 'sam' : 'admin';
+    res.writeHead(302, { Location: '/' });
+    res.end();
+    return;
+  }
+  if (url === '/sw.js') { res.writeHead(404); res.end(); return; } // no service worker while testing
+  if (url === '/config.js') {
+    const src = fs.readFileSync(path.join(WEB, 'config.js'), 'utf8')
+      .replace(/apiUrl: '[^']*'/, "apiUrl: '/api'")
+      .replace('__COMMIT__', 'e2e').replace('__BUILT_AT__', 'local');
+    const login = "localStorage.setItem('fleet.session', JSON.stringify({ token: '" + tokens[persona] + "', expiresAt: '2099-01-01T00:00:00Z' }));\n";
+    res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' });
+    res.end(login + src);
+    return;
+  }
+  const file = path.join(WEB, url === '/' ? 'index.html' : url);
+  if (!file.startsWith(WEB) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); res.end('not found'); return; }
+  res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+  res.end(fs.readFileSync(file));
+}).listen(PORT, () => console.log('E2E test server on http://localhost:' + PORT));

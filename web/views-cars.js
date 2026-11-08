@@ -96,6 +96,12 @@
   }
   function carUrl(id) { return (cfg.siteUrl || location.origin + location.pathname) + '#/car/' + id; }
 
+  // Shared with the entry screens.
+  Views.fmt = {
+    money: money, date: fmtDate, num: num, hostOf: hostOf, chip: chip, loading: loading, backLink: backLink,
+    notFound: notFound, currencyOptions: CURRENCY_OPTIONS,
+  };
+
   // ---------- fleet ----------
   Views.fleet = function (ctx, root) {
     var msg = el('div');
@@ -288,6 +294,8 @@
           car.odometerUpdatedAt ? el('div', { class: 'muted small-text', text: 'Updated ' + fmtDate(car.odometerUpdatedAt) }) : null,
           odoForm,
         ]),
+        EntryUI.historyCard(car),
+        EntryUI.costsCard(car),
         el('section', { class: 'card' }, [
           el('h2', { text: 'Details' }),
           el('dl', { class: 'details' }, details),
@@ -307,10 +315,7 @@
           el('img', { class: 'qr', src: qrDataUrl(carUrl(car.id)), alt: 'QR code for ' + car.registration, width: '140', height: '140' }),
           el('p', {}, [el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/label', text: 'Print label' })]),
         ]),
-        el('section', { class: 'card muted' }, [
-          el('p', { text: 'Issues, repairs, maintenance and costs for this car are coming in the next phases.' }),
-          el('p', { class: 'small-text', text: 'Last changed ' + fmtDate(car.updatedAt) }),
-        ]),
+        el('p', { class: 'muted small-text center', text: 'Car details last changed ' + fmtDate(car.updatedAt) }),
         editBottom
       );
     }
