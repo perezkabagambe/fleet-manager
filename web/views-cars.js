@@ -292,15 +292,16 @@
         }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
       });
 
-      function specRow(f, name) {
-        return el('li', { class: 'fluid' }, [
-          el('div', { class: 'fluid-name', text: name }),
+      // Fluids are blue with a water drop; bulbs are amber with a light bulb.
+      function specRow(f, name, kind) {
+        return el('li', { class: 'fluid kind-' + kind }, [
+          el('div', { class: 'fluid-name' }, [el('span', { class: 'spec-icon', 'aria-hidden': 'true', text: kind === 'bulb' ? '💡' : '💧' }), el('span', { text: name })]),
           el('div', { text: [f.specification, f.capacity].filter(Boolean).join(' · ') || '–' }),
           f.notes ? el('div', { class: 'muted small-text', text: f.notes }) : null,
         ]);
       }
-      var fluidRows = fluids.filter(function (f) { return !isBulb(f.fluid); }).map(function (f) { return specRow(f, f.fluid); });
-      var bulbRows = fluids.filter(function (f) { return isBulb(f.fluid); }).map(function (f) { return specRow(f, f.fluid.slice(BULB_PREFIX.length)); });
+      var fluidRows = fluids.filter(function (f) { return !isBulb(f.fluid); }).map(function (f) { return specRow(f, f.fluid, 'fluid'); });
+      var bulbRows = fluids.filter(function (f) { return isBulb(f.fluid); }).map(function (f) { return specRow(f, f.fluid.slice(BULB_PREFIX.length), 'bulb'); });
 
       root.replaceChildren(
         el('div', { class: 'copy-row' }, [UI.copyLinkButton(carUrl(car.id), { label: 'Copy link to this car' })]),
@@ -334,8 +335,9 @@
         collapsible('Fluids and specs', el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids and specs' }),
           el('div', { class: 'section-tools' }, [el('a', { class: 'btn small secondary section-edit', href: '#/car/' + car.id + '/fluids', text: 'Edit', 'aria-label': 'Edit the fluids and specs' })]),
+          fluidRows.length ? el('h3', { class: 'spec-group kind-fluid', text: '💧 Fluids' }) : null,
           fluidRows.length ? el('ul', { class: 'fluids' }, fluidRows) : (bulbRows.length ? null : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' })),
-          bulbRows.length ? el('h3', { class: 'spec-group', text: 'Bulbs' }) : null,
+          bulbRows.length ? el('h3', { class: 'spec-group kind-bulb', text: '💡 Bulbs' }) : null,
           bulbRows.length ? el('ul', { class: 'fluids' }, bulbRows) : null,
           el('div', { class: 'catalogue' }, car.partsouqUrl
             ? [el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) })]
@@ -392,13 +394,21 @@
       showLabels();
       var remove = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
       remove.addEventListener('click', function () { rows.splice(rows.indexOf(row), 1); draw(); });
-      return el('div', { class: 'fluid-edit' }, [
+      var rowBox = el('div', { class: 'fluid-edit' }, [
         fluidField,
         specField,
         capField,
         UI.field('Notes', inp('notes', { maxlength: '200' })),
         remove,
       ]);
+      function showKind() { // blue for a fluid, amber for a bulb (it can change while the name is being typed)
+        var bulb = isBulb(fluidIn.value);
+        rowBox.classList.toggle('kind-bulb', bulb);
+        rowBox.classList.toggle('kind-fluid', !bulb);
+      }
+      fluidIn.addEventListener('input', showKind);
+      showKind();
+      return rowBox;
     }
 
     // The fluids and the bulbs are one list on the car, shown as two sections of the form.
@@ -664,8 +674,8 @@
 
       // Every part of the form opens and closes, and starts closed. (A new car starts with Details open, because
       // that is where the required fields are.)
-      function section(title, children, open) {
-        var d = el('details', { class: 'form-section collapsible' }, [
+      function section(title, children, open, kind) {
+        var d = el('details', { class: 'form-section collapsible' + (kind ? ' ' + kind : '') }, [
           el('summary', {}, [el('h2', { text: title })]),
           el('div', { class: 'collapse-body' }, children),
         ]);
@@ -674,8 +684,8 @@
       }
       var detailsSection = section('Vehicle details', detailFields, !car);
       var ownersSection = section('Owner/Custodian', ownerFields);
-      var fluidsSection = section('Fluids and specs', [fluidsEd.node]);
-      var bulbsSection = section('Bulbs', [fluidsEd.bulbsNode]);
+      var fluidsSection = section('💧 Fluids and specs', [fluidsEd.node], false, 'kind-fluid');
+      var bulbsSection = section('💡 Bulbs', [fluidsEd.bulbsNode], false, 'kind-bulb');
       var photoSection = section('Photo', photoFields);
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: car ? 'Save changes' : 'Add car' });
       var form = el('form', { novalidate: true }, [
