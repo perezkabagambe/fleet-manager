@@ -12,10 +12,20 @@
     'Coolant', 'Brake fluid', 'Power steering fluid', 'AC refrigerant',
   ];
 
+  // Bulbs live in the same list as the fluids, with "Bulb: " in front of the name. The Specification says the bulb
+  // type and then the specific bulb (e.g. "Halogen H7 55 W"); the Capacity box says how many are fitted.
+  var BULB_PREFIX = 'Bulb: ';
+  var BULB_TEMPLATE = [
+    'Bulb: Dipped beam', 'Bulb: Full beam', 'Bulb: Indicator', 'Bulb: Front fog', 'Bulb: Rear fog',
+    'Bulb: Front daytime running', 'Bulb: Rear light', 'Bulb: Rear brake light', 'Bulb: Rear reverse light',
+  ];
+  function isBulb(name) { return (name || '').indexOf(BULB_PREFIX) === 0; }
+
   // Greyed-out examples shown in an empty Specification / Capacity box. They are
   // only suggestions of a typical standard for that kind of fluid, never saved.
   // Order matters: the first pattern that matches the fluid name wins.
   var FLUID_HINTS = [
+    [/^bulb/i, { spec: 'e.g. Halogen H7 55 W', cap: 'e.g. 2 (one each side)' }],
     [/transfer/i, { spec: 'e.g. 75W-90 API GL-4', cap: 'e.g. 1 L' }],
     [/differential|diff\b/i, { spec: 'e.g. 75W-90 API GL-5', cap: 'e.g. 1.2 L' }],
     [/engine|motor oil/i, { spec: 'e.g. 5W-30 ACEA C3', cap: 'e.g. 5.5 L' }],
@@ -282,13 +292,15 @@
         }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
       });
 
-      var fluidRows = fluids.map(function (f) {
+      function specRow(f, name) {
         return el('li', { class: 'fluid' }, [
-          el('div', { class: 'fluid-name', text: f.fluid }),
+          el('div', { class: 'fluid-name', text: name }),
           el('div', { text: [f.specification, f.capacity].filter(Boolean).join(' · ') || '–' }),
           f.notes ? el('div', { class: 'muted small-text', text: f.notes }) : null,
         ]);
-      });
+      }
+      var fluidRows = fluids.filter(function (f) { return !isBulb(f.fluid); }).map(function (f) { return specRow(f, f.fluid); });
+      var bulbRows = fluids.filter(function (f) { return isBulb(f.fluid); }).map(function (f) { return specRow(f, f.fluid.slice(BULB_PREFIX.length)); });
 
       root.replaceChildren(
         el('div', { class: 'copy-row' }, [UI.copyLinkButton(carUrl(car.id), { label: 'Copy link to this car' })]),
@@ -322,7 +334,9 @@
         collapsible('Fluids and specs', el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids and specs' }),
           el('div', { class: 'section-tools' }, [el('a', { class: 'btn small secondary section-edit', href: '#/car/' + car.id + '/fluids', text: 'Edit', 'aria-label': 'Edit the fluids and specs' })]),
-          fluids.length ? el('ul', { class: 'fluids' }, fluidRows) : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' }),
+          fluidRows.length ? el('ul', { class: 'fluids' }, fluidRows) : (bulbRows.length ? null : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' })),
+          bulbRows.length ? el('h3', { class: 'spec-group', text: 'Bulbs' }) : null,
+          bulbRows.length ? el('ul', { class: 'fluids' }, bulbRows) : null,
           el('div', { class: 'catalogue' }, car.partsouqUrl
             ? [el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) })]
             : [el('span', { class: 'muted', text: 'No parts catalogue link yet. Tap Edit car to add one.' })]),
@@ -345,7 +359,7 @@
   function fluidsEditor(initial) {
     var rows = initial.map(function (f) { return Object.assign({}, f); });
     var list = el('div', { class: 'stack' });
-    var datalist = el('datalist', { id: 'fluid-names' }, FLUID_TEMPLATE.map(function (n) { return el('option', { value: n }); }));
+    var datalist = el('datalist', { id: 'fluid-names' }, FLUID_TEMPLATE.concat(BULB_TEMPLATE).map(function (n) { return el('option', { value: n }); }));
 
     function rowEl(row, i) {
       function inp(key, attrs) {
@@ -362,14 +376,25 @@
         specIn.placeholder = h.spec;
         capIn.placeholder = h.cap;
       }
-      fluidIn.addEventListener('input', showHints);
+      var fluidField = UI.field('Fluid', fluidIn);
+      var specField = UI.field('Specification', specIn);
+      var capField = UI.field('Capacity', capIn);
+      // A bulb row asks for the bulb type and name, and how many, instead of a spec and a capacity.
+      function showLabels() {
+        var bulb = isBulb(fluidIn.value);
+        fluidField.querySelector('label').textContent = bulb ? 'Bulb' : 'Fluid';
+        specField.querySelector('label').textContent = bulb ? 'Bulb type and name' : 'Specification';
+        capField.querySelector('label').textContent = bulb ? 'How many' : 'Capacity';
+      }
+      fluidIn.addEventListener('input', function () { showHints(); showLabels(); });
       showHints();
+      showLabels();
       var remove = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
       remove.addEventListener('click', function () { rows.splice(i, 1); draw(); });
       return el('div', { class: 'fluid-edit' }, [
-        UI.field('Fluid', fluidIn),
-        UI.field('Specification', specIn),
-        UI.field('Capacity', capIn),
+        fluidField,
+        specField,
+        capField,
         UI.field('Notes', inp('notes', { maxlength: '200' })),
         remove,
       ]);
@@ -378,7 +403,7 @@
     function draw() {
       list.replaceChildren.apply(list, rows.length
         ? rows.map(rowEl)
-        : [el('p', { class: 'muted', text: 'No fluids yet. Add one, or add the standard set.' })]);
+        : [el('p', { class: 'muted', text: 'No fluids or bulbs yet. Add one, or add the standard set.' })]);
     }
 
     var addBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add fluid' });
@@ -387,6 +412,15 @@
     stdBtn.addEventListener('click', function () {
       var have = rows.map(function (r) { return (r.fluid || '').toLowerCase(); });
       FLUID_TEMPLATE.forEach(function (n) {
+        if (have.indexOf(n.toLowerCase()) === -1) rows.push({ fluid: n, specification: '', capacity: '', notes: '' });
+      });
+      draw();
+    });
+
+    var bulbBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add standard bulbs' });
+    bulbBtn.addEventListener('click', function () {
+      var have = rows.map(function (r) { return (r.fluid || '').toLowerCase(); });
+      BULB_TEMPLATE.forEach(function (n) {
         if (have.indexOf(n.toLowerCase()) === -1) rows.push({ fluid: n, specification: '', capacity: '', notes: '' });
       });
       draw();
@@ -402,7 +436,7 @@
     draw();
 
     return {
-      node: el('div', {}, [datalist, list, el('div', { class: 'btn-row' }, [addBtn, stdBtn])]),
+      node: el('div', {}, [datalist, list, el('div', { class: 'btn-row' }, [addBtn, stdBtn, bulbBtn])]),
       payload: payload,
       dirty: function () { return JSON.stringify(payload()) !== snapshot; },
       // After a save the server gives every row its id; keep them so a retry never duplicates a row.
