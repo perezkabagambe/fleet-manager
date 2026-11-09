@@ -502,3 +502,9 @@ li.fluid.kind-bulb .fluid-name { color: var(--kind-bulb-text); }
 details.form-section.kind-fluid > summary h2 { color: var(--kind-fluid-text); }
 details.form-section.kind-bulb > summary h2 { color: var(--kind-bulb-text); }
 .fluid-edit .field-pair { align-items: end; }
+
+/* "Fill in the rest with AI" in the Add car form */
+.ai-box { border: 1px dashed var(--accent); border-radius: var(--radius); padding: 12px; margin: 4px 0 16px; }
+.ai-box .hint { margin-top: 8px; }
+.ai-status { margin-top: 8px; }
+.ai-warning { font-weight: 600; margin: 8px 0; }

@@ -18,6 +18,21 @@ env.seedUser({ name: 'Sam', email: 'sam@example.com', role: 'user' });
 const tokens = { admin: env.signInAs('perez@example.com'), sam: env.signInAs('sam@example.com') };
 let persona = 'admin';
 
+// A pretend AI service, so the "Fill in the rest with AI" button can be tried locally (it takes 2 seconds, like a quick lookup)
+env.props.ANTHROPIC_API_KEY = 'sk-ant-local-test';
+env.state.anthropic = () => ({
+  code: 200,
+  body: {
+    stop_reason: 'end_turn',
+    content: [{ type: 'text', text: JSON.stringify({
+      details: { make: 'Kia', model: 'Sorento', year: '2013', colour: 'Black', engineCode: 'D4HB', gearboxCode: '', market: 'European', driveSide: 'RHD', fuelCapacity: '71' },
+      fluids: [{ fluid: 'Engine oil', specification: '5W-30 ACEA C3', capacity: '6.7 L', notes: '' }, { fluid: 'Brake fluid', specification: 'DOT 4', capacity: '', notes: '' }],
+      bulbs: [{ location: 'Dipped beam', type: 'Xenon D3S 35 W', quantity: '2', notes: 'Halogen versions use H7' }, { location: 'Full beam', type: 'Halogen H1 55 W', quantity: '2', notes: '' }],
+      summary: 'A 2013 Kia Sorento 2.2 CRDi (local test answer).', confidence: 'medium',
+    }), citations: [{ type: 'web_search_result_location', url: 'https://example.com/sorento', title: 'x', cited_text: 'x' }] }],
+  },
+});
+
 // A little starting data
 const mk = (fields) => env.call('saveCar', { token: tokens.admin, fields }).data.car;
 const car1 = mk({ registration: 'AB12 CDE', make: 'Toyota', model: 'Land Cruiser', year: '2015', vin: 'JTMHV05J604123456', colour: 'White', odometer: '51200', country: 'UK' });

@@ -8,7 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const BACKEND = path.join(__dirname, '..', 'backend');
-const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'People.js', 'Photos.js', 'Entries.js', 'Attachments.js', 'CarDocuments.js', 'Guests.js', 'Feedback.js', 'Tasks.js', 'Reminders.js', 'Code.js', 'Version.js', 'Setup.js'];
+const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'People.js', 'Photos.js', 'Entries.js', 'Attachments.js', 'CarDocuments.js', 'AiFill.js', 'Guests.js', 'Feedback.js', 'Tasks.js', 'Reminders.js', 'Code.js', 'Version.js', 'Setup.js'];
 
 function makeSheet(header) {
   const rows = [header.slice()];
@@ -65,7 +65,7 @@ function createEnv() {
   const outbox = [];
   const sleeps = [];
   const files = {};
-  const state = { tokeninfo: null, mailQuota: 100, cacheCalls: 0 }; // cacheCalls: round trips to the script cache
+  const state = { tokeninfo: null, mailQuota: 100, cacheCalls: 0, anthropic: null, aiRequests: [] }; // cacheCalls: round trips to the script cache
   const folders = {};
   const triggers = [];
   let folderCount = 0;
@@ -177,7 +177,15 @@ function createEnv() {
       sendEmail: (m) => { outbox.push(m); },
     },
     UrlFetchApp: {
-      fetch: () => {
+      fetch: (url, opts) => {
+        if (/api\.anthropic\.com/.test(url)) { // the AI service: tests set state.anthropic = (request) => ({ code, body })
+          const sent = { url, headers: opts.headers, body: JSON.parse(opts.payload) };
+          state.aiRequests.push(sent);
+          if (!state.anthropic) throw new Error('no AI mock');
+          const r = state.anthropic(sent);
+          if (r instanceof Error) throw r;
+          return { getResponseCode: () => r.code, getContentText: () => typeof r.body === 'string' ? r.body : JSON.stringify(r.body) };
+        }
         const r = state.tokeninfo;
         if (!r) throw new Error('no tokeninfo mock');
         return { getResponseCode: () => r.code, getContentText: () => JSON.stringify(r.body) };

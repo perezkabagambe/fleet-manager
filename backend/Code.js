@@ -73,6 +73,8 @@ function actions_() {
     getAttachmentThumbs: { auth: 'user', fn: getAttachmentThumbs_ },
     setAttachmentThumb: { auth: 'user', lock: true, fn: setAttachmentThumb_ },
     deleteAttachment: { auth: 'admin', lock: true, fn: deleteAttachment_ },
+    aiStatus: { auth: 'user', fn: aiStatus_ },
+    aiFillCar: { auth: 'user', fn: aiFillCar_ }, // no script lock: it waits for an outside service and must not block everyone else
     listCarDocuments: { auth: 'user', fn: listCarDocuments_ },
     uploadCarDocument: { auth: 'user', lock: true, fn: uploadCarDocument_ },
     getCarDocument: { auth: 'user', fn: getCarDocument_ },

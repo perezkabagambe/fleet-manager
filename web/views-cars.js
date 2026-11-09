@@ -427,11 +427,24 @@
     var bulbBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add standard bulbs' });
     bulbBtn.addEventListener('click', function () { addStandard(BULB_TEMPLATE, 'bulb'); });
 
+    // Rows suggested by AI: added only where the car has no row of that name yet. Returns how many were added.
+    function addSuggested(suggested) {
+      var added = 0;
+      suggested.forEach(function (s) {
+        var exists = rows.some(function (r) { return (r.kind === 'bulb') === (s.kind === 'bulb') && (r.fluid || '').toLowerCase() === (s.fluid || '').toLowerCase(); });
+        if (exists) return;
+        rows.push({ kind: s.kind === 'bulb' ? 'bulb' : 'fluid', fluid: s.fluid, specification: s.specification || '', capacity: s.capacity || '', notes: s.notes || '', source: s.source || '' });
+        added++;
+      });
+      draw();
+      return added;
+    }
+
     // Rows with nothing in them are ignored when saving.
     function payload() {
       return rows
         .filter(function (r) { return (r.fluid || '').trim() || (r.specification || '').trim() || (r.capacity || '').trim(); })
-        .map(function (r) { return { id: r.id, kind: r.kind === 'bulb' ? 'bulb' : 'fluid', fluid: r.fluid || '', specification: r.specification || '', capacity: r.capacity || '', notes: r.notes || '' }; });
+        .map(function (r) { return { id: r.id, kind: r.kind === 'bulb' ? 'bulb' : 'fluid', fluid: r.fluid || '', specification: r.specification || '', capacity: r.capacity || '', notes: r.notes || '', source: r.source || '' }; });
     }
     var snapshot = JSON.stringify(payload());
     draw();
@@ -440,6 +453,7 @@
       node: el('div', {}, [datalist, list, el('div', { class: 'btn-row' }, [addBtn, stdBtn])]),
       bulbsNode: el('div', {}, [bulbDatalist, bulbList, el('div', { class: 'btn-row' }, [addBulbBtn, bulbBtn])]),
       payload: payload,
+      addSuggested: addSuggested,
       dirty: function () { return JSON.stringify(payload()) !== snapshot; },
       // After a save the server gives every row its id; keep them so a retry never duplicates a row.
       markSaved: function (saved) {
@@ -591,6 +605,89 @@
       notes.value = v.notes || '';
       f.notes = notes;
       detailFields.push(UI.field('Notes', notes));
+
+      // ---- "Fill in the rest with AI" (a new car only): appears under the registration and VIN ----
+      function aiAssist() {
+        var box = el('div', { class: 'ai-box' });
+        var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Fill in the rest with AI' });
+        var hint = el('div', { class: 'hint', text: 'Enter the registration number and the VIN first. AI looks the car up and fills the empty boxes. Its answers are not always right: you must check them.' });
+        var status = el('div', { class: 'ai-status' });
+        box.append(btn, hint, status);
+        box.hidden = true; // shown only once we know AI is switched on
+
+        function ready() { return f.registration.value.trim() !== '' && f.vin.value.replace(/\s+/g, '').length >= 5; }
+        function refresh() { btn.disabled = !ready(); }
+        f.registration.addEventListener('input', refresh);
+        f.vin.addEventListener('input', refresh);
+        refresh();
+        FleetApi.call('aiStatus', {}).then(function (r) {
+          if (!r.data.available) return;
+          box.hidden = false;
+          hint.textContent = 'Enter the registration number and the VIN first. AI looks the car up and fills the empty boxes. Its answers are not always right: you must check them. ' + r.data.remaining + ' of ' + r.data.limit + ' lookups left today.';
+        }).catch(function () { /* no AI box: the form works without it */ });
+
+        function setIfEmpty(input, value, label, filled) {
+          if (!value || String(input.value).trim() !== '') return;
+          input.value = value;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          filled.push(label);
+        }
+
+        function apply(d) {
+          var filled = [];
+          var det = d.details || {};
+          setIfEmpty(f.make, det.make, 'make', filled);
+          setIfEmpty(f.model, det.model, 'model', filled);
+          setIfEmpty(f.year, det.year, 'year', filled);
+          setIfEmpty(f.colour, det.colour, 'colour', filled);
+          setIfEmpty(f.engineCode, det.engineCode, 'engine code', filled);
+          setIfEmpty(f.gearboxCode, det.gearboxCode, 'gearbox code', filled);
+          setIfEmpty(f.market, det.market, 'market', filled);
+          setIfEmpty(f.driveSide, det.driveSide, 'drive side', filled);
+          setIfEmpty(f.fuelCapacity, det.fuelCapacity, 'fuel capacity', filled);
+          var nFluids = fluidsEd.addSuggested(d.fluids || []);
+          var nBulbs = fluidsEd.addSuggested(d.bulbs || []);
+          if (filled.length) { // a note on the car itself says which details came from AI
+            var line = 'AI suggested these details (check them): ' + filled.join(', ') + '.';
+            f.notes.value = f.notes.value.trim() ? f.notes.value.replace(/\s+$/, '') + '\n' + line : line;
+          }
+          var parts = [];
+          if (filled.length) parts.push('the ' + filled.join(', '));
+          if (nFluids) parts.push(nFluids + ' fluid' + (nFluids === 1 ? '' : 's'));
+          if (nBulbs) parts.push(nBulbs + ' bulb' + (nBulbs === 1 ? '' : 's'));
+          var kids = [];
+          kids.push(UI.notice(parts.length ? 'ok' : 'error', parts.length
+            ? 'AI filled in ' + parts.join(' and ') + ' (' + d.confidence + ' confidence). ' + (d.summary || '')
+            : 'AI had nothing new to add. ' + (d.summary || '')));
+          kids.push(el('p', { class: 'ai-warning', text: 'AI answers are not perfect, and it is up to you to check every entry before you save. The fluids and bulbs it added are marked as AI suggestions; open each section to review them.' }));
+          if (d.sources && d.sources.length) {
+            kids.push(el('div', { class: 'small-text muted' }, [el('span', { text: 'Sources: ' })].concat(d.sources.map(function (u, i) {
+              return el('a', { href: u, target: '_blank', rel: 'noopener noreferrer', text: (i ? ', ' : '') + (function () { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return 'link'; } })() });
+            }))));
+          }
+          status.replaceChildren.apply(status, kids);
+          hint.textContent = d.remaining + ' AI lookups left today.';
+        }
+
+        function run() {
+          status.replaceChildren(UI.notice('ok', 'Asking AI to look the car up… this can take up to a minute. Please wait.'));
+          btn.disabled = true;
+          FleetApi.call('aiFillCar', {
+            registration: f.registration.value, vin: f.vin.value, country: f.country.value,
+            make: f.make.value, model: f.model.value, year: f.year.value,
+          }, { timeoutMs: 120000 }).then(function (r) { apply(r.data); })
+            .catch(function (e) { status.replaceChildren(UI.notice('error', UI.errorText(e))); })
+            .then(refresh);
+        }
+
+        btn.addEventListener('click', function () {
+          UI.confirm('AI can get things wrong. Its answers are suggestions, not facts, and they are not always right. It is up to you to check every entry it fills in before you save the car.\n\nTo look the car up, the registration number and VIN are sent to Anthropic\'s AI service, which may search the web. It can take up to a minute.', { okLabel: 'Ask AI' })
+            .then(function (yes) { if (yes) run(); });
+        });
+        return box;
+      }
+      if (!car) detailFields.splice(1, 0, aiAssist());
 
       // Owner/custodian: people who use this app are ticked; anyone else is written in.
       var ownerFields = [
