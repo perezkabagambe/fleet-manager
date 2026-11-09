@@ -197,30 +197,48 @@ test('the old "Repair" type is now Maintenance: a stale app is accepted, and sto
 
 test('a purchase tracks its total and stock status', () => {
   const { add, get, list } = setup();
-  const p = add('Purchase', purchase({ quantity: '4', unitCost: '12.50', shippingCost: '5', partNumber: 'BP-123', vendor: 'Parts Ltd', productUrl: 'https://partsouq.com/x' })).data.entry;
+  const p = add('Purchase', purchase({ quantity: '4', unitCost: '12.50', partNumber: 'BP-123', vendor: 'Parts Ltd', productUrl: 'https://partsouq.com/x' })).data.entry;
   const row = list().find((e) => e.id === p.id);
-  assert.equal(row.total, 55);           // 4 x 12.50 + 5
+  assert.equal(row.total, 50);           // 4 x 12.50
   assert.equal(row.remaining, 4);
   assert.equal(row.stockStatus, 'In stock');
   const detail = get(p.id).data;
-  assert.equal(detail.stock.perUnit, 13.75);
+  assert.equal(detail.stock.perUnit, 12.5);
   assert.equal(detail.entry.productUrl, 'https://partsouq.com/x');
   assert.deepEqual(detail.usedIn, []);
+});
+
+test('there is no shipping field on a purchase: one sent by an older phone is ignored, and an old value is left alone', () => {
+  const { env, sam, add, get } = setup();
+  const p = add('Purchase', purchase({ quantity: '2', unitCost: '10', shippingCost: '7' })).data.entry;
+  assert.equal(p.shippingCost, null, 'not stored');
+  assert.equal(get(p.id).data.stock.total, 20);
+  // a purchase that already had shipping (from before) keeps it when edited without the field
+  const header = env.sheets.Entries._rows[0];
+  const row = env.sheets.Entries._rows.find((r) => r[0] === p.id);
+  row[header.indexOf('shipping_cost')] = '5';
+  env.invalidate();
+  assert.equal(get(p.id).data.stock.total, 25, 'an old shipping amount still counts');
+  const r = env.call('saveEntry', { token: sam, id: p.id, version: p.version, fields: purchase({ quantity: '2', unitCost: '10', title: 'Renamed' }) });
+  assert.equal(r.ok, true);
+  assert.equal(get(p.id).data.stock.total, 25, 'and is not wiped by an edit');
+  const job = add('Maintenance', repair(), { parts: [{ name: 'Pads', quantity: '1', unitCost: '30', shippingCost: '9' }] }).data.entry;
+  assert.deepEqual(get(job.id).data.jobCost, { GBP: 120 }, 'a part bought with a job has no shipping either: 30 + labour 90');
 });
 
 test('a repair can buy-and-use new parts: they join the purchase ledger and add to the job cost', () => {
   const { add, get, list } = setup();
   const r = add('Maintenance', repair(), { parts: [
     { name: 'Brake pads', quantity: '1', unitCost: '60', vendor: 'Parts Ltd', partNumber: 'BP1' },
-    { name: 'Brake fluid', quantity: '2', unitCost: '8.25', shippingCost: '1.50' },
+    { name: 'Brake fluid', quantity: '2', unitCost: '8.25' },
   ] }).data.entry;
   const purchases = list().filter((e) => e.type === 'Purchase');
   assert.deepEqual(purchases.map((p) => p.title).sort(), ['Brake fluid', 'Brake pads']);
   purchases.forEach((p) => { assert.equal(p.stockStatus, 'Fitted'); assert.equal(p.remaining, 0); assert.equal(p.date, D2); });
   const d = get(r.id).data;
   assert.equal(d.parts.length, 2);
-  // parts 60 + (2 x 8.25 + 1.50 = 18) = 78, plus labour 90 = 168
-  assert.deepEqual(d.jobCost, { GBP: 168 });
+  // parts 60 + (2 x 8.25 = 16.50) = 76.50, plus labour 90 = 166.50
+  assert.deepEqual(d.jobCost, { GBP: 166.5 });
   assert.equal(list().find((e) => e.id === r.id).partsUsed, 2);
 });
 
@@ -372,7 +390,7 @@ test('car costs count every cost once: a part bought earlier is not counted agai
 
 test('car costs split by currency, year and category', () => {
   const { env, sam, car, add } = setup();
-  add('Purchase', purchase({ date: '2024-05-01', quantity: '2', unitCost: '10', shippingCost: '4' }));          // GBP 24 parts, 2024
+  add('Purchase', purchase({ date: '2024-05-01', quantity: '2', unitCost: '10' }));                              // GBP 20 parts, 2024
   add('Issue', issue({ date: '2025-01-02', cost: '25' }));                                                      // GBP 25 issues, 2025
   add('Compliance', { title: 'MOT', date: '2025-02-02', cost: '54.85' });                                       // GBP compliance, 2025
   add('Maintenance', repair({ date: '2025-03-03', costMode: 'lump', lumpSumCost: '300', currency: 'UGX' }));         // UGX invoice, 2025
@@ -380,9 +398,9 @@ test('car costs split by currency, year and category', () => {
   const costs = env.call('getCarCosts', { token: sam, carId: car.id }).data.currencies;
   const gbp = costs.find((c) => c.currency === 'GBP');
   const ugx = costs.find((c) => c.currency === 'UGX');
-  assert.equal(gbp.total, 198.85);
-  assert.deepEqual(gbp.categories, { parts: 24, issues: 25, compliance: 54.85, labour: 80, other: 15 });
-  assert.deepEqual(gbp.years.map((y) => [y.year, y.total]), [['2025', 174.85], ['2024', 24]]);
+  assert.equal(gbp.total, 194.85);
+  assert.deepEqual(gbp.categories, { parts: 20, issues: 25, compliance: 54.85, labour: 80, other: 15 });
+  assert.deepEqual(gbp.years.map((y) => [y.year, y.total]), [['2025', 174.85], ['2024', 20]]);
   assert.equal(ugx.total, 300);
   assert.deepEqual(ugx.categories, { invoices: 300 });
 });

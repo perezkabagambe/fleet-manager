@@ -9,7 +9,7 @@
 
   var FLUID_TEMPLATE = [
     'Engine oil', 'Gearbox oil / ATF', 'Front differential oil', 'Rear differential oil', 'Transfer case oil',
-    'Coolant', 'Brake fluid', 'Power steering fluid', 'Washer fluid', 'AC refrigerant',
+    'Coolant', 'Brake fluid', 'Power steering fluid', 'AC refrigerant',
   ];
 
   // Greyed-out examples shown in an empty Specification / Capacity box. They are
@@ -23,7 +23,6 @@
     [/coolant|antifreeze/i, { spec: 'e.g. OAT coolant (G12+), 50/50', cap: 'e.g. 8 L' }],
     [/brake|clutch/i, { spec: 'e.g. DOT 4', cap: 'e.g. 1 L' }],
     [/steering/i, { spec: 'e.g. ATF Dexron III, or CHF 11S', cap: 'e.g. 1 L' }],
-    [/washer|screen/i, { spec: 'e.g. screenwash, ready mixed', cap: 'e.g. 3 L' }],
     [/refrigerant|a\/c|\bac\b|air con/i, { spec: 'e.g. R134a or R1234yf', cap: 'e.g. 450 g' }],
   ];
   var FLUID_HINT_DEFAULT = { spec: 'e.g. grade or standard', cap: 'e.g. 1 L' };

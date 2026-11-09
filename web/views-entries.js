@@ -328,7 +328,6 @@
         var pd = [].concat(
           line('Part number', e.partNumber), line('Quantity bought', String(e.quantity)),
           line('Price each', fmt.money(e.unitCost, e.currency)),
-          e.shippingCost !== null ? line('Shipping', fmt.money(e.shippingCost, e.currency)) : [],
           line('Total paid', fmt.money(s.total, e.currency)),
           line('Used / left', s.used + ' used · ' + s.remaining + ' left')
         );
@@ -545,21 +544,8 @@
         ];
       } else if (type === 'Purchase') {
         costTotal = el('div', { class: 'job-total' });
-        // Shipping belongs to the same order, so it is in the same currency as the price.
-        var shipCur = el('span', { class: 'cur-label' });
-        var shippingField = function () {
-          var ship = text('shippingCost', v.shippingCost === null || v.shippingCost === undefined ? '' : v.shippingCost, { inputmode: 'decimal', id: 'f-ship' });
-          var showCur = function () { shipCur.textContent = currencySelect.value; };
-          currencySelect.addEventListener('change', showCur);
-          showCur();
-          return el('div', { class: 'field' }, [
-            el('label', { for: 'f-ship', text: 'Shipping or delivery' }),
-            el('div', { class: 'odo-row' }, [ship, shipCur]),
-            el('div', { class: 'hint', text: 'Optional. For the whole order, in the same currency as the price.' }),
-          ]);
-        };
         var updatePurchaseTotal = function () {
-          var t = num0(f.quantity.value) * num0(f.unitCost.value) + num0(f.shippingCost.value);
+          var t = num0(f.quantity.value) * num0(f.unitCost.value);
           costTotal.replaceChildren(el('span', { text: 'Total' }), el('strong', { text: fmt.money(round2(t), currencySelect.value) }));
         };
         body = [
@@ -567,11 +553,10 @@
           UI.field('Part number', text('partNumber', v.partNumber, { maxlength: '60' }), 'Optional, e.g. the OEM number from the catalogue.'),
           UI.field('Quantity *', text('quantity', v.quantity === null || v.quantity === undefined ? '1' : v.quantity, { inputmode: 'decimal', required: true }), 'How many were bought, e.g. 1, 4 or 4.5 litres.'),
           amountRow('Price of each *', text('unitCost', v.unitCost === null || v.unitCost === undefined ? '' : v.unitCost, { inputmode: 'decimal', required: true }), null, 'f-unit'),
-          shippingField(),
           UI.field('Product link', text('productUrl', v.productUrl, { inputmode: 'url', placeholder: 'https://…' }), 'Optional. A secure (https) link.'),
           costTotal,
         ];
-        ['quantity', 'unitCost', 'shippingCost'].forEach(function (k) { f[k].addEventListener('input', updatePurchaseTotal); });
+        ['quantity', 'unitCost'].forEach(function (k) { f[k].addEventListener('input', updatePurchaseTotal); });
         currencySelect.addEventListener('change', updatePurchaseTotal);
         updatePurchaseTotal();
       } else {
@@ -636,7 +621,7 @@
             partRows.forEach(function (r) {
               var q = num0(r.quantity);
               if (r.kind === 'existing') add(r.currency, q * (r.unitCost || 0));
-              else add(r.currency || defaultCurrency, q * num0(r.unitCost) + num0(r.shippingCost));
+              else add(r.currency || defaultCurrency, q * num0(r.unitCost));
             });
           }
           return map;
@@ -670,7 +655,6 @@
               (function () { var i2 = el('input', { type: 'text', value: row.unitCost || '', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Price of each' }); i2.addEventListener('input', function () { row.unitCost = i2.value; updateTotal(); }); return i2; })(),
               cur,
             ])]),
-            partInput(row, 'shippingCost', 'Shipping for these (optional, same currency)', { inputmode: 'decimal' }),
             partInput(row, 'partNumber', 'Part number (optional)', { maxlength: '60' }),
             partInput(row, 'vendor', 'Supplier (optional)', { maxlength: '80' }),
             remove,
@@ -698,7 +682,7 @@
         });
         var newBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add a new part' });
         newBtn.addEventListener('click', function () {
-          partRows.push({ kind: 'new', name: '', quantity: '1', unitCost: '', shippingCost: '', partNumber: '', vendor: '', currency: defaultCurrency });
+          partRows.push({ kind: 'new', name: '', quantity: '1', unitCost: '', partNumber: '', vendor: '', currency: defaultCurrency });
           drawParts();
         });
 
@@ -789,7 +773,7 @@
 
       function collect() {
         var fields = {};
-        ['title', 'date', 'mileage', 'vendor', 'notes', 'status', 'cost', 'expiryDate', 'partNumber', 'quantity', 'unitCost', 'shippingCost',
+        ['title', 'date', 'mileage', 'vendor', 'notes', 'status', 'cost', 'expiryDate', 'partNumber', 'quantity', 'unitCost',
           'productUrl', 'lumpSumCost', 'labourCost', 'labourNote', 'labourHours', 'otherCost', 'otherNote', 'linkedIssueId',
           'labourCurrency', 'otherCurrency', 'lumpCurrency'].forEach(function (k) {
           if (f[k]) fields[k] = f[k].value;
@@ -826,7 +810,7 @@
           payload.parts = f.modeLump.checked ? [] : f.partRows.map(function (r) {
             return r.kind === 'existing'
               ? { purchaseId: r.purchaseId, quantity: r.quantity }
-              : { name: r.name, quantity: r.quantity, unitCost: r.unitCost, shippingCost: r.shippingCost, partNumber: r.partNumber, vendor: r.vendor, currency: r.currency };
+              : { name: r.name, quantity: r.quantity, unitCost: r.unitCost, partNumber: r.partNumber, vendor: r.vendor, currency: r.currency };
           });
           if (f.resolve && f.linkedIssueId.value) payload.resolveIssue = f.resolve.checked;
         }

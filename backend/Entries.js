@@ -317,7 +317,7 @@ function parseEntryInput_(f, type, car) {
     out.quantity = String(parseQty_(f.quantity));
     out.unit_cost = parseMoney_(f.unitCost);
     if (out.unit_cost === '') fail_('unit_cost_required');
-    out.shipping_cost = parseMoney_(f.shippingCost);
+    // (no shipping field any more: an older phone that still sends one is ignored, and an existing value is left alone)
     out.product_url = parseHttpsUrl_(f.productUrl, 'invalid_url');
   } else {
     // Maintenance
@@ -357,7 +357,7 @@ function planParts_(partsIn, car, eventDate, eventCurrency, eventId, c) {
       const unit = parseMoney_(it.unitCost);
       if (unit === '') fail_('unit_cost_required');
       create.push({
-        name: name, quantity: parseQty_(it.quantity), unitCost: unit, shipping: parseMoney_(it.shippingCost),
+        name: name, quantity: parseQty_(it.quantity), unitCost: unit, shipping: '',
         partNumber: cleanStr_(it.partNumber, 60), vendor: cleanStr_(it.vendor, 80),
         currency: oneOf_(it.currency, CURRENCIES, eventCurrency, 'invalid_currency'),
       });
