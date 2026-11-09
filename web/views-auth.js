@@ -97,12 +97,38 @@
           .catch(function (e) { msg.append(UI.notice('error', UI.errorText(e))); });
       });
 
+      // Re-send: a new email with a new link and code (the old ones stop working). Wait half a minute between sends.
+      var resend = el('button', { type: 'button', class: 'linklike', text: 'Re-send code' });
+      var waitTimer = null;
+      function startWait(seconds) {
+        resend.disabled = true;
+        var left = seconds;
+        resend.textContent = 'Re-send code (' + left + ')';
+        clearInterval(waitTimer);
+        waitTimer = setInterval(function () {
+          left--;
+          if (left <= 0) { clearInterval(waitTimer); resend.disabled = false; resend.textContent = 'Re-send code'; return; }
+          resend.textContent = 'Re-send code (' + left + ')';
+        }, 1000);
+      }
+      resend.addEventListener('click', function () {
+        msg.replaceChildren();
+        startWait(30);
+        FleetApi.call('requestLogin', { email: emailAddr }).then(function () {
+          msg.append(UI.notice('ok', 'A new code is on its way. Use the newest email: the earlier code and link no longer work.'));
+        }).catch(function (e) {
+          clearInterval(waitTimer); resend.disabled = false; resend.textContent = 'Re-send code';
+          msg.append(UI.notice('error', UI.errorText(e)));
+        });
+      });
+
       card.replaceChildren(
         el('h1', { text: 'Check your email' }),
         el('p', { text: 'If ' + emailAddr + ' has an account, we have sent a link and a code. They expire in 15 minutes.' }),
         el('p', { class: 'muted', text: 'Nothing yet? Check your junk folder and mark the email as "not junk".' }),
         msg, form,
-        el('p', { class: 'center' }, [el('button', { type: 'button', class: 'linklike', text: 'Use a different email', onclick: function () { stepEmail(emailAddr); } })])
+        el('p', { class: 'center' }, [resend]),
+        el('p', { class: 'center' }, [el('button', { type: 'button', class: 'linklike', text: 'Use a different email', onclick: function () { clearInterval(waitTimer); stepEmail(emailAddr); } })])
       );
       code.focus();
     }
