@@ -12,21 +12,19 @@
     'Coolant', 'Brake fluid', 'Power steering fluid', 'AC refrigerant',
   ];
 
-  // Bulbs live in the same list as the fluids, with "Bulb: " in front of the name. The Specification says the bulb
-  // type and then the specific bulb (e.g. "Halogen H7 55 W"); the Capacity box says how many are fitted.
-  var BULB_PREFIX = 'Bulb: ';
+  // Bulbs are rows of the same list as the fluids, marked with kind 'bulb'. The name is where the bulb goes ("Dipped
+  // beam"), the Specification says the bulb type and then the specific bulb (e.g. "Halogen H7 55 W"), and the
+  // Capacity box says how many are fitted.
   var BULB_TEMPLATE = [
-    'Bulb: Dipped beam', 'Bulb: Full beam', 'Bulb: Front side light', 'Bulb: Front indicator', 'Bulb: Rear indicator',
-    'Bulb: Front fog', 'Bulb: Rear fog', 'Bulb: Front daytime running', 'Bulb: Rear light', 'Bulb: Rear brake light',
-    'Bulb: Rear reverse light',
+    'Dipped beam', 'Full beam', 'Front side light', 'Front indicator', 'Rear indicator', 'Front fog', 'Rear fog',
+    'Front daytime running', 'Rear light', 'Rear brake light', 'Rear reverse light',
   ];
-  function isBulb(name) { return (name || '').indexOf(BULB_PREFIX) === 0; }
+  function isBulbRow(row) { return row && row.kind === 'bulb'; }
 
   // Greyed-out examples shown in an empty Specification / Capacity box. They are
   // only suggestions of a typical standard for that kind of fluid, never saved.
   // Order matters: the first pattern that matches the fluid name wins.
   var FLUID_HINTS = [
-    [/^bulb/i, { spec: 'e.g. Halogen H7 55 W', cap: 'e.g. 2 (one each side)' }],
     [/transfer/i, { spec: 'e.g. 75W-90 API GL-4', cap: 'e.g. 1 L' }],
     [/differential|diff\b/i, { spec: 'e.g. 75W-90 API GL-5', cap: 'e.g. 1.2 L' }],
     [/engine|motor oil/i, { spec: 'e.g. 5W-30 ACEA C3', cap: 'e.g. 5.5 L' }],
@@ -37,6 +35,7 @@
     [/refrigerant|a\/c|\bac\b|air con/i, { spec: 'e.g. R134a or R1234yf', cap: 'e.g. 450 g' }],
   ];
   var FLUID_HINT_DEFAULT = { spec: 'e.g. grade or standard', cap: 'e.g. 1 L' };
+  var BULB_HINT = { spec: 'e.g. Halogen H7 55 W', cap: 'e.g. 2 (one each side)' };
   function fluidHint(name) {
     for (var i = 0; i < FLUID_HINTS.length; i++) {
       if (FLUID_HINTS[i][0].test(name || '')) return FLUID_HINTS[i][1];
@@ -301,8 +300,8 @@
           f.notes ? el('div', { class: 'muted small-text', text: f.notes }) : null,
         ]);
       }
-      var fluidRows = fluids.filter(function (f) { return !isBulb(f.fluid); }).map(function (f) { return specRow(f, f.fluid, 'fluid'); });
-      var bulbRows = fluids.filter(function (f) { return isBulb(f.fluid); }).map(function (f) { return specRow(f, f.fluid.slice(BULB_PREFIX.length), 'bulb'); });
+      var fluidRows = fluids.filter(function (f) { return !isBulbRow(f); }).map(function (f) { return specRow(f, f.fluid, 'fluid'); });
+      var bulbRows = fluids.filter(isBulbRow).map(function (f) { return specRow(f, f.fluid, 'bulb'); });
 
       root.replaceChildren(
         el('div', { class: 'copy-row' }, [UI.copyLinkButton(carUrl(car.id), { label: 'Copy link to this car' })]),
@@ -311,7 +310,7 @@
           el('div', { class: 'page-head' }, [
             el('div', {}, [
               el('h1', { text: car.registration }),
-              el('div', { class: 'muted', text: [car.nickname, carTitle(car)].filter(Boolean).join(' · ') }),
+              el('div', { class: 'muted', text: carTitle(car) }),
             ]),
             chip(car.status),
           ]),
@@ -363,59 +362,47 @@
     var rows = initial.map(function (f) { return Object.assign({}, f); });
     var list = el('div', { class: 'stack' });
     var bulbList = el('div', { class: 'stack' });
-    var datalist = el('datalist', { id: 'fluid-names' }, FLUID_TEMPLATE.concat(BULB_TEMPLATE).map(function (n) { return el('option', { value: n }); }));
+    var datalist = el('datalist', { id: 'fluid-names' }, FLUID_TEMPLATE.map(function (n) { return el('option', { value: n }); }));
+    var bulbDatalist = el('datalist', { id: 'bulb-names' }, BULB_TEMPLATE.map(function (n) { return el('option', { value: n }); }));
 
-    function rowEl(row, i) {
+    function rowEl(row) {
+      var bulb = isBulbRow(row);
       function inp(key, attrs) {
         var input = el('input', Object.assign({ type: 'text', value: row[key] || '', autocomplete: 'off' }, attrs || {}));
         input.addEventListener('input', function () { row[key] = input.value; });
         return input;
       }
-      var fluidIn = inp('fluid', { list: 'fluid-names', maxlength: '40' });
+      var nameIn = inp('fluid', { list: bulb ? 'bulb-names' : 'fluid-names', maxlength: '40' });
       var specIn = inp('specification', { maxlength: '120' });
       var capIn = inp('capacity', { maxlength: '40' });
-      // The examples follow the fluid name, so a differential oil never suggests an engine oil grade.
+      // The examples follow the name, so a differential oil never suggests an engine oil grade.
       function showHints() {
-        var h = fluidHint(fluidIn.value);
+        var h = bulb ? BULB_HINT : fluidHint(nameIn.value);
         specIn.placeholder = h.spec;
         capIn.placeholder = h.cap;
+        if (bulb) nameIn.placeholder = 'e.g. Dipped beam';
       }
-      var fluidField = UI.field('Fluid', fluidIn);
-      var specField = UI.field('Specification', specIn);
-      var capField = UI.field('Capacity', capIn);
-      // A bulb row asks for the bulb type and name, and how many, instead of a spec and a capacity.
-      function showLabels() {
-        var bulb = isBulb(fluidIn.value);
-        fluidField.querySelector('label').textContent = bulb ? 'Bulb' : 'Fluid';
-        specField.querySelector('label').textContent = bulb ? 'Bulb type and name' : 'Specification';
-        capField.querySelector('label').textContent = bulb ? 'How many' : 'Capacity';
-      }
-      fluidIn.addEventListener('input', function () { showHints(); showLabels(); });
+      nameIn.addEventListener('input', showHints);
       showHints();
-      showLabels();
       var remove = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
       remove.addEventListener('click', function () { rows.splice(rows.indexOf(row), 1); draw(); });
-      var rowBox = el('div', { class: 'fluid-edit' }, [
-        fluidField,
-        specField,
-        capField,
+      // The name and the specification share a line, to save scrolling. A bulb row asks for where the bulb goes,
+      // the bulb type and name, and how many, instead of a fluid, a specification and a capacity.
+      return el('div', { class: 'fluid-edit ' + (bulb ? 'kind-bulb' : 'kind-fluid') }, [
+        el('div', { class: 'field-pair' }, [
+          UI.field(bulb ? 'Bulb location' : 'Fluid', nameIn),
+          UI.field(bulb ? 'Bulb type and name' : 'Specification', specIn),
+        ]),
+        UI.field(bulb ? 'How many' : 'Capacity', capIn),
         UI.field('Notes', inp('notes', { maxlength: '200' })),
         remove,
       ]);
-      function showKind() { // blue for a fluid, amber for a bulb (it can change while the name is being typed)
-        var bulb = isBulb(fluidIn.value);
-        rowBox.classList.toggle('kind-bulb', bulb);
-        rowBox.classList.toggle('kind-fluid', !bulb);
-      }
-      fluidIn.addEventListener('input', showKind);
-      showKind();
-      return rowBox;
     }
 
     // The fluids and the bulbs are one list on the car, shown as two sections of the form.
     function draw() {
-      var fluidRows = rows.filter(function (r) { return !isBulb(r.fluid); });
-      var bulbRows = rows.filter(function (r) { return isBulb(r.fluid); });
+      var fluidRows = rows.filter(function (r) { return !isBulbRow(r); });
+      var bulbRows = rows.filter(isBulbRow);
       list.replaceChildren.apply(list, fluidRows.length
         ? fluidRows.map(rowEl)
         : [el('p', { class: 'muted', text: 'No fluids yet. Add one, or add the standard set.' })]);
@@ -424,40 +411,34 @@
         : [el('p', { class: 'muted', text: 'No bulbs yet. Add one, or add the standard set.' })]);
     }
 
+    function addStandard(names, kind) {
+      var have = rows.filter(function (r) { return (r.kind === 'bulb') === (kind === 'bulb'); }).map(function (r) { return (r.fluid || '').toLowerCase(); });
+      names.forEach(function (n) {
+        if (have.indexOf(n.toLowerCase()) === -1) rows.push({ kind: kind, fluid: n, specification: '', capacity: '', notes: '' });
+      });
+      draw();
+    }
     var addBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add fluid' });
-    addBtn.addEventListener('click', function () { rows.push({ fluid: '', specification: '', capacity: '', notes: '' }); draw(); });
+    addBtn.addEventListener('click', function () { rows.push({ kind: 'fluid', fluid: '', specification: '', capacity: '', notes: '' }); draw(); });
     var stdBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add standard fluids' });
-    stdBtn.addEventListener('click', function () {
-      var have = rows.map(function (r) { return (r.fluid || '').toLowerCase(); });
-      FLUID_TEMPLATE.forEach(function (n) {
-        if (have.indexOf(n.toLowerCase()) === -1) rows.push({ fluid: n, specification: '', capacity: '', notes: '' });
-      });
-      draw();
-    });
-
+    stdBtn.addEventListener('click', function () { addStandard(FLUID_TEMPLATE, 'fluid'); });
     var addBulbBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add bulb' });
-    addBulbBtn.addEventListener('click', function () { rows.push({ fluid: BULB_PREFIX, specification: '', capacity: '', notes: '' }); draw(); });
+    addBulbBtn.addEventListener('click', function () { rows.push({ kind: 'bulb', fluid: '', specification: '', capacity: '', notes: '' }); draw(); });
     var bulbBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add standard bulbs' });
-    bulbBtn.addEventListener('click', function () {
-      var have = rows.map(function (r) { return (r.fluid || '').toLowerCase(); });
-      BULB_TEMPLATE.forEach(function (n) {
-        if (have.indexOf(n.toLowerCase()) === -1) rows.push({ fluid: n, specification: '', capacity: '', notes: '' });
-      });
-      draw();
-    });
+    bulbBtn.addEventListener('click', function () { addStandard(BULB_TEMPLATE, 'bulb'); });
 
     // Rows with nothing in them are ignored when saving.
     function payload() {
       return rows
         .filter(function (r) { return (r.fluid || '').trim() || (r.specification || '').trim() || (r.capacity || '').trim(); })
-        .map(function (r) { return { id: r.id, fluid: r.fluid || '', specification: r.specification || '', capacity: r.capacity || '', notes: r.notes || '' }; });
+        .map(function (r) { return { id: r.id, kind: r.kind === 'bulb' ? 'bulb' : 'fluid', fluid: r.fluid || '', specification: r.specification || '', capacity: r.capacity || '', notes: r.notes || '' }; });
     }
     var snapshot = JSON.stringify(payload());
     draw();
 
     return {
       node: el('div', {}, [datalist, list, el('div', { class: 'btn-row' }, [addBtn, stdBtn])]),
-      bulbsNode: el('div', {}, [bulbList, el('div', { class: 'btn-row' }, [addBulbBtn, bulbBtn])]),
+      bulbsNode: el('div', {}, [bulbDatalist, bulbList, el('div', { class: 'btn-row' }, [addBulbBtn, bulbBtn])]),
       payload: payload,
       dirty: function () { return JSON.stringify(payload()) !== snapshot; },
       // After a save the server gives every row its id; keep them so a retry never duplicates a row.
@@ -560,16 +541,20 @@
       function odometerField() {
         var odo = text('odometer', v.odometer === null || v.odometer === undefined ? '' : v.odometer, { inputmode: 'numeric', id: 'f-odometer' });
         return el('div', { class: 'field' }, [
-          el('label', { for: 'f-odometer', text: 'Current odometer (miles)' }),
+          el('label', { for: 'f-odometer', text: 'Odometer (miles)' }),
           odo,
-          el('div', { class: 'hint', text: 'Whole number, in miles.' }),
+          el('div', { class: 'hint', text: 'Whole number.' }),
         ]);
       }
 
       // Two short fields side by side, to save scrolling.
       function pair(a, b, cls) { return el('div', { class: 'field-pair' + (cls ? ' ' + cls : '') }, [a, b]); }
       var detailFields = [
-        UI.field('Registration number *', text('registration', v.registration, { maxlength: '20', autocapitalize: 'characters', required: true })),
+        pair(
+          UI.field('Registration *', text('registration', v.registration, { maxlength: '20', autocapitalize: 'characters', required: true })),
+          UI.field('VIN / chassis', text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 'The 17-character VIN, or chassis number.'),
+          'wide-second' // a VIN is long, a registration is short
+        ),
         pair(
           UI.field('Make *', text('make', v.make, { maxlength: '40', placeholder: 'e.g. Toyota', required: true })),
           UI.field('Model *', text('model', v.model, { maxlength: '40', placeholder: 'e.g. Land Cruiser', required: true }))
@@ -578,8 +563,6 @@
           UI.field('Year *', text('year', v.year, { inputmode: 'numeric', maxlength: '4', placeholder: 'e.g. 2015', required: true })),
           UI.field('Colour', text('colour', v.colour, { maxlength: '30' }))
         ),
-        UI.field('Nickname', text('nickname', v.nickname, { maxlength: '40' }), 'Optional, e.g. "The work truck".'),
-        UI.field('VIN / chassis number', text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 'The 17-character VIN, or the chassis number for Japanese imports.'),
         pair(
           UI.field('Engine code', text('engineCode', v.engineCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. 1GR-FE.'),
           UI.field('Gearbox code', text('gearboxCode', v.gearboxCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. A750F.')
@@ -593,8 +576,10 @@
           UI.field('Location', select('country', [['UK', 'UK'], ['UG', 'Uganda']], v.country), 'Where it is based. Sets the usual currency.'),
           UI.field('Date imported', text('importDate', v.importDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.')
         ),
-        UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
-        odometerField(),
+        pair(
+          UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
+          odometerField()
+        ),
         pair(
           UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.'),
           acquisitionCostField(),
@@ -700,7 +685,7 @@
       function collect() {
         return {
           registration: f.registration.value, make: f.make.value, model: f.model.value, year: f.year.value, colour: f.colour.value,
-          nickname: f.nickname.value, vin: f.vin.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, country: f.country.value,
+          vin: f.vin.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, country: f.country.value,
           market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value, importDate: f.importDate.value,
           status: f.status.value, odometer: f.odometer.value,
           acquisitionCost: f.acquisitionCost.value, acquisitionCurrency: f.acquisitionCurrency.value, acquisitionDate: f.acquisitionDate.value,

@@ -245,9 +245,9 @@ test('catalogue link may be any secure https link (PartSouq is just an example)'
 
 test('notes keep line breaks but lose control characters; text is length-capped', () => {
   const { env, sam } = setup();
-  const c = addCar(env, sam, { notes: 'line1\r\nline2\u0007\n\n\n\nline3', nickname: 'x'.repeat(100) }).data.car;
+  const c = addCar(env, sam, { notes: 'line1\r\nline2\u0007\n\n\n\nline3' }).data.car;
   assert.equal(c.notes, 'line1\nline2 \n\nline3');
-  assert.equal(c.nickname.length, 40);
+  assert.equal(c.nickname, undefined, 'there is no nickname any more');
 });
 
 // ---------- duplicates ----------
@@ -417,6 +417,45 @@ test('fluids: add, change, remove; ids stay stable', () => {
   assert.equal(r.data.fluids.find((f) => f.fluid === 'Engine oil').id, oil.id);
   assert.equal(r.data.fluids.find((f) => f.fluid === 'Engine oil').specification, '0W-20');
   assert.equal(env.call('getCar', { token: sam, id: car.id }).data.fluids.length, 2);
+});
+
+test('a row of the list is a fluid or a bulb, and a bulb has no "Bulb: " in its name', () => {
+  const { env, sam } = setup();
+  const car = addCar(env, sam).data.car;
+  const save = (fluids) => env.call('saveFluids', { token: sam, carId: car.id, fluids });
+  const r = save([
+    { fluid: 'Engine oil', specification: '5W-30' },
+    { kind: 'bulb', fluid: 'Dipped beam', specification: 'Halogen H7 55 W', capacity: '2' },
+    { fluid: 'Bulb: Full beam', specification: 'Halogen H7 55 W' },          // an older phone: the prefix becomes the kind
+    { kind: 'fluid', fluid: 'Coolant' },
+  ]);
+  assert.deepEqual(r.data.fluids.map((f) => [f.kind, f.fluid]), [['fluid', 'Engine oil'], ['bulb', 'Dipped beam'], ['bulb', 'Full beam'], ['fluid', 'Coolant']]);
+  // saving the same list again changes nothing
+  const again = save(r.data.fluids);
+  assert.deepEqual(again.data.fluids.map((f) => f.id), r.data.fluids.map((f) => f.id));
+  assert.equal(again.data.fluids.find((f) => f.fluid === 'Dipped beam').kind, 'bulb');
+  // a row can be turned into a bulb
+  const oil = again.data.fluids[0];
+  const turned = save([Object.assign({}, oil, { kind: 'bulb' })].concat(again.data.fluids.slice(1)));
+  assert.equal(turned.data.fluids[0].kind, 'bulb');
+  assert.equal(env.call('getCar', { token: sam, id: car.id }).data.fluids.length, 4);
+});
+
+test('the move away from "Bulb: " names turns those rows into bulbs without the prefix', () => {
+  const { env, sam } = setup();
+  const car = addCar(env, sam).data.car;
+  env.call('saveFluids', { token: sam, carId: car.id, fluids: [{ fluid: 'Engine oil' }, { kind: 'bulb', fluid: 'Dipped beam' }] });
+  // wind the rows back to how they were: the prefix in the name, no kind
+  const header = env.sheets.FluidSpecs._rows[0];
+  env.sheets.FluidSpecs._rows.forEach((r, i) => {
+    if (i === 0) return;
+    if (r[header.indexOf('fluid')] === 'Dipped beam') r[header.indexOf('fluid')] = 'Bulb: Dipped beam';
+    r[header.indexOf('kind')] = '';
+  });
+  env.invalidate();
+  env.props.SCHEMA_VERSION = '17';
+  const got = env.call('getCar', { token: sam, id: car.id }).data.fluids;
+  assert.deepEqual(got.map((f) => [f.kind, f.fluid]), [['fluid', 'Engine oil'], ['bulb', 'Dipped beam']]);
 });
 
 test('fluid validation and limits', () => {

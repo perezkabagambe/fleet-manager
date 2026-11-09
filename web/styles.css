@@ -484,7 +484,7 @@ details.form-section.collapsible[open] > summary { margin-bottom: 12px; }
 .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; align-items: start; }
 .field-pair > .field { min-width: 0; }
 .field-pair .odo-row select { min-width: 0; width: 4.8em; }
-.field-pair.wide-second { grid-template-columns: 0.85fr 1.15fr; }
+.field-pair.wide-second { grid-template-columns: 0.8fr 1.2fr; }
 @media (max-width: 339px) { .field-pair { grid-template-columns: 1fr; } }
 
 /* Fluids are blue (water drop), bulbs are amber (light bulb) */
@@ -501,3 +501,4 @@ li.fluid.kind-bulb .fluid-name { color: var(--kind-bulb-text); }
 .fluid-edit.kind-bulb { border-left: 4px solid var(--kind-bulb); background: color-mix(in srgb, var(--kind-bulb) 7%, transparent); }
 details.form-section.kind-fluid > summary h2 { color: var(--kind-fluid-text); }
 details.form-section.kind-bulb > summary h2 { color: var(--kind-bulb-text); }
+.fluid-edit .field-pair { align-items: end; }

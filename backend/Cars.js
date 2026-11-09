@@ -24,7 +24,6 @@ function summarizeCar_(c) {
   return {
     id: c.id,
     registration: c.registration,
-    nickname: c.nickname,
     make: c.make,
     model: c.model,
     year: c.year ? Number(c.year) : null,
@@ -88,7 +87,6 @@ function parseCarInput_(f, existing) {
   if (!out.make) fail_('make_required');
   out.model = cleanStr_(f.model, 40);
   if (!out.model) fail_('model_required');
-  out.nickname = cleanStr_(f.nickname, 40);
   out.colour = cleanStr_(f.colour, 30);
 
   const yearRaw = cleanStr_(f.year, 6);
@@ -356,15 +354,25 @@ function listFluids_(carId) {
     .filter(function (f) { return f.car_id === carId && !isTrue_(f.deleted); })
     .map(function (f) {
       return {
-        id: f.id, fluid: f.fluid, specification: f.specification, capacity: f.capacity,
+        id: f.id, kind: f.kind === 'bulb' ? 'bulb' : 'fluid', fluid: f.fluid, specification: f.specification, capacity: f.capacity,
         notes: f.notes, source: f.source,
       };
     });
 }
 
+const BULB_PREFIX = 'Bulb: '; // bulbs used to be told apart from fluids by this in front of their name
+
+/**
+ * One row of the "Fluids, Bulbs & Specifications" list. `kind` is 'bulb' for a bulb and otherwise a fluid
+ * (stored as '' for a fluid). A name that still starts with "Bulb: " (an older phone) becomes a bulb without it.
+ */
 function cleanFluid_(it) {
+  let name = cleanStr_(it.fluid, 60);
+  let kind = it.kind === 'bulb' ? 'bulb' : '';
+  if (name.toLowerCase().indexOf(BULB_PREFIX.toLowerCase()) === 0) { kind = 'bulb'; name = name.slice(BULB_PREFIX.length).trim(); }
   const out = {
-    fluid: cleanStr_(it.fluid, 40),
+    kind: kind,
+    fluid: name.slice(0, 40),
     specification: cleanStr_(it.specification, 120),
     capacity: cleanStr_(it.capacity, 40),
     notes: cleanStr_(it.notes, 200),

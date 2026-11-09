@@ -25,7 +25,7 @@ const SCHEMA = {
   },
   // Which users own / are the registered keeper of which cars (one row per car, user and role).
   CarPeople: { base: true, cols: ['car_id', 'user_id', 'role'] },
-  FluidSpecs: { base: true, cols: ['car_id', 'fluid', 'specification', 'capacity', 'notes', 'source', 'verify_flag'] },
+  FluidSpecs: { base: true, cols: ['car_id', 'fluid', 'specification', 'capacity', 'notes', 'source', 'verify_flag', 'kind'] },
   Entries: {
     base: true,
     cols: ['car_id', 'type', 'title', 'notes', 'date', 'mileage', 'cost', 'currency', 'vendor', 'status',
@@ -51,7 +51,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 17; // 17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 18; // 18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
@@ -72,6 +72,7 @@ function migrateIfNeeded_() {
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 11) switchOnGuestAccessEverywhere_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 15) convertEverythingToMiles_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 17) numberExistingEntries_();
+    if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 18) markBulbRows_();
     Db.invalidateAll(); // the sheets were changed directly: nothing remembered about them can be trusted
     props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   } finally {
@@ -209,6 +210,15 @@ function convertEverythingToMiles_() {
       if (t[k] !== '') patch[k] = String(convertDistance_(t[k], 'km', 'mi'));
     });
     if (Object.keys(patch).length) Db.update('Tasks', t._row, patch);
+  });
+}
+
+/** One-off (version 18): a row named "Bulb: Dipped beam" becomes a bulb row named "Dipped beam". */
+function markBulbRows_() {
+  Db.all('FluidSpecs').forEach(function (f) {
+    if (String(f.fluid).indexOf(BULB_PREFIX) === 0) {
+      Db.update('FluidSpecs', f._row, { kind: 'bulb', fluid: String(f.fluid).slice(BULB_PREFIX.length).trim() });
+    }
   });
 }
 
