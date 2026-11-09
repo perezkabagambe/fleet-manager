@@ -359,6 +359,7 @@
   function fluidsEditor(initial) {
     var rows = initial.map(function (f) { return Object.assign({}, f); });
     var list = el('div', { class: 'stack' });
+    var bulbList = el('div', { class: 'stack' });
     var datalist = el('datalist', { id: 'fluid-names' }, FLUID_TEMPLATE.concat(BULB_TEMPLATE).map(function (n) { return el('option', { value: n }); }));
 
     function rowEl(row, i) {
@@ -390,7 +391,7 @@
       showHints();
       showLabels();
       var remove = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
-      remove.addEventListener('click', function () { rows.splice(i, 1); draw(); });
+      remove.addEventListener('click', function () { rows.splice(rows.indexOf(row), 1); draw(); });
       return el('div', { class: 'fluid-edit' }, [
         fluidField,
         specField,
@@ -400,10 +401,16 @@
       ]);
     }
 
+    // The fluids and the bulbs are one list on the car, shown as two sections of the form.
     function draw() {
-      list.replaceChildren.apply(list, rows.length
-        ? rows.map(rowEl)
-        : [el('p', { class: 'muted', text: 'No fluids or bulbs yet. Add one, or add the standard set.' })]);
+      var fluidRows = rows.filter(function (r) { return !isBulb(r.fluid); });
+      var bulbRows = rows.filter(function (r) { return isBulb(r.fluid); });
+      list.replaceChildren.apply(list, fluidRows.length
+        ? fluidRows.map(rowEl)
+        : [el('p', { class: 'muted', text: 'No fluids yet. Add one, or add the standard set.' })]);
+      bulbList.replaceChildren.apply(bulbList, bulbRows.length
+        ? bulbRows.map(rowEl)
+        : [el('p', { class: 'muted', text: 'No bulbs yet. Add one, or add the standard set.' })]);
     }
 
     var addBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add fluid' });
@@ -417,6 +424,8 @@
       draw();
     });
 
+    var addBulbBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add bulb' });
+    addBulbBtn.addEventListener('click', function () { rows.push({ fluid: BULB_PREFIX, specification: '', capacity: '', notes: '' }); draw(); });
     var bulbBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Add standard bulbs' });
     bulbBtn.addEventListener('click', function () {
       var have = rows.map(function (r) { return (r.fluid || '').toLowerCase(); });
@@ -436,7 +445,8 @@
     draw();
 
     return {
-      node: el('div', {}, [datalist, list, el('div', { class: 'btn-row' }, [addBtn, stdBtn, bulbBtn])]),
+      node: el('div', {}, [datalist, list, el('div', { class: 'btn-row' }, [addBtn, stdBtn])]),
+      bulbsNode: el('div', {}, [bulbList, el('div', { class: 'btn-row' }, [addBulbBtn, bulbBtn])]),
       payload: payload,
       dirty: function () { return JSON.stringify(payload()) !== snapshot; },
       // After a save the server gives every row its id; keep them so a retry never duplicates a row.
@@ -637,16 +647,28 @@
         el('div', { class: 'hint', text: 'Take a photo with your camera, or choose one from your gallery.' }),
       ];
 
-      function section(title, children) {
-        return el('div', { class: 'form-section' }, [el('h2', { text: title })].concat(children));
+      // Every part of the form opens and closes, and starts closed. (A new car starts with Details open, because
+      // that is where the required fields are.)
+      function section(title, children, open) {
+        var d = el('details', { class: 'form-section collapsible' }, [
+          el('summary', {}, [el('h2', { text: title })]),
+          el('div', { class: 'collapse-body' }, children),
+        ]);
+        d.open = !!open;
+        return d;
       }
+      var detailsSection = section('Vehicle details', detailFields, !car);
+      var ownersSection = section('Owner/Custodian', ownerFields);
       var fluidsSection = section('Fluids and specs', [fluidsEd.node]);
+      var bulbsSection = section('Bulbs', [fluidsEd.bulbsNode]);
+      var photoSection = section('Photo', photoFields);
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: car ? 'Save changes' : 'Add car' });
       var form = el('form', { novalidate: true }, [
-        section('Details', detailFields),
-        section('Owner/Custodian', ownerFields),
+        detailsSection,
+        ownersSection,
         fluidsSection,
-        section('Photo', photoFields),
+        bulbsSection,
+        photoSection,
       ].concat([btn]));
 
       function collect() {
@@ -749,6 +771,12 @@
           var text = (e.savedParts && e.savedParts.length ? 'Saved: ' + e.savedParts.join(', ') + '. ' : '') +
             'Could not save ' + (e.failedStep || 'the changes') + ': ' + UI.errorText(e);
           msg.replaceChildren(UI.notice('error', text));
+          // open the part that could not be saved, so the problem is in front of you
+          var failed = e.failedStep || '';
+          if (/details/.test(failed)) detailsSection.open = true;
+          else if (/fluid/.test(failed)) { fluidsSection.open = true; bulbsSection.open = true; }
+          else if (/owner/.test(failed)) ownersSection.open = true;
+          else if (/photo/.test(failed)) photoSection.open = true;
           window.scrollTo(0, 0);
         });
       });
@@ -779,7 +807,7 @@
         deleteBox,
       ]));
       // "Edit" on the Fluids and specs section of the car page lands straight on that part of the form
-      if (/\/fluids$/.test(ctx.path || '')) setTimeout(function () { fluidsSection.scrollIntoView(); }, 0);
+      if (/\/fluids$/.test(ctx.path || '')) { fluidsSection.open = true; setTimeout(function () { fluidsSection.scrollIntoView(); }, 0); }
     }
   };
 

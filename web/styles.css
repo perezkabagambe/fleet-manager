@@ -474,3 +474,8 @@ details.collapsible[open] > summary .collapse-hint { display: none; }
 .linklike:disabled { color: var(--muted); text-decoration: none; cursor: default; }
 
 .spec-group { margin: 16px 0 4px; font-size: 1rem; }
+
+/* The parts of the car form open and close */
+details.form-section.collapsible > summary { min-height: 48px; }
+details.form-section.collapsible[open] > summary { margin-bottom: 12px; }
+.form-section.collapsible .collapse-body > .field:first-child { margin-top: 0; }
