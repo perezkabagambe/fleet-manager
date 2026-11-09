@@ -16,8 +16,9 @@
   // type and then the specific bulb (e.g. "Halogen H7 55 W"); the Capacity box says how many are fitted.
   var BULB_PREFIX = 'Bulb: ';
   var BULB_TEMPLATE = [
-    'Bulb: Dipped beam', 'Bulb: Full beam', 'Bulb: Indicator', 'Bulb: Front fog', 'Bulb: Rear fog',
-    'Bulb: Front daytime running', 'Bulb: Rear light', 'Bulb: Rear brake light', 'Bulb: Rear reverse light',
+    'Bulb: Dipped beam', 'Bulb: Full beam', 'Bulb: Front side light', 'Bulb: Front indicator', 'Bulb: Rear indicator',
+    'Bulb: Front fog', 'Bulb: Rear fog', 'Bulb: Front daytime running', 'Bulb: Rear light', 'Bulb: Rear brake light',
+    'Bulb: Rear reverse light',
   ];
   function isBulb(name) { return (name || '').indexOf(BULB_PREFIX) === 0; }
 
@@ -332,9 +333,9 @@
         ]), car.odometer === null ? 'Not set' : num(car.odometer) + ' mi'),
         collapsible('Maintenance & Issues Log', EntryUI.historyCard(car, page && page.entries), page && page.entries ? countText(page.entries.length, 'entry', 'entries') : ''),
         collapsible('Reminders', RemindersUI.card(car, page && page.tasks), page && page.tasks ? reminderHint(page.tasks) : ''),
-        collapsible('Fluids and specs', el('section', { class: 'card' }, [
-          el('h2', { text: 'Fluids and specs' }),
-          el('div', { class: 'section-tools' }, [el('a', { class: 'btn small secondary section-edit', href: '#/car/' + car.id + '/fluids', text: 'Edit', 'aria-label': 'Edit the fluids and specs' })]),
+        collapsible('Fluids, Bulbs & Specifications', el('section', { class: 'card' }, [
+          el('h2', { text: 'Fluids, Bulbs & Specifications' }),
+          el('div', { class: 'section-tools' }, [el('a', { class: 'btn small secondary section-edit', href: '#/car/' + car.id + '/fluids', text: 'Edit', 'aria-label': 'Edit the fluids, bulbs and specifications' })]),
           fluidRows.length ? el('h3', { class: 'spec-group kind-fluid', text: '💧 Fluids' }) : null,
           fluidRows.length ? el('ul', { class: 'fluids' }, fluidRows) : (bulbRows.length ? null : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' })),
           bulbRows.length ? el('h3', { class: 'spec-group kind-bulb', text: '💡 Bulbs' }) : null,
@@ -684,7 +685,7 @@
       }
       var detailsSection = section('Vehicle details', detailFields, !car);
       var ownersSection = section('Owner/Custodian', ownerFields);
-      var fluidsSection = section('💧 Fluids and specs', [fluidsEd.node], false, 'kind-fluid');
+      var fluidsSection = section('💧 Fluids & Specifications', [fluidsEd.node], false, 'kind-fluid');
       var bulbsSection = section('💡 Bulbs', [fluidsEd.bulbsNode], false, 'kind-bulb');
       var photoSection = section('Photo', photoFields);
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: car ? 'Save changes' : 'Add car' });
@@ -747,10 +748,10 @@
           if (res === 'cancelled') return 'stop';
           if (res === 'saved') done.push('car details');
           if (!fluidsEd.dirty()) return null;
-          step = 'the fluids and specs';
+          step = 'the fluids, bulbs and specifications';
           return FleetApi.call('saveFluids', { carId: state.carId, fluids: fluidsEd.payload() }).then(function (r) {
             fluidsEd.markSaved(r.data.fluids);
-            done.push('fluids and specs');
+            done.push('fluids, bulbs and specifications');
           });
         }).then(function (stop) {
           if (stop === 'stop') return 'stop';
@@ -831,7 +832,7 @@
         msg, form,
         deleteBox,
       ]));
-      // "Edit" on the Fluids and specs section of the car page lands straight on that part of the form
+      // "Edit" on the Fluids, Bulbs & Specifications section of the car page lands straight on that part of the form
       if (/\/fluids$/.test(ctx.path || '')) { fluidsSection.open = true; setTimeout(function () { fluidsSection.scrollIntoView(); }, 0); }
     }
   };
