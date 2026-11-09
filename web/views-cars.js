@@ -541,7 +541,7 @@
         return el('div', { class: 'field' }, [
           el('label', { for: 'f-cost', text: 'Acquisition cost' }),
           el('div', { class: 'odo-row' }, [cost, cur]),
-          el('div', { class: 'hint', text: 'Optional. What you paid for the car, in any of these currencies.' }),
+          el('div', { class: 'hint', text: 'Optional. What you paid.' }),
         ]);
       }
 
@@ -555,25 +555,40 @@
         ]);
       }
 
+      // Two short fields side by side, to save scrolling.
+      function pair(a, b, cls) { return el('div', { class: 'field-pair' + (cls ? ' ' + cls : '') }, [a, b]); }
       var detailFields = [
         UI.field('Registration number *', text('registration', v.registration, { maxlength: '20', autocapitalize: 'characters', required: true })),
-        UI.field('Make *', text('make', v.make, { maxlength: '40', placeholder: 'e.g. Toyota', required: true })),
-        UI.field('Model *', text('model', v.model, { maxlength: '40', placeholder: 'e.g. Land Cruiser', required: true })),
-        UI.field('Year *', text('year', v.year, { inputmode: 'numeric', maxlength: '4', placeholder: 'e.g. 2015', required: true })),
-        UI.field('Colour', text('colour', v.colour, { maxlength: '30' })),
+        pair(
+          UI.field('Make *', text('make', v.make, { maxlength: '40', placeholder: 'e.g. Toyota', required: true })),
+          UI.field('Model *', text('model', v.model, { maxlength: '40', placeholder: 'e.g. Land Cruiser', required: true }))
+        ),
+        pair(
+          UI.field('Year *', text('year', v.year, { inputmode: 'numeric', maxlength: '4', placeholder: 'e.g. 2015', required: true })),
+          UI.field('Colour', text('colour', v.colour, { maxlength: '30' }))
+        ),
         UI.field('Nickname', text('nickname', v.nickname, { maxlength: '40' }), 'Optional, e.g. "The work truck".'),
         UI.field('VIN / chassis number', text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 'The 17-character VIN, or the chassis number for Japanese imports.'),
-        UI.field('Engine code', text('engineCode', v.engineCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. 1GR-FE. Often stamped on the engine or listed in the handbook.'),
-        UI.field('Gearbox code', text('gearboxCode', v.gearboxCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. A750F. Useful when ordering gearbox parts or oil.'),
-        UI.field('Market', select('market', [['', 'Not recorded']].concat(MARKETS.map(function (m) { return [m, m]; })), v.market), 'The market the car was built and sold for, e.g. European or Japanese (JDM).'),
-        UI.field('Drive side', select('driveSide', [['', 'Not recorded'], ['LHD', 'Left-hand drive (LHD)'], ['RHD', 'Right-hand drive (RHD)']], v.driveSide)),
+        pair(
+          UI.field('Engine code', text('engineCode', v.engineCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. 1GR-FE.'),
+          UI.field('Gearbox code', text('gearboxCode', v.gearboxCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. A750F.')
+        ),
+        pair(
+          UI.field('Market', select('market', [['', 'Not recorded']].concat(MARKETS.map(function (m) { return [m, m]; })), v.market), 'Where it was built and sold for.'),
+          UI.field('Drive side', select('driveSide', [['', 'Not recorded'], ['LHD', 'Left-hand (LHD)'], ['RHD', 'Right-hand (RHD)']], v.driveSide))
+        ),
         UI.field('Fuel capacity (litres)', text('fuelCapacity', v.fuelCapacity === null || v.fuelCapacity === undefined ? '' : v.fuelCapacity, { inputmode: 'decimal', maxlength: '6', placeholder: 'e.g. 87' }), 'Optional. The size of the fuel tank.'),
-        UI.field('Location', select('country', [['UK', 'United Kingdom'], ['UG', 'Uganda']], v.country), 'Where the car is based. It sets the usual currency for its costs.'),
-        UI.field('Date imported', text('importDate', v.importDate, { maxlength: '24', placeholder: 'e.g. 2021, Mar 2021 or 12/03/2021' }), 'Optional. A full date, or just the month and year, or just the year.'),
+        pair(
+          UI.field('Location', select('country', [['UK', 'UK'], ['UG', 'Uganda']], v.country), 'Where it is based. Sets the usual currency.'),
+          UI.field('Date imported', text('importDate', v.importDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.')
+        ),
         UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
         odometerField(),
-        UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. 2021, Mar 2021 or 12/03/2021' }), 'Optional. A full date, or just the month and year, or just the year.'),
-        acquisitionCostField(),
+        pair(
+          UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.'),
+          acquisitionCostField(),
+          'wide-second' // the amount needs more room than the date
+        ),
         UI.field('Parts catalogue link', text('partsouqUrl', v.partsouqUrl, { inputmode: 'url', placeholder: 'https://…' }), 'Optional. Any secure (https) link, e.g. partsouq.com'),
       ];
       var notes = el('textarea', { name: 'notes', rows: '4', maxlength: '2000' });
