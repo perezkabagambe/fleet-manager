@@ -12,7 +12,7 @@ function setup() {
   const admin = env.signInAs('admin@example.com');
   const sam = env.signInAs('sam@example.com');
   const car = env.call('saveCar', { token: sam, fields: CAR }).data.car;
-  const up = (extra, token) => env.call('uploadCarDocument', Object.assign({ token: token || sam, carId: car.id, type: 'Insurance', mime: 'application/pdf', data: pdf(2000), filename: 'policy.pdf' }, extra || {}));
+  const up = (extra, token) => env.call('uploadCarDocument', Object.assign({ token: token || sam, carId: car.id, type: 'Other', mime: 'application/pdf', data: pdf(2000), filename: 'policy.pdf' }, extra || {}));
   const list = (token) => env.call('listCarDocuments', { token: token || sam, carId: car.id });
   return { env, admin, sam, car, up, list };
 }
@@ -50,11 +50,20 @@ test('a PDF and a photo can be added with a type and note; there is no limit on 
 
 test('every document type is accepted; others are refused', () => {
   const { up } = setup();
-  ['Logbook', 'Insurance', 'MOT / inspection', 'Import papers', 'Receipt / invoice', 'Other']
+  ['Logbook', 'Import papers', 'Other']
     .forEach((t) => assert.equal(up({ type: t }).data.document.type, t, t));
-  assert.equal(up({ type: 'Love letter' }).error, 'invalid_document_type');
+  ['Insurance', 'MOT / inspection', 'Receipt / invoice', 'Love letter'].forEach((t) => assert.equal(up({ type: t }).error, 'invalid_document_type', t + ' is no longer offered'));
   assert.equal(up({ type: '' }).error, 'invalid_document_type');
   assert.equal(up({ type: undefined }).error, 'invalid_document_type');
+});
+
+test('a document saved with a type that is no longer offered keeps that type', () => {
+  const { env, up, list } = setup();
+  const d = up({ type: 'Logbook' }).data.document;
+  const header = env.sheets.CarDocuments._rows[0];
+  env.sheets.CarDocuments._rows.find((r) => r[0] === d.id)[header.indexOf('doc_type')] = 'Insurance';
+  env.invalidate();
+  assert.equal(list().data.documents[0].type, 'Insurance');
 });
 
 test('JPEGs and PDFs are checked by their first bytes; other files are accepted within the limits', () => {
@@ -119,7 +128,7 @@ test('the car page carries the documents, and they are not mixed up with entry a
 
 test('adding and removing a document is audited', () => {
   const { env, admin, up } = setup();
-  const d = up({ type: 'Insurance', filename: 'policy.pdf' }).data.document;
+  const d = up({ type: 'Other', filename: 'policy.pdf' }).data.document;
   env.call('deleteCarDocument', { token: admin, id: d.id });
   const text = env.sheets.Audit._rows.slice(1).map((r) => r[3]).join(' ');
   assert.match(text, /document_added/);

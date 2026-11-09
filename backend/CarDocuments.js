@@ -5,7 +5,8 @@
  * Any signed-in user can add one; only admins remove one (the file goes to the Drive trash). Guests never see them.
  */
 
-const DOCUMENT_TYPES = ['Logbook', 'Insurance', 'MOT / inspection', 'Import papers', 'Receipt / invoice', 'Other'];
+// A document already saved with an older type (such as Insurance) keeps it; only these can be chosen for a new one.
+const DOCUMENT_TYPES = ['Logbook', 'Import papers', 'Other'];
 
 function documentShape_(d) {
   return { id: d.id, type: d.doc_type || 'Other', note: d.note || '', filename: d.filename, mime: d.mime, size: Number(d.size) || 0, createdAt: d.created_at };

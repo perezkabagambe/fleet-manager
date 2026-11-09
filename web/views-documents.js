@@ -6,7 +6,7 @@
   var el = UI.el;
   var Views = (window.Views = window.Views || {});
   var fmt = Views.fmt;
-  var TYPES = ['Logbook', 'Insurance', 'MOT / inspection', 'Import papers', 'Receipt / invoice', 'Other'];
+  var TYPES = ['Logbook', 'Import papers', 'Other'];
 
   function kb(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
 
