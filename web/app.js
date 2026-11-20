@@ -39,8 +39,12 @@
     return !!(PUBLIC[r.path] || GUEST_PATH.test(r.path) || (r.query.g && SCAN_PATH.test(r.path) && !FleetAuth.hasSession()));
   }
 
-  function route() {
+  var started = false; // nothing is drawn until the phone's saved copy has been read (a moment at most)
+
+  function route(opts) {
+    if (!started) return;
     var r = parseHash();
+    r.keepOpen = !!(opts && opts.keepOpen === true); // redrawing the same screen because its data changed: keep what was open
     if (!isOpen(r)) {
       if (!FleetAuth.hasSession()) { go('/login', { next: r.raw }); return; }
       if (!FleetAuth.getUser()) {
@@ -58,6 +62,7 @@
         return;
       }
     }
+    if (FleetAuth.hasSession() && FleetAuth.getUser() && window.FleetSync) FleetSync.start(); // saves the fleet's data on this phone (once), then keeps it fresh
     var view;
     var m;
     r.params = {};
@@ -97,7 +102,7 @@
     } else view = viewNotFound;
     view(r, appEl);
     appEl.focus({ preventScroll: true });
-    if (!r.query.focus) window.scrollTo(0, 0);
+    if (!r.query.focus && !r.keepOpen) window.scrollTo(0, 0);
   }
 
   // ---------- navigation ----------
@@ -109,6 +114,7 @@
     if (FleetAuth.isAdmin()) links.push(el('a', { href: '#/admin/users', text: 'Users' }));
     if (user) links.push(el('a', { href: '#/profile', text: user.name.split(' ')[0] }));
     if (FleetAuth.hasSession()) {
+      if (user && window.FleetSync) links.push(el('button', { type: 'button', class: 'navbtn', id: 'refresh-all', text: 'Refresh all app data', onclick: function () { FleetSync.refreshAll(); } }));
       links.push(el('button', { type: 'button', class: 'navbtn', text: 'Sign out', onclick: signOut }));
     } else {
       links.push(el('a', { href: '#/login', text: 'Sign in' }));
@@ -132,6 +138,19 @@
     if (!isOpen(r)) go('/login', { next: r.raw });
   });
 
+  // ---------- saved data changed behind the scenes ----------
+  // When the phone downloads newer data for the screen being shown (someone else changed it, or "Refresh all app data"
+  // was used), the screen is drawn again, unless the person is in the middle of typing.
+  window.addEventListener('fleet:data-updated', function (ev) {
+    var d = (ev && ev.detail) || {};
+    var r = parseHash();
+    var m = /^\/car\/([0-9a-f-]{8,40})(?:\/entry\/[0-9a-f-]{8,40})?$/.exec(r.path);
+    var affected = r.path === '/' ? !!(d.fleet || d.all) : m ? !!(d.all || (d.cars || []).indexOf(m[1]) !== -1) : false;
+    var a = document.activeElement;
+    if (!affected || (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+    route({ keepOpen: true });
+  });
+
   // ---------- footer / version check ----------
   var backendInfo = null;
 
@@ -139,7 +158,16 @@
     return !rev || rev.indexOf('__') === 0 ? 'dev' : rev.slice(0, 7);
   }
 
+  function renderSaved() {
+    var span = document.getElementById('rev-saved');
+    var at = window.FleetSync ? FleetSync.lastSaved() : 0;
+    if (!span) return;
+    span.textContent = at ? '· data saved on this phone ' + new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  }
+  window.addEventListener('fleet:synced', renderSaved);
+
   function renderFooter() {
+    renderSaved();
     document.getElementById('rev-front').textContent = 'rev ' + shortRev(cfg.commit);
     var back = document.getElementById('rev-back');
     var warn = document.getElementById('rev-warn');
@@ -302,10 +330,15 @@
     setFlash: function (kind, text) { flash = { kind: kind, text: text }; },
     takeFlash: function () { var f = flash; flash = null; return f; },
   };
-  window.addEventListener('hashchange', route);
-  renderFooter();
-  refreshNav();
-  route();
-  checkBackend();
-  setupServiceWorker();
+  window.addEventListener('hashchange', function () { route(); });
+  function boot() {
+    if (started) return;
+    started = true;
+    renderFooter();
+    refreshNav();
+    route();
+    checkBackend();
+    setupServiceWorker();
+  }
+  (window.FleetStore ? window.FleetStore.ready : Promise.resolve()).then(boot, boot);
 })();

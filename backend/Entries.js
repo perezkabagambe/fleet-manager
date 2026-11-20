@@ -231,10 +231,15 @@ function getEntry_(p, ctx) {
   const car = findCar_(e.car_id, ctx.user.role === 'admin');
   if (!car) fail_('not_found');
   const c = entryContext_(car.id);
-  const out = { entry: summarizeEntry_(e, guestNamesById_()), car: { id: car.id, registration: car.registration, distanceUnit: 'mi', currency: car.currency || 'GBP' } };
+  const attachments = Db.all('Attachments').filter(function (a) { return a.entry_id === e.id && !isTrue_(a.deleted); });
+  return buildEntryDetail_(e, car, c, guestNamesById_(), attachments);
+}
 
-  out.attachments = Db.all('Attachments')
-    .filter(function (a) { return a.entry_id === e.id && !isTrue_(a.deleted); })
+/** What the entry page shows. `c` is entryContext_(car.id) and `attachments` the entry's live attachment rows, so a whole car can be built in one pass. */
+function buildEntryDetail_(e, car, c, guestNames, attachments) {
+  const out = { entry: summarizeEntry_(e, guestNames), car: { id: car.id, registration: car.registration, distanceUnit: 'mi', currency: car.currency || 'GBP' } };
+
+  out.attachments = attachments
     .map(function (a) { return { id: a.id, filename: a.filename, mime: a.mime, size: Number(a.size || 0), thumb: !!a.thumb_file_id }; });
 
   if (e.task_id) {

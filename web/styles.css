@@ -529,3 +529,15 @@ details.form-section.kind-bulb > summary h2 { color: var(--kind-bulb-text); }
 .attach-staged { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); }
 .attach-staged[hidden] { display: none; }
 .attach-row.staged { border-top: 0; }
+
+/* Saving the app's data on this phone: a full-screen progress card */
+.sync-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; background: color-mix(in srgb, var(--brand) 94%, black); }
+.sync-card { width: 100%; max-width: 440px; background: var(--surface); color: var(--text); border-radius: var(--radius); padding: 22px 20px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35); }
+.sync-card h2 { margin: 0 0 8px; }
+.sync-bar-row { display: flex; align-items: center; gap: 12px; margin: 16px 0 8px; }
+.sync-bar { flex: 1; height: 14px; border-radius: 7px; background: var(--border); overflow: hidden; }
+.sync-bar-fill { height: 100%; width: 0; background: var(--accent); border-radius: 7px; transition: width 0.25s ease; }
+.sync-percent { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.sync-status { margin: 0 0 12px; min-height: 1.5em; }
+.sync-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+#refresh-all { white-space: nowrap; }

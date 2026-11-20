@@ -260,8 +260,11 @@
     var carId = ctx.params.id;
     var id = ctx.params.eid;
     root.replaceChildren(el('section', { class: 'card' }, [fmt.loading()]));
-    FleetApi.call('getEntry', { id: id }).then(function (r) { render(r.data); }).catch(function (e) {
-      if (e.code === 'not_found') {
+    // the copy saved on this phone is used as it is when nothing has changed; otherwise it appears at once and the fresh one replaces it
+    FleetApi.cached('getEntry', { id: id }, function (data) { render(data); }).catch(function (e) {
+      if (e.hadSaved && e.code !== 'not_found' && e.code !== 'unauthorized') {
+        root.prepend(UI.notice('error', 'Could not refresh, so this is the copy saved on this phone. ' + UI.errorText(e)));
+      } else if (e.code === 'not_found') {
         root.replaceChildren(el('section', { class: 'card' }, [
           el('h1', { text: 'Entry not found' }), el('p', { class: 'muted', text: 'It may have been deleted.' }),
           el('a', { class: 'btn', href: '#/car/' + carId, text: 'Back to the car' }),

@@ -36,6 +36,8 @@ function actions_() {
     listCars: { auth: 'user', fn: listCars_ },
     getCar: { auth: 'user', fn: getCar_ },
     getCarPage: { auth: 'user', fn: getCarPage_ },
+    getChanges: { auth: 'user', fn: getChanges_ },
+    getCarBundle: { auth: 'user', fn: getCarBundle_ },
     saveCar: { auth: 'user', lock: true, fn: saveCar_ },
     updateOdometer: { auth: 'user', lock: true, fn: updateOdometer_ },
     deleteCar: { auth: 'admin', lock: true, fn: deleteCar_ },

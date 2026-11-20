@@ -10,12 +10,18 @@ function browser(opts) {
   opts = opts || {};
   const store = {};
   const calls = [];
-  const win = { FLEET_CONFIG: { apiUrl: 'https://api.example/exec' }, dispatchEvent() {}, FleetAuth: null };
+  const events = [];
+  const clock = { offset: 0 }; // move "now" forward to test day changes
+  class FakeDate extends Date {
+    constructor(...a) { if (a.length) super(...a); else super(Date.now() + clock.offset); }
+    static now() { return Date.now() + clock.offset; }
+  }
+  const win = { FLEET_CONFIG: { apiUrl: 'https://api.example/exec' }, dispatchEvent(e) { events.push(e); }, FleetAuth: null };
   const answers = {}; // action -> function(params) returning { ok, data } | { ok:false, error }
   const sandbox = {
-    window: win, console, Event: class {}, CustomEvent: class {},
+    window: win, console, Event: class { constructor(type) { this.type = type; } }, CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
     performance: { now: () => Date.now() }, AbortController: class { constructor() { this.signal = {}; } abort() {} },
-    setTimeout, clearTimeout, JSON, Object, Promise, Error, Date, Math,
+    setTimeout, clearTimeout, JSON, Object, Promise, Error, Date: FakeDate, Math,
     localStorage: opts.noStorage ? { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); }, removeItem() { throw new Error('blocked'); } }
       : { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { if (opts.full) throw new Error('quota'); store[k] = String(v); }, removeItem: (k) => { delete store[k]; } },
     fetch: (url, init) => {
@@ -27,11 +33,12 @@ function browser(opts) {
     },
   };
   win.window = win;
+  win.FleetGuest = { get: () => ({ token: 'g' }), clear() {} };
   let user = { id: 'u1' };
   win.FleetAuth = { token: () => 't', getUser: () => user, clear() { win.FleetApi.clearSaved(); } };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'web', 'api.js'), 'utf8'), sandbox);
-  return { api: win.FleetApi, store, calls, answers, setUser: (u) => { user = u; }, win };
+  return { api: win.FleetApi, store, calls, answers, setUser: (u) => { user = u; }, win, events, clock };
 }
 
 const collect = (api, action, params) => {
@@ -80,23 +87,95 @@ test('saved copies are per person, per car, and never used when nobody is signed
   await r.done;
 });
 
-test('any change clears everything saved; plain reads do not', async () => {
+test('any change makes saved copies stale (still shown at once, but fetched again); plain reads do not', async () => {
   const b = browser();
   b.answers.getCarPage = () => ({ ok: true, data: { x: 1 } });
   await collect(b.api, 'getCarPage', { id: 'c1' }).done;
   await b.api.call('listCars');
   await b.api.call('ping');
   assert.equal(collect(b.api, 'getCarPage', { id: 'c1' }).seen.length, 1, 'reads leave it alone');
-  for (const action of ['saveEntry', 'updateOdometer', 'deleteEntry', 'saveTask', 'setCarPeople', 'sendMyReminders', 'saveCar', 'guestSaveEntry']) {
-    await collect(b.api, 'getCarPage', { id: 'c1' }).done;
-    const before = collect(b.api, 'getCarPage', { id: 'c1' });
-    assert.equal(before.seen.length, 1, 'saved before ' + action);
-    await before.done;
+  for (const action of ['saveEntry', 'updateOdometer', 'deleteEntry', 'saveTask', 'setCarPeople', 'saveCar', 'uploadAttachment']) {
+    b.api.setRevisions({ c1: 'r1' });
+    await collect(b.api, 'getCarPage', { id: 'c1' }).done; // saved with revision r1
+    const before = b.calls.length;
+    const current = collect(b.api, 'getCarPage', { id: 'c1' });
+    await current.done;
+    assert.equal(b.calls.length, before, 'a current copy needs no request before ' + action);
     await b.api.call(action, {});
+    const n = b.calls.length;
     const after = collect(b.api, 'getCarPage', { id: 'c1' });
-    assert.equal(after.seen.length, 0, action + ' clears what was saved');
+    assert.equal(after.seen.length, 1, action + ': the old copy still appears at once');
     await after.done;
+    assert.equal(b.calls.length, n + 1, action + ': and it is fetched again');
   }
+  const ev = b.events.filter((e) => e.type === 'fleet:changed');
+  assert.ok(ev.length >= 7, 'each change announces itself');
+});
+
+test('things that change nothing a car screen shows do not make copies stale', async () => {
+  const b = browser();
+  b.answers.getCarPage = () => ({ ok: true, data: { x: 1 } });
+  b.api.setRevisions({ c1: 'r1' });
+  await collect(b.api, 'getCarPage', { id: 'c1' }).done;
+  for (const action of ['requestLogin', 'sendFeedback', 'logout', 'aiFillCar', 'sendMyReminders', 'guestSaveEntry']) await b.api.call(action, {});
+  await b.api.call('saveEntry', {}, { guestCarId: 'c1' }).catch(() => {}); // a guest change on this phone
+  assert.deepEqual(b.events.filter((e) => e.type === 'fleet:changed'), []);
+  const n = b.calls.length;
+  await collect(b.api, 'getCarPage', { id: 'c1' }).done;
+  assert.equal(b.calls.length, n, 'still current');
+});
+
+test('a copy is current only while its car has the revision it was saved at, and only on the day it was saved', async () => {
+  const b = browser();
+  b.answers.getCarPage = () => ({ ok: true, data: { x: 1 } });
+  b.api.setRevisions({ c1: 'r1', c2: 'r9' });
+  await collect(b.api, 'getCarPage', { id: 'c1' }).done;
+  let n = b.calls.length;
+  let r = collect(b.api, 'getCarPage', { id: 'c1' });
+  assert.equal((await r.done).cached, true);
+  assert.equal(b.calls.length, n, 'current: no request');
+  assert.deepEqual(r.seen.map((x) => x.saved), [true], 'drawn once, from the copy');
+
+  b.api.setRevisions({ c1: 'r2' }); // the car changed elsewhere
+  n = b.calls.length;
+  await collect(b.api, 'getCarPage', { id: 'c1' }).done;
+  assert.equal(b.calls.length, n + 1, 'another revision: fetched again');
+  await collect(b.api, 'getCarPage', { id: 'c1' }).done;
+  assert.equal(b.calls.length, n + 1, 'and now current at r2');
+
+  b.clock.offset = 26 * 3600 * 1000; // tomorrow: reminders may have gone overdue
+  await collect(b.api, 'getCarPage', { id: 'c1' }).done;
+  assert.equal(b.calls.length, n + 2, 'a new day: fetched again');
+});
+
+test('with no revision known (nothing synced yet) every screen behaves as before: copy first, then the fresh answer', async () => {
+  const b = browser();
+  b.answers.getCarPage = () => ({ ok: true, data: { x: 1 } });
+  await collect(b.api, 'getCarPage', { id: 'c1' }).done;
+  const n = b.calls.length;
+  const r = collect(b.api, 'getCarPage', { id: 'c1' });
+  assert.equal(r.seen.length, 1);
+  await r.done;
+  assert.equal(b.calls.length, n + 1);
+});
+
+test('an entry belongs to the car named in its answer; put() saves a whole car at once', async () => {
+  const b = browser();
+  b.answers.getEntry = (req) => ({ ok: true, data: { entry: { id: req.id }, car: { id: 'c1' } } });
+  b.api.setRevisions({ c1: 'r1' });
+  await collect(b.api, 'getEntry', { id: 'e1' }).done; // stored against c1 at r1 although its car was not known beforehand
+  let n = b.calls.length;
+  await collect(b.api, 'getEntry', { id: 'e1' }).done;
+  assert.equal(b.calls.length, n, 'current');
+  b.api.put('getEntry', { id: 'e2' }, { entry: { id: 'e2' }, car: { id: 'c1' } }, 'c1', 'r1');
+  const r = collect(b.api, 'getEntry', { id: 'e2' });
+  await r.done;
+  assert.equal(b.calls.length, n, 'a copy put in directly is current too');
+  assert.deepEqual(r.seen.map((x) => x.data.entry.id), ['e2']);
+  assert.deepEqual(b.api.peek('getEntry', { id: 'e2' }).entry, { id: 'e2' });
+  b.api.setRevisions({ c1: 'r2' });
+  await collect(b.api, 'getEntry', { id: 'e2' }).done;
+  assert.equal(b.calls.length, n + 1);
 });
 
 test('an answer that was already on its way when something changed is not saved afterwards', async () => {
@@ -124,7 +203,6 @@ test('a failed change does not clear the saved copy, but signing out does', asyn
   await kept.done;
   b.win.FleetAuth.clear(); // what signing out or an ended session does
   assert.equal(collect(b.api, 'getCarPage', { id: 'c1' }).seen.length, 0);
-  assert.equal(b.store['fleet.saved.v1'], undefined, 'nothing left on the phone');
 });
 
 test('when the refresh fails after a saved copy was shown, the error says so; not-found forgets the copy', async () => {
@@ -158,17 +236,6 @@ test('it works, just without the speed-up, when the phone will not store anythin
     await again.done; // in memory for this visit at least, and no crash
     await b.api.call('saveEntry', {});
   }
-});
-
-test('the saved screens are kept within a size and count limit', async () => {
-  const b = browser();
-  b.answers.getCarPage = (req) => ({ ok: true, data: { id: req.id, blob: 'x'.repeat(100000) } });
-  for (let i = 0; i < 40; i++) await b.api.seen('getCarPage', { id: 'car' + i }, () => {});
-  const saved = JSON.parse(b.store['fleet.saved.v1']);
-  assert.ok(Object.keys(saved).length <= 24, 'at most 24 screens');
-  assert.ok(b.store['fleet.saved.v1'].length <= 1500000 + 1000, 'within the size limit');
-  assert.ok(Object.keys(saved).some((k) => k.includes('car39')), 'the newest are kept');
-  assert.ok(!Object.keys(saved).some((k) => k.includes('"car0"')), 'the oldest go first');
 });
 
 test('server time is passed along when the backend reports it', async () => {

@@ -212,16 +212,45 @@
   }
 
   // ---------- small thumbnails of the photos attached to entries ----------
-  // Fetched a few at a time (one request for up to 8), remembered on this phone by attachment id, and forgotten at sign-out.
-  var ATHUMB_KEY = 'fleet.athumb.';
+  // Fetched a few at a time (one request for up to 8), remembered on this phone by attachment id (in FleetStore, the
+  // phone's database, which has room for all of them) and forgotten at sign-out. FleetSync downloads them all up front.
+  var ATHUMB_KEY = 'fleet.athumb.'; // where an older version kept them (localStorage): moved over the first time one is needed
+  var ATHUMB_BATCH = 8;
   var athumbMemory = {};
   var athumbWaiting = {};
   var athumbQueue = [];
   var athumbTimer = null;
 
+  function store() { return window.FleetStore; }
+
   function rememberAthumb(id, src) {
     athumbMemory[id] = src;
-    try { localStorage.setItem(ATHUMB_KEY + id, src); } catch (e) { /* storage full or blocked */ }
+    if (store()) store().set('t|' + id, src);
+  }
+
+  function savedAthumb(id) {
+    if (athumbMemory[id]) return athumbMemory[id];
+    var src = store() ? store().get('t|' + id) : null;
+    if (!src) {
+      try {
+        src = localStorage.getItem(ATHUMB_KEY + id);
+        if (src) { rememberAthumb(id, src); localStorage.removeItem(ATHUMB_KEY + id); }
+      } catch (e) { /* ignore */ }
+    }
+    if (src) athumbMemory[id] = src;
+    return src || null;
+  }
+
+  /** Download the thumbnails for up to 8 attachments in one request and remember them. Resolves to how many arrived. */
+  function fetchThumbBatch(ids) {
+    return FleetApi.call('getAttachmentThumbs', { ids: ids }).then(function (r) {
+      var n = 0;
+      ids.forEach(function (id) {
+        var b64 = r.data.thumbs && r.data.thumbs[id];
+        if (b64) { rememberAthumb(id, dataUrl(b64)); n++; }
+      });
+      return n;
+    });
   }
 
   function flushAthumbs() {
@@ -233,25 +262,19 @@
       if (!w) return;
       if (src) w.resolve(src); else w.reject(err || new FleetApi.ApiError('no_photo', 'No thumbnail'));
     }
-    for (var i = 0; i < ids.length; i += 8) {
+    for (var i = 0; i < ids.length; i += ATHUMB_BATCH) {
       (function (batch) {
-        FleetApi.call('getAttachmentThumbs', { ids: batch }).then(function (r) {
-          batch.forEach(function (id) {
-            var b64 = r.data.thumbs && r.data.thumbs[id];
-            if (b64) { var src = dataUrl(b64); rememberAthumb(id, src); settle(id, src); } else settle(id, null);
-          });
+        fetchThumbBatch(batch).then(function () {
+          batch.forEach(function (id) { settle(id, athumbMemory[id] || null); });
         }).catch(function (e) { batch.forEach(function (id) { settle(id, null, e); }); });
-      })(ids.slice(i, i + 8));
+      })(ids.slice(i, i + ATHUMB_BATCH));
     }
   }
 
   /** Data URL of an attachment's small thumbnail. */
   function attachmentThumb(id) {
-    if (athumbMemory[id]) return Promise.resolve(athumbMemory[id]);
-    try {
-      var saved = localStorage.getItem(ATHUMB_KEY + id);
-      if (saved) { athumbMemory[id] = saved; return Promise.resolve(saved); }
-    } catch (e) { /* ignore */ }
+    var saved = savedAthumb(id);
+    if (saved) return Promise.resolve(saved);
     if (!athumbWaiting[id]) {
       var w = {};
       w.promise = new Promise(function (resolve, reject) { w.resolve = resolve; w.reject = reject; });
@@ -285,6 +308,7 @@
   function forgetThumbs() {
     athumbMemory = {};
     memory = {};
+    if (store()) store().delPrefix('t|');
     try {
       Object.keys(localStorage).forEach(function (k) {
         if (k.indexOf(ATHUMB_KEY) === 0 || k.indexOf(THUMB_KEY) === 0) localStorage.removeItem(k);
@@ -294,7 +318,7 @@
 
   window.Photos = {
     prepare: prepare, upload: upload, get: get, element: element, picker: picker,
-    attachmentThumb: attachmentThumb, thumbBox: thumbBox, thumbFromBase64: thumbFromBase64, rememberAttachmentThumb: rememberAthumb, forgetThumbs: forgetThumbs,
+    attachmentThumb: attachmentThumb, thumbBox: thumbBox, thumbFromBase64: thumbFromBase64, rememberAttachmentThumb: rememberAthumb, hasAttachmentThumb: function (id) { return !!savedAthumb(id); }, fetchThumbBatch: fetchThumbBatch, THUMB_BATCH: ATHUMB_BATCH, forgetThumbs: forgetThumbs,
     fileButton: fileButton, prepareAttachment: prepareAttachment, fetchAttachment: fetchAttachment, toBlobUrl: toBlobUrl,
   };
 })();
