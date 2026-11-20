@@ -66,3 +66,18 @@ function sendApprovedEmail_(user) {
   const text = 'Hi ' + user.name + ',\n\nYour access to Fleet Manager has been approved. Sign in here: ' + url;
   return sendMail_(user.email, 'Your Fleet Manager access has been approved', html, text);
 }
+
+function sendInviteEmail_(user, link, inviter) {
+  const who = inviter && inviter.name ? esc_(inviter.name) : 'An administrator';
+  const html = layout_('You\'re invited',
+    '<p>Hi ' + esc_(user.name) + ',</p>' +
+    '<p>' + who + ' has invited you to Fleet Manager, the app we use to look after our cars: service history, odometer readings, reminders and more.</p>' +
+    '<p>Tap the button and you will be signed in straight away. The link works once and stays valid for ' + INVITE_DAYS + ' days.</p>' +
+    button_(link, 'Join Fleet Manager') +
+    '<p>After that, you can add the app to your phone\'s home screen. If the link has expired, open the app and enter this email address on the sign-in page to get a new one.</p>' +
+    '<p style="color:#5d6b79">Please don\'t forward this email: the link signs in as you.</p>');
+  const text = 'Hi ' + user.name + ',\n\n' + (inviter && inviter.name ? inviter.name : 'An administrator') +
+    ' has invited you to Fleet Manager. Open this link to be signed in straight away (works once, valid for ' + INVITE_DAYS + ' days):\n' +
+    link + '\n\nIf it has expired, enter this email address on the sign-in page at ' + SITE_URL + ' to get a new one.\nPlease do not forward this email: the link signs in as you.';
+  return sendMail_(user.email, 'You\'re invited to Fleet Manager', html, text);
+}

@@ -4,6 +4,7 @@
 const SITE_URL = 'https://perezkabagambe.github.io/fleet-manager/';
 const TZ = 'Europe/London';
 const LOGIN_MINUTES = 15;
+const INVITE_DAYS = 7;
 const SESSION_DAYS = 30;
 const MAX_CODE_FAILS = 5;
 

@@ -78,6 +78,17 @@ function createLoginTokens_(user) {
   return { link: SITE_URL + '#/login/verify?t=' + linkToken, code: code };
 }
 
+/** A longer-lived single-use sign-in link for an invitation. It signs the invitee straight in (no code). */
+function createInviteLink_(user) {
+  burnOpenTokens_(user.id);
+  const linkToken = randomToken_();
+  Db.insert('Tokens', {
+    hash: hash_(linkToken), type: 'login_link', user_id: user.id,
+    expires_at: isoIn_(INVITE_DAYS * 24 * 3600 * 1000), attempts: 0,
+  });
+  return SITE_URL + '#/login/verify?t=' + linkToken + '&i=1';
+}
+
 function signIn_(user, method) {
   const token = randomToken_();
   const now = nowIso_();

@@ -16,7 +16,36 @@
     var me = FleetAuth.getUser();
     var msg = el('div');
     var listBox = el('div', { class: 'stack' });
-    root.replaceChildren(el('section', { class: 'card' }, [el('h1', { text: 'Users' }), msg, listBox]));
+    var inviteBox = el('div');
+    root.replaceChildren(el('section', { class: 'card' }, [el('h1', { text: 'Users' }), msg, inviteBox, listBox]));
+
+    // Invite someone by email: they get a link that signs them straight in.
+    function inviteForm() {
+      var name = el('input', { type: 'text', id: 'invite-name', autocomplete: 'off', maxlength: '80', placeholder: 'Their name' });
+      var email = el('input', { type: 'email', id: 'invite-email', autocomplete: 'off', inputmode: 'email', placeholder: 'name@example.com' });
+      var note = el('div');
+      var send = el('button', { type: 'submit', class: 'btn', text: 'Send invitation' });
+      var form = el('form', { class: 'stack', novalidate: true }, [
+        el('p', { class: 'muted small-text', text: 'We will email them a link. When they tap it they are signed in straight away, with no password or code.' }),
+        UI.field('Name', name),
+        UI.field('Email address', email),
+        note, send,
+      ]);
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        note.replaceChildren();
+        UI.busy(send, 'Sending…', FleetApi.call('inviteUser', { name: name.value, email: email.value }))
+          .then(function (r) {
+            note.append(UI.notice('ok', 'Invitation sent to ' + r.data.user.email + '.'));
+            name.value = ''; email.value = '';
+            return load();
+          })
+          .catch(function (err) { note.replaceChildren(UI.notice('error', UI.errorText(err))); });
+      });
+      var box = el('details', { class: 'invite-box' }, [el('summary', { text: 'Invite someone by email' }), form]);
+      return box;
+    }
+    inviteBox.append(inviteForm());
 
     function act(btn, label, action, params, confirmText) {
       function go() {
@@ -44,6 +73,7 @@
         if (u.role === 'admin') button('Make regular user', 'secondary', function (b) { act(b, 'Saving…', 'setUserRole', { userId: u.id, role: 'user' }, 'Remove admin rights from ' + u.name + '?'); });
         else button('Make admin', 'secondary', function (b) { act(b, 'Saving…', 'setUserRole', { userId: u.id, role: 'admin' }, 'Make ' + u.name + ' an admin? Admins can approve users and delete cars.'); });
         actions.push(el('a', { class: 'btn small secondary', href: '#/admin/users/' + u.id + '/cars', text: 'Cars' }));
+        if (!isSelf && !u.lastLogin) button('Resend invitation', 'secondary', function (b) { act(b, 'Sending…', 'inviteUser', { email: u.email }); });
         if (!isSelf) button('Revoke access', 'danger', function (b) { act(b, 'Revoking…', 'setUserStatus', { userId: u.id, status: 'Revoked' }, 'Revoke access for ' + u.name + '? They will be signed out immediately.'); });
       } else {
         button('Approve again', '', function (b) { act(b, 'Approving…', 'setUserStatus', { userId: u.id, status: 'Approved' }); });

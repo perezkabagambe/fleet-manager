@@ -385,3 +385,85 @@ test('the setup schema keeps the Tokens and Sessions columns the auth code relie
   assert.deepEqual(env.sheets.Tokens._rows[0], ['hash', 'type', 'user_id', 'expires_at', 'used_at', 'attempts']);
   assert.ok(env.sheets.Sessions._rows[0].includes('revoked'));
 });
+
+// ---------- admin invitations ----------
+
+function inviteMail(env, email) {
+  const m = env.outbox.filter((x) => x.to === email && /invited/.test(x.subject)).pop();
+  if (!m) return null;
+  return { token: /verify\?t=([0-9a-f]+)&i=1/.exec(m.body)[1], mail: m };
+}
+
+test('an admin can invite a new person; the emailed link signs them straight in, once', () => {
+  const { env, admin } = setup();
+  const tok = env.signInAs(admin.email);
+  const r = env.call('inviteUser', { token: tok, name: 'New Person', email: ' New.Person@Example.com ' });
+  assert.equal(r.ok, true);
+  assert.equal(r.data.created, true);
+  assert.equal(r.data.user.status, 'Approved');
+  assert.equal(r.data.user.email, 'new.person@example.com');
+  const inv = inviteMail(env, 'new.person@example.com');
+  assert.ok(inv, 'invitation emailed');
+  assert.match(inv.mail.body, /Admin One/);
+  const v = env.call('verifyLink', { token: inv.token });
+  assert.equal(v.ok, true);
+  assert.equal(v.data.user.email, 'new.person@example.com');
+  assert.equal(v.data.user.role, 'user');
+  assert.equal(env.call('verifyLink', { token: inv.token }).error, 'invalid_or_expired');
+});
+
+test('an invitation link lasts a week, not fifteen minutes', () => {
+  const { env, admin } = setup();
+  const tok = env.signInAs(admin.email);
+  env.call('inviteUser', { token: tok, name: 'Later', email: 'later@example.com' });
+  const inv = inviteMail(env, 'later@example.com');
+  env.advance(6 * 24 * 3600 * 1000);
+  assert.equal(env.call('verifyLink', { token: inv.token }).ok, true);
+
+  env.call('inviteUser', { token: tok, name: 'Too late', email: 'toolate@example.com' });
+  const late = inviteMail(env, 'toolate@example.com');
+  env.advance(8 * 24 * 3600 * 1000);
+  assert.equal(env.call('verifyLink', { token: late.token }).error, 'invalid_or_expired');
+});
+
+test('inviting an existing address re-sends a fresh link and burns the old one', () => {
+  const { env, admin, user } = setup();
+  const tok = env.signInAs(admin.email);
+  const a = env.call('inviteUser', { token: tok, email: user.email });
+  assert.equal(a.ok, true);
+  assert.equal(a.data.created, false);
+  const first = inviteMail(env, user.email);
+  env.call('inviteUser', { token: tok, email: user.email });
+  const second = inviteMail(env, user.email);
+  assert.notEqual(first.token, second.token);
+  assert.equal(env.call('verifyLink', { token: first.token }).error, 'invalid_or_expired');
+  assert.equal(env.call('verifyLink', { token: second.token }).ok, true);
+});
+
+test('inviting a pending or revoked person approves them', () => {
+  const { env, admin } = setup();
+  const tok = env.signInAs(admin.email);
+  env.call('requestAccount', { name: 'Pat', email: 'pat@example.com' });
+  const r = env.call('inviteUser', { token: tok, email: 'pat@example.com' });
+  assert.equal(r.ok, true);
+  assert.equal(r.data.user.status, 'Approved');
+  assert.equal(r.data.user.name, 'Pat');
+  assert.equal(env.call('verifyLink', { token: inviteMail(env, 'pat@example.com').token }).ok, true);
+});
+
+test('invitations need an admin, a valid email and a name for a new person', () => {
+  const { env, admin, user } = setup();
+  assert.equal(env.call('inviteUser', { email: 'x@example.com', name: 'X' }).error, 'unauthorized');
+  const sam = env.signInAs(user.email);
+  assert.equal(env.call('inviteUser', { token: sam, email: 'x@example.com', name: 'X' }).error, 'forbidden');
+  const tok = env.signInAs(admin.email);
+  assert.equal(env.call('inviteUser', { token: tok, name: 'X', email: 'nonsense' }).error, 'invalid_email');
+  assert.equal(env.call('inviteUser', { token: tok, email: 'x@example.com' }).error, 'invalid_name');
+});
+
+test('if the invitation email cannot be sent the admin is told', () => {
+  const { env, admin } = setup();
+  const tok = env.signInAs(admin.email);
+  env.state.mailQuota = 0;
+  assert.equal(env.call('inviteUser', { token: tok, name: 'Q', email: 'q@example.com' }).error, 'invite_email_failed');
+});

@@ -94,6 +94,7 @@
     not_found: 'That user no longer exists.',
     invalid_transition: 'That change is not allowed for this user.',
     cannot_revoke_self: 'You cannot revoke your own access.',
+    invite_email_failed: 'The invitation email could not be sent. Please try again in a little while.',
     last_admin: 'There must always be at least one admin.',
     registration_required: 'Please enter the registration number.',
     make_required: 'Please enter the make.',

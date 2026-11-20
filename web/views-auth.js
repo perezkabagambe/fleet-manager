@@ -256,22 +256,34 @@
   // person taps the button, so a scanner cannot use up the one-time link.
   Views.verify = function (ctx, root) {
     var token = ctx.query.t || '';
+    var invited = ctx.query.i === '1'; // an invitation link signs in without a tap
     var msg = el('div');
-    var btn = el('button', { type: 'button', class: 'btn block', text: 'Tap to sign in' });
+    var btn = el('button', { type: 'button', class: 'btn block', text: invited ? 'Join Fleet Manager' : 'Tap to sign in' });
     var card = el('section', { class: 'card narrow' }, [
-      el('h1', { text: 'Sign in to Fleet Manager' }),
-      el('p', { class: 'muted', text: 'Tap the button below to finish signing in on this device.' }),
+      el('h1', { text: invited ? 'Welcome to Fleet Manager' : 'Sign in to Fleet Manager' }),
+      el('p', { class: 'muted', text: invited ? 'Signing you in…' : 'Tap the button below to finish signing in on this device.' }),
       msg, btn,
       el('p', { class: 'center' }, [el('a', { href: '#/login', text: 'Back to sign in' })]),
     ]);
     root.replaceChildren(card);
     if (!token) { msg.append(UI.notice('error', UI.errorText({ code: 'invalid_or_expired' }))); btn.disabled = true; return; }
 
-    btn.addEventListener('click', function () {
+    var started = false;
+    function go() {
+      if (started) return;
+      started = true;
       msg.replaceChildren();
       UI.busy(btn, 'Signing in…', FleetApi.call('verifyLink', { token: token }))
         .then(function (r) { signedIn(r.data, ''); })
-        .catch(function (e) { msg.append(UI.notice('error', UI.errorText(e))); });
-    });
+        .catch(function (e) {
+          started = false;
+          if (invited && e && e.code === 'invalid_or_expired') {
+            msg.append(UI.notice('error', 'This invitation link has already been used or has expired. Enter your email address on the sign-in page and we will send you a new sign-in link.'));
+            btn.hidden = true;
+          } else msg.append(UI.notice('error', UI.errorText(e)));
+        });
+    }
+    btn.addEventListener('click', go);
+    if (invited) go();
   };
 })();

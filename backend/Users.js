@@ -62,6 +62,44 @@ function setUserStatus_(p, ctx) {
   return { user: summarizeUser_(Object.assign({}, target, patch)) };
 }
 
+/**
+ * Admin invites someone by email. A new address gets an approved account straight away; a pending, rejected or
+ * revoked one is approved; an approved one is simply sent a fresh link. The emailed link is single use, valid for
+ * INVITE_DAYS, and signs the invitee in without any further step.
+ */
+function inviteUser_(p, ctx) {
+  const email = normEmail_(p.email);
+  if (!email) fail_('invalid_email');
+  if (!rateLimit_('invite:' + hash_(email), 5, 3600)) fail_('try_later');
+  if (!dailyCap_('invites', 50)) fail_('try_later');
+
+  let user = findUserByEmail_(email);
+  let created = false;
+  const now = nowIso_();
+  if (!user) {
+    const name = cleanStr_(p.name, 80);
+    if (!name) fail_('invalid_name');
+    user = {
+      id: Utilities.getUuid(), created_at: now, created_by: ctx.user.id, updated_at: now, updated_by: ctx.user.id, version: 1,
+      deleted: false, name: name, email: email, status: 'Approved', role: 'user', requested_at: now,
+      approved_by: ctx.user.id, approved_at: now,
+    };
+    Db.insert('Users', user);
+    created = true;
+  } else if (user.status !== 'Approved') {
+    const patch = { status: 'Approved', approved_by: ctx.user.id, approved_at: now };
+    patchUser_(user, patch, ctx.user);
+    user = Object.assign({}, user, patch);
+  }
+
+  const link = createInviteLink_(user);
+  const emailed = sendInviteEmail_(user, link, ctx.user);
+  audit_(ctx.user, created ? 'user_invited' : 'invite_resent', 'User', user.id,
+    (created ? 'Invited ' : 'Re-sent the invitation to ') + user.name + ' (' + user.email + ')' + (emailed ? '' : ' - email could not be sent'));
+  if (!emailed) fail_('invite_email_failed');
+  return { user: summarizeUser_(user), created: created };
+}
+
 function setUserRole_(p, ctx) {
   const target = findUserById_(cleanStr_(p.userId, 64));
   if (!target) fail_('not_found');

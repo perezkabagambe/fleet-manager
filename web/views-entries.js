@@ -65,6 +65,58 @@
   // What a file looks like in a list: a camera for photos, a page for PDFs, a paperclip for everything else.
   function fileIcon(mime) { return mime === 'image/jpeg' ? '📷 ' : mime === 'application/pdf' ? '📄 ' : '📎 '; }
 
+  /**
+   * One file that is already attached: its name on the first line, then View / Open / Download on the left and
+   * (admins only) Remove on the right, so the two are never mistaken for each other.
+   * hooks.error(err) shows a problem; hooks.removed(a, row) runs after a successful remove.
+   */
+  function attachmentRow(a, hooks) {
+    var isImage = a.mime === 'image/jpeg';
+    var view = el('button', { type: 'button', class: 'btn small secondary', text: isImage ? 'View' : a.mime === 'application/pdf' ? 'Open' : 'Download' });
+    var holder = el('div');
+    view.addEventListener('click', function () {
+      UI.busy(view, 'Loading…', Photos.fetchAttachment(a.id)).then(function (att) {
+        var url = Photos.toBlobUrl(att);
+        if (!isImage) { // PDFs and other files are saved or opened by the phone, never shown inside the app
+          var link = el('a', { href: url, download: att.filename });
+          document.body.append(link); link.click(); link.remove();
+        } else {
+          holder.replaceChildren(el('img', { class: 'attach-img', src: url, alt: att.filename }));
+        }
+      }).catch(hooks.error);
+    });
+    var actions = [view];
+    var row = el('div', { class: 'attach-row' });
+    if (FleetAuth.isAdmin()) {
+      var rm = el('button', { type: 'button', class: 'btn small danger attach-remove', text: 'Remove' });
+      rm.addEventListener('click', function () {
+        UI.confirm('Remove ' + a.filename + '?', { okLabel: 'Remove', danger: true }).then(function (yes) {
+          if (!yes) return;
+          UI.busy(rm, 'Removing…', FleetApi.call('deleteAttachment', { id: a.id }))
+            .then(function () { hooks.removed(a, row); })
+            .catch(hooks.error);
+        });
+      });
+      actions.push(rm);
+    }
+    row.append(el('div', { class: 'attach-name', text: fileIcon(a.mime) + a.filename + ' · ' + kb(a.size) }),
+      el('div', { class: 'attach-actions' }, actions), holder);
+    return row;
+  }
+
+  /** The "add something" block: kept apart from the files that are already attached. */
+  function addPanel(onFile, hint) {
+    return el('div', { class: 'attach-add' }, [
+      el('div', { class: 'attach-title', text: 'Add a photo or file' }),
+      el('div', { class: 'attach-add-buttons' }, [
+        Photos.fileButton('📷 Take photo', 'image/*', true, onFile),
+        Photos.fileButton('🖼 Choose photo', 'image/*', false, onFile),
+        Photos.fileButton('📎 Add file', '', false, onFile),
+      ]),
+      el('div', { class: 'hint', text: hint }),
+    ]);
+  }
+
   function costText(e) {
     if (e.type === 'Maintenance') return moneyMap(e.jobCost);
     if (e.type === 'Purchase') return fmt.money(e.total, e.currency);
@@ -346,44 +398,19 @@
 
       // attachments
       var attBox = el('div', { class: 'stack' });
+      var attHeading = el('div', { class: 'attach-title' });
+      var attHooks = {
+        error: function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); },
+        removed: function (a) {
+          d.attachments = d.attachments.filter(function (x) { return x.id !== a.id; });
+          drawAttachments();
+          refreshTopThumb();
+        },
+      };
       function drawAttachments() {
-        attBox.replaceChildren.apply(attBox, d.attachments.length ? d.attachments.map(attachmentRow)
-          : [el('p', { class: 'muted', text: 'Nothing attached.' })]);
-      }
-      function attachmentRow(a) {
-        var isImage = a.mime === 'image/jpeg';
-        var view = el('button', { type: 'button', class: 'btn small secondary', text: isImage ? 'View' : a.mime === 'application/pdf' ? 'Open' : 'Download' });
-        var holder = el('div');
-        view.addEventListener('click', function () {
-          UI.busy(view, 'Loading…', Photos.fetchAttachment(a.id)).then(function (att) {
-            var url = Photos.toBlobUrl(att);
-            if (!isImage) { // PDFs and other files are saved or opened by the phone, never shown inside the app
-              var link = el('a', { href: url, download: att.filename });
-              document.body.append(link); link.click(); link.remove();
-            } else {
-              holder.replaceChildren(el('img', { class: 'attach-img', src: url, alt: att.filename }));
-            }
-          }).catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
-        });
-        var buttons = [view];
-        if (FleetAuth.isAdmin()) {
-          var rm = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
-          rm.addEventListener('click', function () {
-            UI.confirm('Remove ' + a.filename + '?', { okLabel: 'Remove', danger: true }).then(function (yes) {
-              if (!yes) return;
-              UI.busy(rm, 'Removing…', FleetApi.call('deleteAttachment', { id: a.id })).then(function () {
-                d.attachments = d.attachments.filter(function (x) { return x.id !== a.id; });
-                drawAttachments();
-                refreshTopThumb();
-              }).catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
-            });
-          });
-          buttons.push(rm);
-        }
-        return el('div', { class: 'attach-row' }, [
-          el('div', { class: 'attach-name', text: fileIcon(a.mime) + a.filename + ' · ' + kb(a.size) }),
-          el('div', { class: 'btn-row' }, buttons), holder,
-        ]);
+        attHeading.textContent = d.attachments.length ? 'Attached files (' + d.attachments.length + ')' : 'Attached files';
+        attBox.replaceChildren.apply(attBox, d.attachments.length ? d.attachments.map(function (a) { return attachmentRow(a, attHooks); })
+          : [el('p', { class: 'muted', text: 'Nothing attached yet.' })]);
       }
       drawAttachments();
       // Add straight from here: no need to open Edit first. (Removing is on each row, for admins.)
@@ -401,13 +428,8 @@
       }
       cards.push(el('section', { class: 'card' }, [
         el('h2', { text: 'Photos and documents' }),
-        attBox,
-        el('div', { class: 'btn-row' }, [
-          Photos.fileButton('Take photo', 'image/*', true, addFile),
-          Photos.fileButton('Choose photo', 'image/*', false, addFile),
-          Photos.fileButton('Add file', '', false, addFile),
-        ]),
-        el('div', { class: 'hint', text: 'Receipts, invoices, quotes, photos or any other file. Photos are shrunk automatically; other files can be up to 5 MB.' }),
+        el('div', { class: 'attach-existing' }, [attHeading, attBox]),
+        addPanel(addFile, 'Receipts, invoices, quotes, photos or any other file. Photos are shrunk automatically; other files can be up to 5 MB.'),
       ]));
 
       cards.push(el('a', { class: 'btn block big edit-bottom', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit ' + BY_TYPE[e.type].label.toLowerCase() }));
@@ -731,40 +753,34 @@
       var stagedBox = el('div', { class: 'stack' });
       function drawStaged() {
         stagedBox.replaceChildren.apply(stagedBox, staged.map(function (s, i) {
-          var rm = el('button', { type: 'button', class: 'linklike', text: 'Remove' });
+          var rm = el('button', { type: 'button', class: 'btn small secondary', text: 'Don\'t add' });
           rm.addEventListener('click', function () { staged.splice(i, 1); drawStaged(); });
-          return el('div', { class: 'attach-row' }, [el('div', { class: 'attach-name', text: fileIcon(/^image\//.test(s.type || '') ? 'image/jpeg' : s.type === 'application/pdf' ? 'application/pdf' : '') + s.name }), rm]);
+          return el('div', { class: 'attach-row staged' }, [el('div', { class: 'attach-name', text: fileIcon(/^image\//.test(s.type || '') ? 'image/jpeg' : s.type === 'application/pdf' ? 'application/pdf' : '') + s.name }), rm]);
         }));
+        if (stagedBox.parentNode) stagedBox.parentNode.hidden = !staged.length;
       }
       function stage(file) { staged.push({ file: file, name: file.name || 'photo', type: file.type }); drawStaged(); }
       var attachList = el('div', { class: 'stack' });
-      if (existingData && existingData.attachments.length) {
-        existingData.attachments.forEach(function (a) {
-          var line = [el('div', { class: 'attach-name', text: fileIcon(a.mime) + a.filename + ' · ' + kb(a.size) })];
-          if (FleetAuth.isAdmin()) {
-            var rm = el('button', { type: 'button', class: 'linklike', text: 'Remove' });
-            rm.addEventListener('click', function () {
-              UI.confirm('Remove ' + a.filename + '?', { okLabel: 'Remove', danger: true }).then(function (yes) {
-                if (!yes) return;
-                FleetApi.call('deleteAttachment', { id: a.id }).then(function () { row.remove(); })
-                  .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
-              });
-            });
-            line.push(rm);
-          }
-          var row = el('div', { class: 'attach-row' }, line);
-          attachList.append(row);
-        });
-      }
-      var attachSection = el('div', { class: 'field' }, [
+      var existingCount = existingData ? existingData.attachments.length : 0;
+      var existingHead = el('div', { class: 'attach-title', text: 'Attached files' + (existingCount ? ' (' + existingCount + ')' : '') });
+      var formHooks = {
+        error: function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); },
+        removed: function (a, row) {
+          row.remove();
+          existingCount -= 1;
+          if (!existingCount) attachList.append(el('p', { class: 'muted', text: 'Nothing attached yet.' }));
+          existingHead.textContent = 'Attached files' + (existingCount ? ' (' + existingCount + ')' : '');
+        },
+      };
+      if (existingCount) existingData.attachments.forEach(function (a) { attachList.append(attachmentRow(a, formHooks)); });
+      else attachList.append(el('p', { class: 'muted', text: 'Nothing attached yet.' }));
+      var stagedHead = el('div', { class: 'attach-title', text: 'Ready to add when you save' });
+      var addBlock = addPanel(stage, 'Receipts, invoices, quotes, photos of the problem or any other file. Photos are shrunk automatically; other files can be up to 5 MB.');
+      addBlock.append(el('div', { class: 'attach-staged', hidden: true }, [stagedHead, stagedBox]));
+      var attachSection = el('div', { class: 'field attach-section' }, [
         el('div', { class: 'field-label', text: 'Photos and documents' }),
-        attachList, stagedBox,
-        el('div', { class: 'btn-row' }, [
-          Photos.fileButton('Take photo', 'image/*', true, stage),
-          Photos.fileButton('Choose photo', 'image/*', false, stage),
-          Photos.fileButton('Add file', '', false, stage),
-        ]),
-        el('div', { class: 'hint', text: 'Receipts, invoices, quotes, photos of the problem or any other file. Photos are shrunk automatically; other files can be up to 5 MB.' }),
+        el('div', { class: 'attach-existing' }, [existingHead, attachList]),
+        addBlock,
       ]);
 
       // ----- save -----
