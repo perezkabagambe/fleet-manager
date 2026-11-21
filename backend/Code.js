@@ -71,6 +71,8 @@ function actions_() {
     saveEntry: { auth: 'user', lock: true, fn: saveEntry_ },
     setIssueStatus: { auth: 'user', lock: true, fn: setIssueStatus_ },
     deleteEntry: { auth: 'admin', lock: true, fn: deleteEntry_ },
+    listDeletedEntries: { auth: 'admin', fn: listDeletedEntries_ },
+    restoreEntry: { auth: 'admin', lock: true, fn: restoreEntry_ },
     getCarCosts: { auth: 'user', fn: getCarCosts_ },
     uploadAttachment: { auth: 'user', lock: true, fn: uploadAttachment_ },
     getAttachment: { auth: 'user', fn: getAttachment_ },

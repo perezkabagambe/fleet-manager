@@ -190,6 +190,31 @@
     var data = [];
     var editing = false; // the section's Edit button shows an Edit button on every row
 
+    var notes = el('div'); // a message about a delete or a restore that did not work
+
+    // The page is drawn again with the change, keeping its sections open.
+    function afterChange(text) {
+      Views.invalidateCars();
+      FleetApp.setFlash('ok', text);
+      window.dispatchEvent(new CustomEvent('fleet:data-updated', { detail: { cars: [car.id], fleet: true } }));
+    }
+
+    /** Admins only: Delete sits under Edit. The entry goes to the recycle bin and can be restored for 30 days. */
+    function deleteButton(e) {
+      if (!FleetAuth.isAdmin()) return null;
+      var b = el('button', { type: 'button', class: 'btn small danger', text: 'Delete', 'aria-label': 'Delete ' + e.title });
+      b.addEventListener('click', function () {
+        UI.confirm('Delete "' + e.title + '"? It moves to the recycle bin and can be restored for 30 days. Any parts it used go back to stock while it is deleted.', { okLabel: 'Delete', danger: true }).then(function (yes) {
+          if (!yes) return;
+          notes.replaceChildren();
+          UI.busy(b, 'Deleting…', FleetApi.call('deleteEntry', { id: e.id })).then(function () {
+            afterChange('Deleted "' + e.title + '". It is in the recycle bin for 30 days.');
+          }).catch(function (err) { notes.replaceChildren(UI.notice('error', UI.errorText(err))); });
+        });
+      });
+      return b;
+    }
+
     function row(e) {
       var meta = [e.ref, dateText(e.date)].filter(Boolean); // the reference first, e.g. M-0042
       if (e.mileage !== null) meta.push(mileageText(e, car));
@@ -216,7 +241,10 @@
       // a small link icon beside each row copies a link straight to that entry
       return el('div', { class: 'entry-line' }, [
         link,
-        editing ? el('a', { class: 'btn small secondary row-edit', href: '#/car/' + car.id + '/entry/' + e.id + '/edit', text: 'Edit', 'aria-label': 'Edit ' + e.title }) : null,
+        editing ? el('div', { class: 'row-actions' }, [
+          el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/entry/' + e.id + '/edit', text: 'Edit', 'aria-label': 'Edit ' + e.title }),
+          deleteButton(e),
+        ]) : null,
         UI.shareButton(fmt.entryUrl(car.id, e.id), { title: e.title + ' · ' + car.registration, aria: 'Share ' + e.title }),
       ]);
     }
@@ -250,12 +278,52 @@
       });
     }
 
+    // ----- the recycle bin (admins): deleted entries, restorable for 30 days -----
+    function recycleBin() {
+      var body = el('div', { class: 'stack' });
+      var d = el('details', { class: 'copy-section recycle-bin' }, [el('summary', { text: 'Recycle bin' }), body]);
+      var loaded = false;
+      function ago(iso) {
+        var n = Math.floor((Date.now() - Date.parse(iso)) / 86400000);
+        return n < 1 ? 'today' : n === 1 ? 'yesterday' : n + ' days ago';
+      }
+      function load() {
+        body.replaceChildren(el('p', { class: 'muted', text: 'Loading…' }));
+        FleetApi.call('listDeletedEntries', { carId: car.id }).then(function (r) {
+          if (!r.data.entries.length) { body.replaceChildren(el('p', { class: 'muted', text: 'Nothing here. A deleted entry stays here for ' + r.data.days + ' days and can be restored.' })); return; }
+          body.replaceChildren.apply(body, [el('p', { class: 'muted small-text', text: 'Deleted entries can be restored for ' + r.data.days + ' days. After that they can no longer be restored.' })].concat(r.data.entries.map(function (x) {
+            var restore = el('button', { type: 'button', class: 'btn small secondary', text: 'Restore' });
+            restore.addEventListener('click', function () {
+              notes.replaceChildren();
+              UI.busy(restore, 'Restoring…', FleetApi.call('restoreEntry', { id: x.id })).then(function () {
+                afterChange('Restored "' + x.title + '"' + (x.ref ? ' (' + x.ref + ')' : '') + '.');
+              }).catch(function (err) {
+                notes.replaceChildren(UI.notice('error', err.code === 'not_enough_stock' ? 'It cannot be restored yet: parts it used have since been used on other work, so there is not enough in stock. Restore it after that work is changed or deleted.'
+                  : err.code === 'restore_expired' ? 'It was deleted more than ' + r.data.days + ' days ago, so it can no longer be restored.' : UI.errorText(err)));
+              });
+            });
+            return el('div', { class: 'bin-row' }, [
+              el('div', {}, [
+                el('div', { class: 'entry-title', text: x.title }),
+                el('div', { class: 'muted small-text', text: [x.ref, x.type, dateText(x.date)].filter(Boolean).join(' · ') }),
+                el('div', { class: 'muted small-text', text: 'Deleted ' + ago(x.deletedAt) + (x.deletedBy ? ' by ' + x.deletedBy : '') + ' · ' + x.daysLeft + (x.daysLeft === 1 ? ' day' : ' days') + ' left to restore' }),
+              ]),
+              restore,
+            ]);
+          })));
+        }).catch(function (err) { loaded = false; body.replaceChildren(UI.notice('error', UI.errorText(err))); });
+      }
+      d.addEventListener('toggle', function () { if (d.open && !loaded) { loaded = true; load(); } });
+      return d;
+    }
+
     var editBtn = UI.editToggle(function (on) { editing = on; render(); });
     return el('section', { class: 'card' }, [
       el('h2', { text: 'Maintenance & Issues Log' }),
       el('div', { class: 'section-tools' }, [editBtn]),
       el('a', { class: 'btn block big', href: '#/car/' + car.id + '/add', text: 'Add entry' }),
-      chips, list,
+      notes, chips, list,
+      FleetAuth.isAdmin() ? recycleBin() : null,
     ]);
   }
 
@@ -347,10 +415,10 @@
       if (FleetAuth.isAdmin()) {
         deleteBtn = el('button', { type: 'button', class: 'btn small danger', text: 'Delete' });
         deleteBtn.addEventListener('click', function () {
-          UI.confirm('Delete this ' + e.type.toLowerCase() + '? It will be hidden everywhere, and any parts it used go back to stock.', { okLabel: 'Delete', danger: true }).then(function (yes) {
+          UI.confirm('Delete this ' + e.type.toLowerCase() + '? It moves to the recycle bin and can be restored for 30 days. Any parts it used go back to stock while it is deleted.', { okLabel: 'Delete', danger: true }).then(function (yes) {
             if (!yes) return;
             UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteEntry', { id: e.id }))
-              .then(function () { Views.invalidateCars(); FleetApp.go('/car/' + carId); })
+              .then(function () { Views.invalidateCars(); FleetApp.setFlash('ok', 'Deleted "' + e.title + '". It is in the recycle bin for 30 days (open the Maintenance & Issues Log and its Recycle bin to restore it).'); FleetApp.go('/car/' + carId); })
               .catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
           });
         });

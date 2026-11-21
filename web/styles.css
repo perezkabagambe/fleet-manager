@@ -604,3 +604,6 @@ dl.details dd.vin-line { white-space: nowrap; overflow: hidden; overflow-wrap: n
 .receipt-table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
 .receipt-table th, .receipt-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .receipt-table .num, .receipt-table th:nth-child(n+3) { text-align: right; white-space: nowrap; }
+.bin-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); padding: 8px 0; }
+.bin-row:last-child { border-bottom: 0; }
+.recycle-bin { margin-top: 14px; }

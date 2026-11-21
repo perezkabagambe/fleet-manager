@@ -748,7 +748,9 @@ function setIssueStatus_(p, ctx) {
   return { entry: summarizeEntry_(Object.assign({}, e, patch)) };
 }
 
-/** Admin only. Soft delete: the entry is hidden, parts it used return to stock, the audit trail keeps it. */
+const ENTRY_BIN_DAYS = 30; // a deleted entry can be restored for this long
+
+/** Admin only. Soft delete: the entry goes to the recycle bin (restorable for 30 days), hidden everywhere, and parts it used return to stock. */
 function deleteEntry_(p, ctx) {
   const e = findEntry_(cleanStr_(p.id, 64));
   if (!e) fail_('not_found');
@@ -756,9 +758,56 @@ function deleteEntry_(p, ctx) {
     const c = entryContext_(e.car_id);
     (c.itemsByEntry[e.id] || []).forEach(function (i) { if ((c.used[i.id] || 0) > 0) fail_('purchase_in_use'); });
   }
-  Db.update('Entries', e._row, { deleted: true, updated_at: nowIso_(), updated_by: ctx.user.id, version: Number(e.version || 1) + 1 });
-  audit_(ctx.user, 'entry_deleted', 'Entry', e.id, e.type + ' "' + e.title + '" deleted');
-  return { done: true };
+  const now = nowIso_();
+  Db.update('Entries', e._row, { deleted: true, deleted_at: now, updated_at: now, updated_by: ctx.user.id, version: Number(e.version || 1) + 1 });
+  audit_(ctx.user, 'entry_deleted', 'Entry', e.id, e.type + ' "' + e.title + '" deleted (in the recycle bin for ' + ENTRY_BIN_DAYS + ' days)');
+  return { done: true, restorableDays: ENTRY_BIN_DAYS };
+}
+
+/** When a deleted entry was deleted (entries deleted before the bin existed use the time they were last changed). */
+function deletedAt_(e) { return Date.parse(e.deleted_at || e.updated_at) || 0; }
+
+/** Admin only: a car's recycle bin: the entries deleted in the last 30 days, newest first. */
+function listDeletedEntries_(p, ctx) {
+  const car = findCar_(cleanStr_(p.carId, 64), true);
+  if (!car) fail_('not_found');
+  const names = {};
+  Db.all('Users').forEach(function (u) { names[u.id] = u.name; });
+  const limit = ENTRY_BIN_DAYS * 86400000;
+  const entries = Db.all('Entries').filter(function (e) { return e.car_id === car.id && isTrue_(e.deleted) && ENTRY_TYPES.indexOf(e.type) !== -1 && Date.now() - deletedAt_(e) <= limit; })
+    .sort(function (a, b) { return deletedAt_(b) - deletedAt_(a); })
+    .map(function (e) {
+      const at = deletedAt_(e);
+      return { id: e.id, ref: e.ref || '', type: e.type, title: e.title, date: e.date, vendor: e.vendor,
+        deletedAt: new Date(at).toISOString(), deletedBy: String(e.updated_by).indexOf('guest:') === 0 ? 'a guest' : (names[e.updated_by] || ''),
+        daysLeft: Math.max(0, Math.ceil((limit - (Date.now() - at)) / 86400000)) };
+    });
+  return { entries: entries, days: ENTRY_BIN_DAYS };
+}
+
+/**
+ * Admin only: bring a deleted entry back (within 30 days). A maintenance entry takes its parts out of stock again, so it
+ * is refused if those parts have been used elsewhere since.
+ */
+function restoreEntry_(p, ctx) {
+  const id = cleanStr_(p.id, 64);
+  const e = Db.all('Entries').filter(function (x) { return x.id === id; })[0];
+  if (!e || !isTrue_(e.deleted)) fail_('not_found');
+  if (Date.now() - deletedAt_(e) > ENTRY_BIN_DAYS * 86400000) fail_('restore_expired');
+  const car = findCar_(e.car_id, false);
+  if (!car) fail_('not_found');
+  if (JOB_TYPES.indexOf(e.type) !== -1) {
+    const c = entryContext_(car.id); // live entries only: this one is still deleted
+    Db.all('PartUsage').filter(function (u) { return u.event_id === e.id && !isTrue_(u.deleted); }).forEach(function (u) {
+      const item = c.purchasesById[u.purchase_id];
+      if (!item || numOr0_(u.quantity_used) > numOr0_(item.quantity) - (c.used[u.purchase_id] || 0) + 1e-9) fail_('not_enough_stock');
+    });
+  }
+  const now = nowIso_();
+  const patch = { deleted: false, deleted_at: '', updated_at: now, updated_by: ctx.user.id, version: Number(e.version || 1) + 1 };
+  Db.update('Entries', e._row, patch);
+  audit_(ctx.user, 'entry_restored', 'Entry', e.id, e.type + ' "' + e.title + '" restored from the recycle bin');
+  return { entry: summarizeEntry_(Object.assign({}, e, patch)) };
 }
 
 // ---------- costs ----------
