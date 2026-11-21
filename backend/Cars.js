@@ -44,6 +44,7 @@ function summarizeCar_(c) {
     odometerUpdatedAt: c.odometer_updated_at,
     photoId: c.photo_file_id || '',
     photoThumbId: c.photo_thumb_file_id || '',
+    photos: carPhotosOf_(c.id).map(function (r) { return { id: r.id }; }), // all of the car's photos, the main one first
     guestEnabled: isTrue_(c.guest_enabled),
     acquisitionCost: c.acquisition_cost === '' || c.acquisition_cost === undefined ? null : Number(c.acquisition_cost),
     // Older records have no separate currency: the price was in the car's own currency.

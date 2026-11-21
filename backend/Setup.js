@@ -37,6 +37,8 @@ const SCHEMA = {
   Guests: { base: true, cols: ['car_id', 'name', 'name_key', 'token_hash', 'expires_at', 'blocked', 'last_seen'] },
   // Documents kept against a whole car (logbook, insurance, import papers...); the files live in its Drive folder.
   CarDocuments: { base: true, cols: ['car_id', 'doc_type', 'note', 'drive_file_id', 'filename', 'mime', 'size', 'ref'] },
+  // A car's photos (up to 15). The first is its main photo, which the car's own photo columns also point at.
+  CarPhotos: { base: true, cols: ['car_id', 'drive_file_id', 'thumb_file_id', 'position'] },
   PartUsage: { base: true, cols: ['purchase_id', 'event_id', 'quantity_used'] },
   // The items of a purchase (one order can hold several). A purchase with no rows here has a single item described by its own columns.
   PurchaseItems: { base: true, cols: ['car_id', 'entry_id', 'name', 'part_number', 'quantity', 'unit_cost', 'position'] },
@@ -59,7 +61,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 24; // 24: deleted entries keep when they were deleted (recycle bin, Entries.deleted_at) (23: receipts can wait for the daily reading allowance (Inbox queue columns) (22: receipts can arrive by email (Cars.receipt_secret, Inbox.email_id) (21: receipts waiting for review (Inbox tab) (20: a purchase can hold several items (PurchaseItems tab) (19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 25; // 25: a car can have up to 15 photos (CarPhotos tab) (24: deleted entries keep when they were deleted (recycle bin, Entries.deleted_at) (23: receipts can wait for the daily reading allowance (Inbox queue columns) (22: receipts can arrive by email (Cars.receipt_secret, Inbox.email_id) (21: receipts waiting for review (Inbox tab) (20: a purchase can hold several items (PurchaseItems tab) (19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
@@ -82,6 +84,7 @@ function migrateIfNeeded_() {
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 17) numberExistingEntries_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 18) markBulbRows_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 19) numberExistingFiles_();
+    if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 25) listExistingCarPhotos_();
     Db.invalidateAll(); // the sheets were changed directly: nothing remembered about them can be trusted
     props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   } finally {
@@ -257,6 +260,20 @@ function numberExistingFiles_() {
     Db.update(t.tab, t.row._row, { ref: formatRef_(FILE_REF_LETTER, top) });
   });
   props_().setProperty('REF_A', String(top));
+}
+
+/** One-off (version 25): a car's existing photo becomes the first row of its photo list. */
+function listExistingCarPhotos_() {
+  const have = {};
+  Db.all('CarPhotos').forEach(function (r) { if (!isTrue_(r.deleted)) have[r.car_id] = true; });
+  Db.all('Cars').forEach(function (c) {
+    if (!c.photo_file_id || have[c.id]) return;
+    const now = new Date().toISOString();
+    Db.insert('CarPhotos', {
+      id: Utilities.getUuid(), created_at: now, created_by: 'migration', updated_at: now, updated_by: 'migration', version: 1, deleted: false,
+      car_id: c.id, drive_file_id: c.photo_file_id, thumb_file_id: c.photo_thumb_file_id || '', position: '0',
+    });
+  });
 }
 
 /** Every car has a secret for its QR code. */

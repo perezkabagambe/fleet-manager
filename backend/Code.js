@@ -108,6 +108,7 @@ function actions_() {
     setMyCarRole: { auth: 'user', lock: true, fn: setMyCarRole_ },
     setCarPeople: { auth: 'admin', lock: true, fn: setCarPeople_ },
     uploadCarPhoto: { auth: 'user', lock: true, fn: uploadCarPhoto_ },
+    setCoverPhoto: { auth: 'user', lock: true, fn: setCoverPhoto_ },
     removeCarPhoto: { auth: 'user', lock: true, fn: removeCarPhoto_ },
     getPhoto: { auth: 'user', fn: getPhoto_ },
   };

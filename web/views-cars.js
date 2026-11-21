@@ -364,7 +364,7 @@
             el('h2', { text: 'Vehicle details' }),
             el('a', { class: 'btn small secondary section-edit', href: '#/car/' + car.id + '/edit', text: 'Edit', 'aria-label': 'Edit the vehicle details' }),
           ]),
-          photo(car, 'big', 'full'),
+          Photos.carousel(car),
           el('dl', { class: 'details top-details' }, details),
           car.notes ? el('p', { class: 'notes' , text: car.notes }) : null,
           el('div', { class: 'btn-row' }, [mineBtn]),
@@ -844,55 +844,106 @@
 
       var fluidsEd = fluidsEditor(fluids);
 
-      // Photo: take one, choose one, or remove it. Nothing is sent until you tap Save, like the other parts.
-      var photoChange = null; // null, { type: 'upload', file, url } or { type: 'remove' }
-      var hasPhoto = !!(car && car.photoThumbId);
-      var previewBox = el('div', { class: 'photo-preview' });
+      // Photos: up to 15. Add some, remove some, choose which is the main one (shown first, and on the fleet list).
+      // Nothing is sent until you tap Save, like the other parts.
+      var MAX_PHOTOS = 15;
+      var tileCount = 0;
+      var tiles = ((car && car.photos) || []).map(function (ph) { return { key: 'e' + ph.id, id: ph.id, removed: false }; });
+      var coverKey = tiles.length ? tiles[0].key : '';
+      var gridBox = el('div', { class: 'photo-grid' });
       var photoNote = el('div', { class: 'muted small-text', role: 'status' });
-      var removeBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Remove photo' });
-      var undoBtn = el('button', { type: 'button', class: 'linklike', text: 'Undo', hidden: true });
-
-      function showPhoto() {
-        var node;
-        if (photoChange && photoChange.type === 'upload') {
-          node = el('div', { class: 'photo' }, [el('img', { class: 'photo-img', src: photoChange.url, alt: 'New photo' })]);
-          photoNote.textContent = 'New photo ready. It is saved when you tap ' + (car ? 'Save changes' : 'Add car') + '.';
-        } else if (photoChange && photoChange.type === 'remove') {
-          node = el('div', { class: 'photo placeholder', 'aria-hidden': 'true', text: '🚗' });
-          photoNote.textContent = 'The photo will be removed when you tap Save changes.';
-        } else if (hasPhoto) {
-          node = photo(car, '', 'full');
-          photoNote.textContent = '';
-        } else {
-          node = el('div', { class: 'photo placeholder', 'aria-hidden': 'true', text: '🚗' });
-          photoNote.textContent = 'No photo yet.';
-        }
-        previewBox.replaceChildren(node);
-        // "Remove" makes sense when there is a photo to remove (saved, or just picked)
-        removeBtn.hidden = !((hasPhoto && !(photoChange && photoChange.type === 'remove')) || (photoChange && photoChange.type === 'upload'));
-        undoBtn.hidden = !(photoChange && photoChange.type === 'remove');
-      }
-      function dropStagedUrl() {
-        if (photoChange && photoChange.url) { try { URL.revokeObjectURL(photoChange.url); } catch (e) { /* ignore */ } }
-      }
       var photoPicker = Photos.picker(function (file) {
-        dropStagedUrl();
-        photoChange = { type: 'upload', file: file, url: URL.createObjectURL(file) };
-        showPhoto();
+        if (tiles.filter(function (t) { return !t.removed; }).length >= MAX_PHOTOS) { photoNote.textContent = 'A car can have up to ' + MAX_PHOTOS + ' photos. Remove one to add another.'; return; }
+        var t = { key: 's' + (++tileCount), file: file, url: URL.createObjectURL(file), removed: false };
+        tiles.push(t);
+        if (!coverKey) coverKey = t.key; // the first photo of a car is its main photo
+        drawPhotos();
       });
-      removeBtn.addEventListener('click', function () {
-        dropStagedUrl();
-        photoChange = hasPhoto ? { type: 'remove' } : null; // a staged pick on a car with no photo just gets cleared
-        showPhoto();
-      });
-      undoBtn.addEventListener('click', function () { photoChange = null; showPhoto(); });
-      showPhoto();
+      function liveTiles() { return tiles.filter(function (t) { return !t.removed; }); }
+      function fixCover() { // the main photo was removed: the first one left takes over
+        var live = liveTiles();
+        if (!live.some(function (t) { return t.key === coverKey; })) coverKey = live.length ? live[0].key : '';
+      }
+      function tileEl(t) {
+        var thumb = el('div', { class: 'photo-tile-img' });
+        if (t.url) thumb.append(el('img', { src: t.url, alt: 'New photo' }));
+        else {
+          thumb.append(el('span', { class: 'photo-tile-wait', text: '🚗' }));
+          Photos.getById(car, { id: t.id }, 'thumb').then(function (src) { thumb.replaceChildren(el('img', { src: src, alt: 'Photo' })); }).catch(function () {});
+        }
+        var actions = [];
+        if (t.removed) {
+          var undo = el('button', { type: 'button', class: 'btn small secondary', text: 'Undo' });
+          undo.addEventListener('click', function () { t.removed = false; if (!coverKey) coverKey = t.key; drawPhotos(); });
+          actions.push(undo);
+        } else {
+          if (t.key !== coverKey) {
+            var main = el('button', { type: 'button', class: 'btn small secondary', text: 'Make main' });
+            main.addEventListener('click', function () { coverKey = t.key; drawPhotos(); });
+            actions.push(main);
+          }
+          var rm = el('button', { type: 'button', class: 'btn small secondary danger-text', text: 'Remove' });
+          rm.addEventListener('click', function () {
+            if (t.id) t.removed = true; // a saved photo is removed when you tap Save (Undo until then)
+            else { try { URL.revokeObjectURL(t.url); } catch (e) { /* ignore */ } tiles.splice(tiles.indexOf(t), 1); } // one just picked simply goes
+            fixCover();
+            drawPhotos();
+          });
+          actions.push(rm);
+        }
+        return el('div', { class: 'photo-tile' + (t.removed ? ' removed' : '') }, [
+          thumb,
+          t.key === coverKey && !t.removed ? el('span', { class: 'photo-tile-main', text: 'Main' }) : null,
+          t.removed ? el('div', { class: 'muted small-text', text: 'Removed when you save' }) : (!t.id ? el('div', { class: 'muted small-text', text: 'New, saved with the car' }) : null),
+          el('div', { class: 'photo-tile-actions' }, actions),
+        ]);
+      }
+      function drawPhotos() {
+        var n = liveTiles().length;
+        gridBox.replaceChildren.apply(gridBox, tiles.length ? tiles.map(tileEl) : [el('p', { class: 'muted', text: 'No photos yet.' })]);
+        photoNote.textContent = n + ' of ' + MAX_PHOTOS + ' photos' + (n > 1 ? '. The main photo is shown first; swipe to see the others on the car\'s page.' : '.');
+        photoPicker.setBusy(n >= MAX_PHOTOS);
+      }
+      drawPhotos();
       var photoFields = [
-        previewBox,
-        el('div', { class: 'btn-row' }, [photoPicker.take, photoPicker.choose, removeBtn]),
-        photoNote, undoBtn,
-        el('div', { class: 'hint', text: 'Take a photo with your camera, or choose one from your gallery.' }),
+        gridBox,
+        el('div', { class: 'btn-row' }, [photoPicker.take, photoPicker.choose]),
+        photoNote,
+        el('div', { class: 'hint', text: 'Take a photo with your camera, or choose one from your gallery. Up to ' + MAX_PHOTOS + ' photos per car.' }),
       ];
+
+      /** Send the photo changes: removals, then new photos, then the choice of main photo. Remembers what is done, so a retry never repeats a step. */
+      function savePhotos() {
+        var ps = state.photoProgress || (state.photoProgress = { removed: {}, added: {}, cover: false });
+        var removals = tiles.filter(function (t) { return t.id && t.removed && !ps.removed[t.key]; });
+        var live = liveTiles();
+        var kept = live.filter(function (t) { return t.id; });
+        var adds = live.filter(function (t) { return !t.id && !ps.added[t.key]; });
+        // with no photo left from before, the one chosen as main goes up first, so it becomes the main photo
+        if (!kept.length) adds.sort(function (x, y) { return (y.key === coverKey ? 1 : 0) - (x.key === coverKey ? 1 : 0); });
+        var chain = Promise.resolve();
+        removals.forEach(function (t) {
+          chain = chain.then(function () {
+            return FleetApi.call('removeCarPhoto', { carId: state.carId, photoId: t.id }).then(function () { ps.removed[t.key] = true; }, function (e) {
+              if (e.code === 'no_photo') ps.removed[t.key] = true; else throw e;
+            });
+          });
+        });
+        adds.forEach(function (t) {
+          chain = chain.then(function () { return Photos.upload(state.carId, t.file).then(function (r) { ps.added[t.key] = r.data.photo.id; }); });
+        });
+        return chain.then(function () {
+          var chosen = live.filter(function (t) { return t.key === coverKey; })[0];
+          var serverFirst = kept[0] || live.filter(function (t) { return !t.id; }).sort(function (x, y) { return (y.key === coverKey ? 1 : 0) - (x.key === coverKey ? 1 : 0); })[0];
+          if (!chosen || ps.cover || chosen === serverFirst) return;
+          var id = chosen.id || ps.added[chosen.key];
+          if (!id) return;
+          return FleetApi.call('setCoverPhoto', { carId: state.carId, photoId: id }).then(function () { ps.cover = true; });
+        });
+      }
+      function photosChanged() {
+        return tiles.some(function (t) { return !t.id || t.removed; }) || (car && tiles.length > 0 && coverKey !== tiles[0].key);
+      }
 
       // Every part of the form opens and closes, and starts closed. (A new car starts with Details open, because
       // that is where the required fields are.)
@@ -985,7 +1036,7 @@
 
       var fluidsSection = section('💧 Fluids & Specifications', car ? [refreshSpecsBox(), fluidsEd.node] : [fluidsEd.node], false, 'kind-fluid');
       var bulbsSection = section('💡 Bulbs', [fluidsEd.bulbsNode], false, 'kind-bulb');
-      var photoSection = section('Photo', photoFields);
+      var photoSection = section('Photos', photoFields);
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: car ? 'Save changes' : 'Add car' });
       var form = el('form', { novalidate: true }, [
         detailsSection,
@@ -1064,18 +1115,15 @@
           return null;
         }).then(function (stop) {
           if (stop === 'stop') return 'stop';
-          if (!photoChange || state.photoDone) return null;
-          step = 'the photo';
-          var doPhoto = photoChange.type === 'upload'
-            ? Photos.upload(state.carId, photoChange.file)
-            : FleetApi.call('removeCarPhoto', { carId: state.carId });
-          return doPhoto.then(function () {
+          if (!photosChanged() || state.photoDone) return null;
+          step = 'the photos';
+          return savePhotos().then(function () {
             state.photoDone = true;
-            done.push('photo');
+            done.push('photos');
           }, function (e) {
-            if (car) throw e; // editing: stay here so the photo can be retried
-            // A brand-new car is already saved, so report the photo on the next screen instead of blocking.
-            FleetApp.setFlash('error', 'The car was saved, but its photo could not be added: ' + UI.errorText(e) + ' You can add it with Edit car.');
+            if (car) throw e; // editing: stay here so the photos can be retried
+            // A brand-new car is already saved, so report the photos on the next screen instead of blocking.
+            FleetApp.setFlash('error', 'The car was saved, but its photos could not be added: ' + UI.errorText(e) + ' You can add them with Edit car.');
           });
         }).then(function (stop) {
           if (stop === 'stop') return;

@@ -102,6 +102,7 @@
     year_required: 'Please enter the year of the vehicle.',
     invalid_year: 'The year must be a four-digit year, such as 2015.',
     ai_not_set_up: 'AI is not set up yet (or its key was refused). An administrator needs to add the Gemini key to the app.',
+    too_many_photos: 'A car can have up to 15 photos. Remove one to add another.',
     receipt_closed: 'That receipt has already been dealt with.',
     inbox_full: 'The Inbox is full. Check or dismiss some receipts first.',
     ai_busy: 'The AI service is busy right now. Please try again in a minute.',

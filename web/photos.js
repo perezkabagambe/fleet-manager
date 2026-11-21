@@ -110,6 +110,79 @@
     return inflight[id];
   }
 
+  /** Data URL for one of a car's several photos (`photo` is { id }), 'thumb' or 'full', remembered by the photo's own id. */
+  function getById(car, photo, kind) {
+    var key = 'cp:' + photo.id + ':' + kind;
+    if (memory[key]) return Promise.resolve(memory[key]);
+    if (kind === 'thumb') {
+      try {
+        var saved = localStorage.getItem(THUMB_KEY + key);
+        if (saved) { memory[key] = saved; return Promise.resolve(saved); }
+      } catch (e) { /* ignore */ }
+    }
+    if (!inflight[key]) {
+      inflight[key] = FleetApi.call('getPhoto', { carId: car.id, kind: kind, photoId: photo.id }).then(function (r) {
+        var src = dataUrl(r.data.data);
+        remember(key, src, kind === 'thumb');
+        return src;
+      }).finally(function () { delete inflight[key]; });
+    }
+    return inflight[key];
+  }
+
+  /**
+   * The car's photos on its page: swipe left and right between them. With one photo (or none) it is just the photo.
+   * Every slide shows its small picture at once; the full picture is fetched when the slide comes into view.
+   * Tap a photo to see it full screen. Arrows and a counter help where swiping is not possible.
+   */
+  function carousel(car) {
+    var photos = car.photos || [];
+    if (photos.length < 2) return element(car, 'full', 'big');
+    var track = el('div', { class: 'carousel-track', role: 'group', 'aria-label': 'The car\'s photos, swipe to see more' });
+    var count = el('div', { class: 'carousel-count', 'aria-live': 'polite' });
+    var slides = photos.map(function (ph, i) {
+      var box = el('div', { class: 'photo big carousel-slide zoomable', role: 'button', tabindex: '0', 'aria-label': 'Photo ' + (i + 1) + ' of ' + photos.length + ', tap to see it full screen' });
+      var img = el('img', { class: 'photo-img', alt: car.registration + ' photo ' + (i + 1) });
+      box.append(img);
+      var haveFull = false;
+      var loadFull = function () {
+        if (haveFull) return;
+        haveFull = true;
+        getById(car, ph, 'full').then(function (src) { img.src = src; }).catch(function () { haveFull = false; });
+      };
+      getById(car, ph, 'thumb').then(function (src) { if (!haveFull || !img.src) img.src = src; }).catch(function () {});
+      function open(ev) {
+        ev.preventDefault();
+        openFull({ preview: img.src, load: function () { return getById(car, ph, 'full'); } });
+      }
+      box.addEventListener('click', open);
+      box.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') open(ev); });
+      box._loadFull = loadFull;
+      track.append(box);
+      return box;
+    });
+    slides[0]._loadFull(); // the main photo at once
+    if ('IntersectionObserver' in window) {
+      var seen = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) { if (en.isIntersecting) en.target._loadFull(); });
+      }, { root: track, threshold: 0.4 });
+      slides.forEach(function (s) { seen.observe(s); });
+    } else {
+      slides.forEach(function (s) { s._loadFull(); });
+    }
+    function index() { return Math.max(0, Math.min(photos.length - 1, Math.round(track.scrollLeft / Math.max(track.clientWidth, 1)))); }
+    function update() { count.textContent = (index() + 1) + ' / ' + photos.length; }
+    var timer = null;
+    track.addEventListener('scroll', function () { clearTimeout(timer); timer = setTimeout(update, 40); });
+    function go(delta) { track.scrollTo({ left: (index() + delta) * track.clientWidth, behavior: 'smooth' }); }
+    var prev = el('button', { type: 'button', class: 'carousel-arrow carousel-prev', 'aria-label': 'Previous photo', text: '‹' });
+    var next = el('button', { type: 'button', class: 'carousel-arrow carousel-next', 'aria-label': 'Next photo', text: '›' });
+    prev.addEventListener('click', function () { go(-1); });
+    next.addEventListener('click', function () { go(1); });
+    update();
+    return el('div', { class: 'carousel' }, [track, prev, next, count]);
+  }
+
   /**
    * A photo box. Shows a placeholder, then the thumbnail, then (for kind 'full') the full image.
    * Always returns an element, so layouts never jump around.
@@ -410,7 +483,7 @@
   });
 
   window.Photos = {
-    prepare: prepare, upload: upload, get: get, element: element, picker: picker, openFull: openFull,
+    prepare: prepare, upload: upload, get: get, getById: getById, element: element, carousel: carousel, picker: picker, openFull: openFull,
     attachmentThumb: attachmentThumb, thumbBox: thumbBox, thumbFromBase64: thumbFromBase64, rememberAttachmentThumb: rememberAthumb, hasAttachmentThumb: function (id) { return !!savedAthumb(id); }, fetchThumbBatch: fetchThumbBatch, THUMB_BATCH: ATHUMB_BATCH, forgetThumbs: forgetThumbs,
     fileButton: fileButton, prepareAttachment: prepareAttachment, fetchAttachment: fetchAttachment, toBlobUrl: toBlobUrl,
   };
