@@ -2,7 +2,10 @@
 // Receipts waiting for review: add a photo/PDF, have Gemini (mocked) read it, review it, approve or dismiss.
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const vm = require('vm');
 const { createEnv } = require('./harness');
+const tokens = new WeakMap();
+const setupToken = (env) => tokens.get(env);
 
 const CAR = { registration: 'AB12 CDE', make: 'Toyota', model: 'Hilux', year: '2015', odometer: '50000' };
 const jpeg = (n) => { const b = Buffer.alloc(n || 50, 5); b[0] = 0xff; b[1] = 0xd8; b[2] = 0xff; b[3] = 0xe0; return b.toString('base64'); };
@@ -25,6 +28,7 @@ function setup(opts) {
   const admin = env.signInAs('admin@example.com');
   const sam = env.signInAs('sam@example.com');
   if (!opts || opts.key !== false) env.props.GEMINI_API_KEY = 'AIza-test-key';
+  tokens.set(env, sam);
   const car = env.call('saveCar', { token: sam, fields: CAR }).data.car;
   const add = (extra, token) => env.call('uploadReceipt', Object.assign({ token: token || sam, mime: 'image/jpeg', data: jpeg(), filename: 'receipt.jpg' }, extra || {}));
   const read = (id, token) => env.call('readReceipt', { token: token || sam, id });
@@ -99,30 +103,37 @@ test('without a key the receipt is kept as Unreadable, nothing is sent, and the 
   assert.ok(env.outbox.some((m) => /waiting for review/.test(m.subject)));
 });
 
-test('Gemini trouble leaves the receipt Unreadable and does not use up the daily allowance', () => {
+test('a busy service queues the receipt; other Gemini trouble leaves it Unreadable; neither uses up the daily allowance', () => {
   const { env, add, read } = setup();
   env.props.RECEIPT_APP_DAILY = '2';
   const id = add().data.receipt.id;
-  for (const bad of [{ code: 429, body: {} }, { code: 500, body: 'oops' }, answer('not json at all'), { code: 200, body: { candidates: [] } }, { code: 403, body: { error: { message: 'API key not valid' } } }]) {
+  const cases = [[{ code: 429, body: {} }, 'Queued'], [{ code: 500, body: 'oops' }, 'Unreadable'], [answer('not json at all'), 'Unreadable'], [{ code: 200, body: { candidates: [] } }, 'Unreadable'],
+    [{ code: 403, body: { error: { message: 'API key not valid' } } }, 'Unreadable'], [new Error('timeout'), 'Unreadable']];
+  for (const [bad, status] of cases) {
     env.state.gemini = () => bad;
-    assert.equal(read(id).data.receipt.status, 'Unreadable');
+    assert.equal(read(id).data.receipt.status, status);
   }
-  env.state.gemini = () => new Error('timeout');
-  assert.equal(read(id).data.receipt.status, 'Unreadable');
-  // five failures against a limit of two: the allowance was given back each time, so a good answer still works
+  // six failures against a limit of two: the allowance was given back each time, so a good answer still works
   env.state.gemini = () => answer(PARTS);
   assert.equal(read(id).data.receipt.status, 'Pending');
 });
 
-test('the daily limit stops reading but still saves the receipt', () => {
+test('the daily limit queues the receipt (saved, not lost) and it is read the next day', () => {
   const { env, add, read } = setup();
   env.props.RECEIPT_USER_DAILY = '1';
   env.state.gemini = () => answer(PARTS);
   assert.equal(read(add().data.receipt.id).data.receipt.status, 'Pending');
   const second = read(add().data.receipt.id).data.receipt;
-  assert.equal(second.status, 'Unreadable');
-  assert.match(second.note, /limit/);
+  assert.equal(second.status, 'Queued');
+  assert.match(second.note, /tomorrow/);
   assert.equal(env.state.geminiRequests.length, 1);
+  assert.equal(env.call('getInboxCount', { token: setupToken(env) }).data.count, 2);
+  // the timer does nothing for it today, and reads it once the allowance has renewed
+  assert.equal(vm.runInContext('readQueuedReceipts_()', env.ctx), 0);
+  env.advance(26 * 3600 * 1000);
+  assert.equal(vm.runInContext('readQueuedReceipts_()', env.ctx), 1);
+  assert.equal(env.call('getInboxItem', { token: setupToken(env), id: second.id }).data.receipt.status, 'Pending');
+  assert.equal(env.state.geminiRequests.length, 2);
 });
 
 test('admins are emailed once when a receipt becomes ready, except the one who added it', () => {

@@ -225,3 +225,55 @@ test('an admin who emails a receipt gets the confirmation, not the admin notice 
   assert.equal(env.outbox.filter((m) => m.to === 'admin@example.com' && /waiting for approval/.test(m.subject)).length, 1);
   assert.equal(env.outbox.filter((m) => m.to === 'admin@example.com' && /waiting for review/.test(m.subject)).length, 0);
 });
+
+test('when the daily limit is used up the sender is told once, and the receipt is read and confirmed the next day', () => {
+  const { env, address, run, inbox } = setup();
+  const to = address();
+  env.props.RECEIPT_APP_DAILY = '1';
+  env.state.gmail = [
+    thread([mail({ to, from: 'Sam <sam@example.com>', id: 'a', body: 'first' })]),
+    thread([mail({ to, from: 'Sam <sam@example.com>', id: 'b', body: 'second Oil filter' })]),
+  ];
+  env.outbox.length = 0;
+  run();
+  const subjects = () => env.outbox.map((m) => m.to + ': ' + m.subject);
+  assert.equal(env.outbox.filter((m) => m.to === 'sam@example.com' && /read tomorrow/.test(m.subject)).length, 1);
+  assert.equal(inbox().filter((r) => r.status === 'Queued').length, 1);
+  assert.equal(inbox().filter((r) => r.status === 'Pending').length, 1);
+  // five minutes later, and again: no second notice, no new reading, the admin is not told about a receipt that has not been read
+  env.advance(5 * 60000); run(); env.advance(5 * 60000); run();
+  assert.equal(env.outbox.filter((m) => /read tomorrow/.test(m.subject)).length, 1);
+  assert.equal(env.state.geminiRequests.length, 1);
+  assert.equal(env.outbox.filter((m) => /waiting for review/.test(m.subject)).length, 1);
+  // the next day: it is read, the sender is told it is waiting for approval, and the admin is told too
+  env.advance(26 * 3600 * 1000);
+  run();
+  assert.equal(inbox().filter((r) => r.status === 'Pending').length, 2);
+  assert.equal(env.state.geminiRequests.length, 2);
+  assert.equal(env.outbox.filter((m) => m.to === 'sam@example.com' && /waiting for approval/.test(m.subject)).length, 2);
+  assert.equal(env.outbox.filter((m) => /waiting for review/.test(m.subject)).length, 2);
+  assert.equal(env.outbox.filter((m) => /read tomorrow/.test(m.subject)).length, 1, subjects().join('\n'));
+  // the queued receipt kept its email text for the reading
+  assert.equal(JSON.stringify(env.state.geminiRequests[1].body).includes('second Oil filter'), true);
+});
+
+test('a busy Gemini is retried after 15 minutes; after three busy answers the sender is told once and it waits longer', () => {
+  const { env, address, run, inbox } = setup();
+  env.state.gemini = () => ({ code: 429, body: {} });
+  env.state.gmail = [thread([mail({ to: address(), from: 'sam@example.com' })])];
+  env.outbox.length = 0;
+  run();
+  assert.equal(inbox()[0].status, 'Queued');
+  assert.equal(env.outbox.filter((m) => /read tomorrow/.test(m.subject)).length, 0); // not yet: it will be tried again shortly
+  env.advance(16 * 60000); run();
+  assert.equal(env.state.geminiRequests.length, 2);
+  env.advance(16 * 60000); run();
+  assert.equal(env.state.geminiRequests.length, 3);
+  assert.equal(env.outbox.filter((m) => /read tomorrow/.test(m.subject)).length, 1);
+  env.advance(16 * 60000); run(); // now it waits hours, not minutes
+  assert.equal(env.state.geminiRequests.length, 3);
+  env.state.gemini = () => answer(PARTS);
+  env.advance(7 * 3600 * 1000); run();
+  assert.equal(inbox()[0].status, 'Pending');
+  assert.equal(env.outbox.filter((m) => m.to === 'sam@example.com' && /waiting for approval/.test(m.subject)).length, 1);
+});

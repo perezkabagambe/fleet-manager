@@ -165,12 +165,11 @@ function handleReceiptMessage_(message, carsBySecret, carsByReg, usersByEmail) {
   const file = receiptEmailFile_(message);
   const row = withScriptLock_(function () {
     return storeReceipt_({
-      source: 'email', car_id: car ? car.id : '', sender: user ? user.name : from, subject: cleanStr_(message.getSubject(), 120), email_id: emailId,
+      source: 'email', car_id: car ? car.id : '', sender: user ? user.name : from, subject: cleanStr_(message.getSubject(), 120), email_id: emailId, sender_id: user ? user.id : '',
     }, file.bytes, file.mime, file.filename, null);
   });
   audit_(null, 'receipt_emailed', 'Inbox', row.id, 'Receipt "' + file.filename + '" arrived by email' + (car ? ' for ' + car.registration : ''));
-  const done = readStoredReceipt_(row, '', receiptEmailText_(message), user ? user.id : ''); // an admin who sent it gets the confirmation below instead of the admin notice
-  if (user) notifyReceiptSender_(done, user);
+  readStoredReceipt_(row, '', receiptEmailText_(message), user ? user.id : ''); // an admin who sent it gets the confirmation instead of the admin notice
   return 'read';
 }
 
@@ -190,8 +189,21 @@ function notifyReceiptSender_(row, user) {
   sendMail_(user.email, 'Your receipt is waiting for approval', html, text);
 }
 
+/** Tell the sender, once, that the day's reading limit is used up and their receipt will be read tomorrow. */
+function notifyReceiptQueued_(row, user) {
+  if (!dailyCap_('rc_ack', RECEIPT_MAIL_DAILY)) return;
+  const url = SITE_URL + '#/inbox';
+  const html = layout_('Your receipt will be read tomorrow',
+    '<p>Hi ' + esc_(user.name) + ',</p>' +
+    '<p>We received your receipt, but the daily limit for reading receipts automatically has been reached. It is saved in the Inbox and will be read automatically tomorrow. We will email you again when it has been read and is waiting for approval.</p>' +
+    '<p>You do not need to send it again.</p>' + button_(url, 'Open the Inbox'));
+  const text = 'Hi ' + user.name + ',\n\nWe received your receipt, but the daily limit for reading receipts automatically has been reached. It is saved in the Inbox and will be read automatically tomorrow. We will email you again when it has been read and is waiting for approval. You do not need to send it again.\n' + url;
+  sendMail_(user.email, 'Your receipt will be read tomorrow', html, text);
+}
+
 /** The timer: read new mail sent to a car's receipt address. Runs every 5 minutes (see setupReceiptEmail). */
 function processReceiptEmails() {
+  try { readQueuedReceipts_(); } catch (e) { console.error('queue failed: ' + (e && e.stack ? e.stack : JSON.stringify(e))); }
   const threads = GmailApp.search(RECEIPT_MAIL_QUERY, 0, RECEIPT_MAIL_THREADS);
   if (!threads.length) return { read: 0 };
   Db.resetRequest();

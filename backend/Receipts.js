@@ -10,7 +10,7 @@
  * Property GEMINI_API_KEY and is never sent to the phone. Optional Script Properties: GEMINI_MODEL, RECEIPT_USER_DAILY and
  * RECEIPT_APP_DAILY (limits on how many receipts are read per day).
  *
- * Statuses: New (stored, not read yet), Pending (read, waiting for review), Unreadable (could not be read automatically:
+ * Statuses: New (stored, not read yet), Queued (waiting for the daily reading allowance to renew), Pending (read, waiting for review), Unreadable (could not be read automatically:
  * fill it in by hand), Approved (an entry was made from it), Dismissed (thrown away by an admin).
  */
 
@@ -20,7 +20,7 @@ const RECEIPT_USER_DAILY = 30;
 const RECEIPT_APP_DAILY = 100;
 const RECEIPT_MAIL_DAILY = 30;     // notification emails per day (the mail service allows about 100 in all)
 const RECEIPT_TEXT_MAX = 20000;    // characters of an email's text that are sent to be read
-const RECEIPT_OPEN = ['New', 'Pending', 'Unreadable'];
+const RECEIPT_OPEN = ['New', 'Pending', 'Queued', 'Unreadable'];
 const RECEIPT_KINDS = ['Purchase', 'Maintenance'];
 const MAX_RECEIPT_ITEMS = 30;
 
@@ -74,7 +74,7 @@ function storeReceipt_(fields, bytes, mime, filename, ctx) {
     updated_by: ctx && ctx.user ? ctx.user.id : 'email', version: 1, deleted: false,
     source: 'upload', status: 'New', car_id: '', kind: '', received_at: now, sender: '', subject: '',
     filename: filename, mime: mime, size: bytes.length, drive_file_id: file.getId(), data: '', vendor: '', date: '', total: '', currency: '',
-    order_ref: '', note: '', duplicate_of: '', entry_id: '', handled_by: '', handled_at: '', notified: '', email_id: '',
+    order_ref: '', note: '', duplicate_of: '', entry_id: '', handled_by: '', handled_at: '', notified: '', email_id: '', sender_id: '', retry_after: '', attempts: '', ack_sent: '', email_text: '',
   }, fields);
   Db.insert('Inbox', row);
   return row;
@@ -243,18 +243,29 @@ function receiptCarGuess_(data) {
 
 // ---------- reading a stored receipt ----------
 
+/** When the daily allowance renews: shortly after the start of tomorrow (London time), as an ISO time. */
+function receiptTomorrow_() {
+  const tomorrow = Utilities.formatDate(new Date(Date.now() + 24 * 3600 * 1000), TZ, 'yyyy-MM-dd');
+  return tomorrow + 'T00:10:00.000Z'; // 00:10 UTC is after midnight in London all year round
+}
+
 /**
  * Read a receipt that is stored in the Inbox and save the result on its row. Does not need the script lock to be held:
  * it takes the lock itself, briefly, only to save. `userId` is whose daily allowance is used ('' for the app's own).
- * `extraText` is an emailed receipt's text. Never throws for a reading problem: the row becomes Unreadable with a reason.
+ * `extraText` is an emailed receipt's text (kept on the row if the reading has to wait). Never throws for a reading
+ * problem. When the day's allowance has run out, or the service is busy, the receipt is Queued and the timer reads it
+ * later (readQueuedReceipts_); a reading that cannot work at all becomes Unreadable, with a reason.
  */
 function readStoredReceipt_(row, userId, extraText, notifyExcept) {
+  extraText = extraText || row.email_text || '';
   let note = '';
   let data = null;
+  let retryAfter = '';   // set when the reading should be tried again later
+  let busy = false;
   if (!geminiKey_()) {
     note = 'Automatic reading is not switched on yet, so this one needs filling in by hand.';
   } else if (receiptTake_(userId)) {
-    note = 'Today\'s limit for automatic reading has been reached. This receipt is saved: fill it in by hand, or read it again tomorrow.';
+    retryAfter = receiptTomorrow_();
   } else {
     try {
       const parts = [{ text: 'Read this document.' + (extraText ? '\n\nThe text of the email it came with:\n' + extraText : '') }];
@@ -266,13 +277,15 @@ function readStoredReceipt_(row, userId, extraText, notifyExcept) {
     } catch (e) {
       receiptRefund_(userId);
       const code = e && e.apiError;
+      if (code === 'ai_busy') busy = true;
       note = code === 'ai_not_set_up' ? 'The reading service did not accept the key, so this one needs filling in by hand.'
-        : code === 'ai_busy' ? 'The reading service was too busy. Try reading it again in a few minutes, or fill it in by hand.'
         : 'It could not be read automatically. Try again, or fill it in by hand.';
       if (!code) console.error(e && e.stack ? e.stack : e);
     }
   }
-  return withScriptLock_(function () {
+  let ackTo = null;
+  let readFor = null;
+  const done = withScriptLock_(function () {
     const fresh = findReceipt_(row.id) || row;
     if (fresh.status === 'Approved' || fresh.status === 'Dismissed') return fresh; // handled while it was being read
     const patch = { updated_at: nowIso_(), version: Number(fresh.version || 1) + 1 };
@@ -286,18 +299,53 @@ function readStoredReceipt_(row, userId, extraText, notifyExcept) {
         status: 'Pending', kind: data.kind, car_id: guess, data: JSON.stringify(data).slice(0, 8000), vendor: data.vendor, date: data.date,
         total: data.total === null ? '' : String(data.total), currency: data.currency, order_ref: data.orderNumber,
         duplicate_of: dupe ? dupe.id : '', note: dupe ? 'This looks like the same order as another receipt in the Inbox.' : '',
+        retry_after: '', email_text: '',
       });
+    } else if (retryAfter || busy) {
+      const attempts = Number(fresh.attempts || 0) + (busy ? 1 : 0);
+      // a busy service is tried again soon; after three busy answers (or a spent allowance) the receipt waits for tomorrow
+      const later = retryAfter || (attempts < 3 ? new Date(Date.now() + 15 * 60000).toISOString() : new Date(Date.now() + 6 * 3600000).toISOString());
+      const long = !!retryAfter || attempts >= 3;
+      Object.assign(patch, {
+        status: 'Queued', attempts: String(attempts), retry_after: later, email_text: extraText.slice(0, RECEIPT_TEXT_MAX),
+        note: long ? 'The daily limit for reading receipts has been reached. This receipt is saved and will be read automatically tomorrow. You can also fill it in by hand now.'
+          : 'The reading service was busy. This receipt is saved and will be tried again shortly.',
+      });
+      if (long && !fresh.ack_sent) { patch.ack_sent = nowIso_(); ackTo = fresh.sender_id; }
     } else {
-      Object.assign(patch, { status: 'Unreadable', note: note });
+      Object.assign(patch, { status: 'Unreadable', note: note, retry_after: '', email_text: '' });
     }
     Db.update('Inbox', fresh._row, patch);
-    const done = Object.assign({}, fresh, patch);
-    if (!fresh.notified) {
+    const merged = Object.assign({}, fresh, patch);
+    if (data) {
+      if (!fresh.notified) {
+        Db.update('Inbox', fresh._row, { notified: nowIso_() });
+        notifyReceiptWaiting_(merged, notifyExcept);
+      }
+      readFor = fresh.sender_id;
+    } else if (!retryAfter && !busy && !fresh.notified) {
       Db.update('Inbox', fresh._row, { notified: nowIso_() });
-      notifyReceiptWaiting_(done, notifyExcept);
+      notifyReceiptWaiting_(merged, notifyExcept);
+      readFor = fresh.sender_id;
     }
-    return done;
+    return merged;
   });
+  // emailed receipts: the person who sent it is told it is waiting (or, once, that reading is delayed until tomorrow)
+  const person = function (id) { return id ? Db.all('Users').filter(function (u) { return u.id === id && !isTrue_(u.deleted) && u.status === 'Approved'; })[0] : null; };
+  if (ackTo && person(ackTo)) notifyReceiptQueued_(done, person(ackTo));
+  if (readFor && person(readFor) && (done.status === 'Pending' || done.status === 'Unreadable')) notifyReceiptSender_(done, person(readFor));
+  return done;
+}
+
+/** The timer: read the queued receipts whose time has come (the allowance has renewed, or the service should be less busy). */
+function readQueuedReceipts_() {
+  const now = nowIso_();
+  const due = Db.all('Inbox').filter(function (r) { return !isTrue_(r.deleted) && r.status === 'Queued' && (!r.retry_after || r.retry_after <= now); })
+    .sort(function (a, b) { return String(a.received_at).localeCompare(String(b.received_at)); }).slice(0, RECEIPT_MAIL_BATCH);
+  due.forEach(function (r) {
+    try { readStoredReceipt_(r, '', '', ''); } catch (e) { console.error('queued receipt failed: ' + (e && e.stack ? e.stack : JSON.stringify(e))); }
+  });
+  return due.length;
 }
 
 /** Tell the admins (except the person who added it) that a receipt is waiting. */

@@ -9,7 +9,7 @@
   var READ_TIMEOUT_MS = 90000; // the AI can take a while to answer
 
   var KIND_LABEL = { Purchase: 'Parts purchase', Maintenance: 'Garage invoice' };
-  var STATUS_LABEL = { New: 'Not read yet', Pending: 'Ready to check', Unreadable: 'Needs filling in by hand', Approved: 'Added', Dismissed: 'Dismissed' };
+  var STATUS_LABEL = { New: 'Not read yet', Pending: 'Ready to check', Queued: 'Waiting to be read', Unreadable: 'Needs filling in by hand', Approved: 'Added', Dismissed: 'Dismissed' };
 
   function fmt() { return Views.fmt; }
 
@@ -169,7 +169,7 @@
       var msg = el('div');
       if (flash) msg.append(UI.notice(flash.kind === 'ok' ? 'ok' : 'info', flash.text));
       var d = r.data || {};
-      var open = r.status === 'New' || r.status === 'Pending' || r.status === 'Unreadable';
+      var open = r.status === 'New' || r.status === 'Pending' || r.status === 'Queued' || r.status === 'Unreadable';
 
       var rows = [];
       function line(label, value) { if (value) rows.push(el('dt', { text: label }), el('dd', { text: value })); }
