@@ -52,7 +52,8 @@
     box.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (TYPE_ICONS[type] || '') + '</svg>'; // fixed drawings, nothing from the data
     return box;
   }
-  function typeChip(type) { return el('span', { class: 'chip t-' + type.toLowerCase(), text: BY_TYPE[type].label }); }
+  // `short`: the plain type name (Purchase, not Purchased item), for the narrow space under a log thumbnail
+  function typeChip(type, short) { return el('span', { class: 'chip t-' + type.toLowerCase(), text: short ? type : BY_TYPE[type].label }); }
   function num0(s) {
     var n = Number(String(s === null || s === undefined ? '' : s).replace(/[£$€,\s]/g, ''));
     return isFinite(n) ? n : 0;
@@ -239,7 +240,11 @@
       if (e.guestName) tags.push(GuestUI.chip(e));
       var cost = costText(e);
       var link = el('a', { class: 'entry-row', href: '#/car/' + car.id + '/entry/' + e.id }, [
-        e.thumbAttachmentId ? Photos.thumbBox(e.thumbAttachmentId, 'row-thumb') : typeThumb(e.type),
+        // the picture, with the type tag beneath it (while editing there is no room: the tag joins the others in the footer)
+        el('div', { class: 'entry-lead' }, [
+          e.thumbAttachmentId ? Photos.thumbBox(e.thumbAttachmentId, 'row-thumb') : typeThumb(e.type),
+          editing ? null : typeChip(e.type, true),
+        ]),
         // the title has the whole width; under it the reference, date and mileage, then the garage in grey,
         // then a footer with the tags (type, status, attachments) on the left and the cost on the right
         el('div', { class: 'entry-main' }, [
@@ -247,7 +252,7 @@
           el('div', { class: 'muted small-text entry-ref-line', text: meta.join(' · ') }),
           e.vendor ? el('div', { class: 'muted small-text entry-vendor', text: e.vendor }) : null,
           el('div', { class: 'entry-foot' }, [
-            el('div', { class: 'entry-foot-tags' }, [typeChip(e.type)].concat(tags)),
+            el('div', { class: 'entry-foot-tags' }, (editing ? [typeChip(e.type, true)] : []).concat(tags)),
             cost ? el('strong', { class: 'entry-cost', text: cost }) : null,
           ]),
         ]),

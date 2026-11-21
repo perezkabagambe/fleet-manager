@@ -672,3 +672,13 @@ body.lightbox-on { overflow: hidden; }
 .type-thumb.tt-purchase { background: var(--warn-bg); color: var(--warn-text); }
 .entry-line.is-editing .type-thumb { width: 44px; height: 44px; }
 .entry-line.is-editing .type-thumb svg { width: 22px; height: 22px; }
+
+/* log row: picture with the type tag under it on the left; details on the right; the price small, bottom right */
+.entry-lead { flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.entry-lead .row-thumb, .entry-lead .type-thumb { margin-right: 0; }
+.entry-lead .chip { font-size: 0.7rem; padding: 1px 8px; }
+.entry-foot { flex-wrap: nowrap; align-items: flex-end; margin-top: 6px; }
+.entry-foot-tags { flex: 1 1 auto; }
+.entry-foot .entry-cost { flex: none; margin-left: auto; font-size: 0.85rem; font-weight: 600; }
+.entry-line:not(.is-editing) .entry-lead { width: 88px; }
+.entry-lead .chip { padding: 1px 6px; }
