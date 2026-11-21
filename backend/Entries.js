@@ -114,6 +114,39 @@ function liveUsage_(carEntries, usageRows) {
   return usageRows.filter(function (u) { return !isTrue_(u.deleted) && liveEvents[u.event_id]; });
 }
 
+// ---------- purchase items ----------
+// A purchase can hold several items (one order, several parts). Items live in the PurchaseItems tab. A purchase with no
+// rows there (every purchase made before this existed, and parts bought inline on a maintenance entry) has ONE item,
+// described by the purchase's own columns, whose id is the purchase's id. Everything that tracks stock works on items:
+// each item looks like a purchase row (title, part_number, quantity, unit_cost, shipping_cost, currency, date).
+
+const MAX_PURCHASE_ITEMS = 30;
+
+function itemFromRow_(r, entry) {
+  return {
+    id: r.id, entry_id: entry.id, car_id: entry.car_id, title: r.name, part_number: r.part_number || '', quantity: r.quantity, unit_cost: r.unit_cost,
+    shipping_cost: r.id === entry.id ? (entry.shipping_cost || '') : '', // an older purchase's own item keeps the shipping it was saved with
+    currency: entry.currency, date: entry.date, vendor: entry.vendor, _entry: entry,
+  };
+}
+
+/** The items of a purchase entry. `rows` are its live PurchaseItems rows (none for a single-item purchase). */
+function purchaseItemsOf_(entry, rows) {
+  if (rows && rows.length) {
+    return rows.slice().sort(function (a, b) { return (numOr0_(a.position) - numOr0_(b.position)) || (a._row - b._row); })
+      .map(function (r) { return itemFromRow_(r, entry); });
+  }
+  return [{
+    id: entry.id, entry_id: entry.id, car_id: entry.car_id, title: entry.title, part_number: entry.part_number || '', quantity: entry.quantity, unit_cost: entry.unit_cost,
+    shipping_cost: entry.shipping_cost || '', currency: entry.currency, date: entry.date, vendor: entry.vendor, _entry: entry,
+  }];
+}
+
+/** The name a purchase gets when the person did not give one: its first item, and how many more there are. */
+function derivedPurchaseTitle_(items) {
+  return cleanStr_(items[0].name + (items.length > 1 ? ' + ' + (items.length - 1) + ' more' : ''), 120);
+}
+
 /** purchaseId -> quantity already used, optionally ignoring one event (the one being edited). */
 function usedQuantities_(usage, excludeEventId) {
   const used = {};
@@ -163,10 +196,36 @@ function summarizeEntry_(e, guestNames) {
 /** Everything the list needs for one car, computed once. */
 function entryContext_(carId) {
   const entries = Db.all('Entries').filter(function (e) { return e.car_id === carId && !isTrue_(e.deleted); });
-  const purchasesById = {};
-  entries.forEach(function (e) { if (e.type === 'Purchase') purchasesById[e.id] = e; });
+  const rowsByEntry = {};
+  Db.all('PurchaseItems').forEach(function (r) {
+    if (r.car_id === carId && !isTrue_(r.deleted)) (rowsByEntry[r.entry_id] = rowsByEntry[r.entry_id] || []).push(r);
+  });
+  const purchasesById = {}; // item id -> item (see purchaseItemsOf_)
+  const itemsByEntry = {};
+  entries.forEach(function (e) {
+    if (e.type !== 'Purchase') return;
+    itemsByEntry[e.id] = purchaseItemsOf_(e, rowsByEntry[e.id]);
+    itemsByEntry[e.id].forEach(function (i) { purchasesById[i.id] = i; });
+  });
   const usage = liveUsage_(entries.filter(function (e) { return JOB_TYPES.indexOf(e.type) !== -1; }), Db.all('PartUsage'));
-  return { entries: entries, purchasesById: purchasesById, usage: usage, used: usedQuantities_(usage, '') };
+  return { entries: entries, purchasesById: purchasesById, itemsByEntry: itemsByEntry, usage: usage, used: usedQuantities_(usage, '') };
+}
+
+/** A purchase as a whole: its items, total price, how much has been used, and its stock status. */
+function purchaseSummary_(e, c) {
+  const items = c.itemsByEntry[e.id] || purchaseItemsOf_(e, []);
+  let total = 0;
+  let quantity = 0;
+  let used = 0;
+  let allUsed = true;
+  items.forEach(function (i) {
+    total += purchaseTotal_(i);
+    quantity += numOr0_(i.quantity);
+    const u = c.used[i.id] || 0;
+    used += u;
+    if (numOr0_(i.quantity) - u > 1e-9) allUsed = false;
+  });
+  return { items: items, total: round2_(total), quantity: quantity, used: used, remaining: round2_(quantity - used), status: !(used > 0) ? 'In stock' : allUsed ? 'Fitted' : 'Partly used' };
 }
 
 function purchaseStatus_(p, used) {
@@ -211,11 +270,12 @@ function listEntries_(p, ctx) {
       s.partsUsed = c.usage.filter(function (u) { return u.event_id === e.id; }).length;
     }
     if (e.type === 'Purchase') {
-      const used = c.used[e.id] || 0;
-      s.total = round2_(purchaseTotal_(e));
-      s.used = used;
-      s.remaining = round2_(numOr0_(e.quantity) - used);
-      s.stockStatus = purchaseStatus_(e, used);
+      const ps = purchaseSummary_(e, c);
+      s.total = ps.total;
+      s.used = ps.used;
+      s.remaining = ps.remaining;
+      s.stockStatus = ps.status;
+      s.itemCount = ps.items.length;
     }
     return s;
   }).sort(function (a, b) {
@@ -260,11 +320,23 @@ function buildEntryDetail_(e, car, c, guestNames, attachments) {
       .map(function (x) { return { id: x.id, title: x.title, date: x.date }; });
   }
   if (e.type === 'Purchase') {
-    const used = c.used[e.id] || 0;
-    out.stock = { used: used, remaining: round2_(numOr0_(e.quantity) - used), status: purchaseStatus_(e, used), total: round2_(purchaseTotal_(e)), perUnit: round2_(unitLanded_(e)) };
-    out.usedIn = c.usage.filter(function (u) { return u.purchase_id === e.id; }).map(function (u) {
+    const ps = purchaseSummary_(e, c);
+    out.items = ps.items.map(function (i) {
+      const used = c.used[i.id] || 0;
+      return {
+        id: i.id, name: i.title, partNumber: i.part_number, quantity: numOr0_(i.quantity), unitCost: numOrNull_(i.unit_cost),
+        lineTotal: round2_(purchaseTotal_(i)), used: used, remaining: round2_(numOr0_(i.quantity) - used), status: purchaseStatus_(i, used),
+      };
+    });
+    out.stock = { used: ps.used, remaining: ps.remaining, status: ps.status, total: ps.total, perUnit: ps.items.length === 1 ? round2_(unitLanded_(ps.items[0])) : null };
+    const names = {};
+    ps.items.forEach(function (i) { names[i.id] = i.title; });
+    out.usedIn = c.usage.filter(function (u) { return names[u.purchase_id] !== undefined; }).map(function (u) {
       const ev = c.entries.filter(function (x) { return x.id === u.event_id; })[0];
-      return ev ? { id: ev.id, title: ev.title, type: ev.type, date: ev.date, quantity: numOr0_(u.quantity_used) } : null;
+      if (!ev) return null;
+      const line = { id: ev.id, title: ev.title, type: ev.type, date: ev.date, quantity: numOr0_(u.quantity_used) };
+      if (ps.items.length > 1) line.item = names[u.purchase_id];
+      return line;
     }).filter(Boolean);
   }
   return out;
@@ -306,6 +378,16 @@ function copyEntry_(p, ctx) {
   const row = Object.assign(baseColumns_(ctx), { car_id: toCar.id, ref: nextEntryRef_(source.type), notes: notes, mileage: '', mileage_unit: '' });
   COPY_COLUMNS.forEach(function (k) { row[k] = source[k] === undefined ? '' : source[k]; });
   Db.insert('Entries', row);
+  if (source.type === 'Purchase') {
+    // a purchase takes its items with it (a single item keeps the purchase's own id, as older purchases do, so any shipping stays with it)
+    const srcItems = c.itemsByEntry[source.id] || [];
+    srcItems.forEach(function (i, n) {
+      Db.insert('PurchaseItems', Object.assign(baseColumns_(ctx), {
+        id: srcItems.length === 1 ? row.id : Utilities.getUuid(), car_id: toCar.id, entry_id: row.id,
+        name: i.title, part_number: i.part_number, quantity: String(i.quantity), unit_cost: String(i.unit_cost), position: String(n),
+      }));
+    });
+  }
 
   // the files: real copies in the other car's folder, each with a new ID
   let copied = 0;
@@ -345,13 +427,16 @@ function listPurchases_(p, ctx) {
   const issues = c.entries.filter(function (e) { return e.type === 'Issue'; })
     .map(function (e) { return { id: e.id, title: e.title, status: e.status, date: e.date }; })
     .sort(function (a, b) { return b.date.localeCompare(a.date); });
-  const purchases = c.entries.filter(function (e) { return e.type === 'Purchase'; })
-    .map(function (e) {
-      const left = round2_(numOr0_(e.quantity) - (used[e.id] || 0));
-      return {
-        id: e.id, name: e.title, partNumber: e.part_number, currency: e.currency, date: e.date,
-        quantity: numOr0_(e.quantity), available: left, unitCost: round2_(unitLanded_(e)), usedHere: own[e.id] || 0,
+  const purchases = Object.keys(c.purchasesById).map(function (id) { return c.purchasesById[id]; })
+    .map(function (i) {
+      const left = round2_(numOr0_(i.quantity) - (used[i.id] || 0));
+      const out = {
+        id: i.id, name: i.title, partNumber: i.part_number, currency: i.currency, date: i.date,
+        quantity: numOr0_(i.quantity), available: left, unitCost: round2_(unitLanded_(i)), usedHere: own[i.id] || 0,
       };
+      // an item from an order with several items says which order it is from
+      if (c.itemsByEntry[i.entry_id].length > 1) out.from = (i._entry.ref ? i._entry.ref + ' ' : '') + i._entry.title;
+      return out;
     })
     .filter(function (x) { return x.available > 0 || x.usedHere > 0; })
     .sort(function (a, b) { return b.date.localeCompare(a.date); });
@@ -360,9 +445,38 @@ function listPurchases_(p, ctx) {
 
 // ---------- validating input ----------
 
-function parseEntryInput_(f, type, car) {
+/**
+ * The items of a purchase from the request: p.items = [{ id?, name, partNumber, quantity, unitCost }]. An older copy of the
+ * app sends one item in the fields instead. `current` are the purchase's existing items (when editing it).
+ */
+function purchaseItemsFromInput_(p, current) {
+  const f = p.fields || {};
+  let raw = p.items;
+  const compat = !Array.isArray(raw);
+  if (compat) raw = [{ name: f.title, partNumber: f.partNumber, quantity: f.quantity, unitCost: f.unitCost }];
+  if (!raw.length || raw.length > MAX_PURCHASE_ITEMS) fail_('invalid_input');
+  const known = {};
+  current.forEach(function (i) { known[i.id] = true; });
+  const seen = {};
+  return raw.map(function (it, n) {
+    it = it || {};
+    const name = cleanStr_(it.name, 120);
+    if (!name) fail_('item_name_required');
+    const quantity = parseQty_(it.quantity);
+    const unitCost = parseMoney_(it.unitCost);
+    if (unitCost === '') fail_('unit_cost_required');
+    let id = cleanStr_(it.id, 64);
+    if (compat && current.length === 1) id = current[0].id; // an older app editing a single-item purchase
+    if (!known[id] || seen[id]) id = ''; // only the purchase's own items can be addressed; anything else is a new item
+    if (id) seen[id] = true;
+    return { id: id, name: name, partNumber: cleanStr_(it.partNumber, 60), quantity: quantity, unitCost: unitCost, position: n };
+  });
+}
+
+function parseEntryInput_(f, type, car, items) {
   const out = {};
   out.title = cleanStr_(f.title, 120);
+  if (!out.title && type === 'Purchase' && items) out.title = derivedPurchaseTitle_(items); // a purchase with no name of its own is named after its items
   if (!out.title) fail_('title_required');
   out.notes = cleanText_(f.notes, 2000);
   const date = parseFullDate_(f.date, false);
@@ -380,10 +494,12 @@ function parseEntryInput_(f, type, car) {
     out.cost = parseMoney_(f.cost);
     out.expiry_date = parseFullDate_(f.expiryDate, true);
   } else if (type === 'Purchase') {
-    out.part_number = cleanStr_(f.partNumber, 60);
-    out.quantity = String(parseQty_(f.quantity));
-    out.unit_cost = parseMoney_(f.unitCost);
-    if (out.unit_cost === '') fail_('unit_cost_required');
+    // The items are saved in PurchaseItems. The purchase's own columns mirror them: exactly the item when there is one,
+    // the total quantity when there are several (a price each means nothing then).
+    const single = items.length === 1;
+    out.part_number = single ? items[0].partNumber : '';
+    out.quantity = String(single ? items[0].quantity : round2_(items.reduce(function (s, i) { return s + i.quantity; }, 0)));
+    out.unit_cost = single ? items[0].unitCost : '';
     // (no shipping field any more: an older phone that still sends one is ignored, and an existing value is left alone)
     out.product_url = parseHttpsUrl_(f.productUrl, 'invalid_url');
   } else {
@@ -467,8 +583,10 @@ function saveEntry_(p, ctx) {
   const car = findCar_(carId, false);
   if (!car) fail_('not_found');
 
-  const input = parseEntryInput_(p.fields || {}, type, car);
   const c = entryContext_(car.id);
+  const currentItems = existing && type === 'Purchase' ? (c.itemsByEntry[existing.id] || []) : [];
+  const items = type === 'Purchase' ? purchaseItemsFromInput_(p, currentItems) : null;
+  const input = parseEntryInput_(p.fields || {}, type, car, items);
   const isJob = JOB_TYPES.indexOf(type) !== -1;
   if (!isJob && p.parts && p.parts.length) fail_('invalid_input');
 
@@ -487,8 +605,13 @@ function saveEntry_(p, ctx) {
   }
 
   if (type === 'Purchase' && existing) {
-    const used = c.used[existing.id] || 0;
-    if (Number(input.quantity) < used - 1e-9) fail_('quantity_below_used');
+    // an item that has been used cannot be removed, and cannot be bought fewer times than it has been used
+    const wanted = {};
+    items.forEach(function (it) { if (it.id) wanted[it.id] = it; });
+    currentItems.forEach(function (cur) {
+      const used = c.used[cur.id] || 0;
+      if (!wanted[cur.id]) { if (used > 0) fail_('item_in_use'); } else if (wanted[cur.id].quantity < used - 1e-9) fail_('quantity_below_used');
+    });
   }
 
   // ---- all checks passed: write ----
@@ -511,6 +634,7 @@ function saveEntry_(p, ctx) {
   }
 
   if (isJob) applyParts_(row, plan, car, ctx);
+  if (type === 'Purchase') savePurchaseItems_(row, items, ctx);
 
   const extras = {};
   if (type === 'Maintenance' && p.resolveIssue === true && input.linked_issue_id) {
@@ -546,6 +670,38 @@ function saveEntry_(p, ctx) {
     extras.reminder = { id: updatedTask.id, name: updatedTask.name, status: d.status, text: d.text };
   }
   return Object.assign({ entry: summarizeEntry_(row) }, extras);
+}
+
+/** Make the PurchaseItems rows of a purchase match `items` (parsed by purchaseItemsFromInput_). An item keeps its id for life, so parts used from it stay linked. */
+function savePurchaseItems_(entry, items, ctx) {
+  const rows = Db.all('PurchaseItems').filter(function (r) { return r.entry_id === entry.id; });
+  const byId = {};
+  rows.forEach(function (r) { byId[r.id] = r; });
+  const keep = {};
+  const now = nowIso_();
+  const taken = {}; // ids already in use for this purchase
+  items.forEach(function (it) { if (it.id) taken[it.id] = true; });
+  rows.forEach(function (r) { taken[r.id] = true; });
+  items.forEach(function (it, n) {
+    // An item with no id is new. The first new item of a purchase takes the purchase's own id (as a single-item purchase
+    // always has, so a part can be used by that id); an older purchase's item also gets its row under that id, keeping its usage linked.
+    let id = it.id;
+    if (!id) {
+      if (!taken[entry.id]) { id = entry.id; taken[id] = true; } else id = Utilities.getUuid();
+    }
+    keep[id] = true;
+    const fields = { name: it.name, part_number: it.partNumber, quantity: String(it.quantity), unit_cost: it.unitCost, position: String(n) };
+    const row = byId[id];
+    if (!row) {
+      Db.insert('PurchaseItems', Object.assign(baseColumns_(ctx), { id: id, car_id: entry.car_id, entry_id: entry.id }, fields));
+      return;
+    }
+    const differs = isTrue_(row.deleted) || Object.keys(fields).some(function (k) { return String(row[k]) !== String(fields[k]); });
+    if (differs) Db.update('PurchaseItems', row._row, Object.assign({}, fields, { deleted: false, updated_at: now, updated_by: ctx.user.id, version: Number(row.version || 1) + 1 }));
+  });
+  rows.forEach(function (r) {
+    if (!keep[r.id] && !isTrue_(r.deleted)) Db.update('PurchaseItems', r._row, { deleted: true, updated_at: now, updated_by: ctx.user.id, version: Number(r.version || 1) + 1 });
+  });
 }
 
 /** Create the inline purchases and make PartUsage match the plan exactly. */
@@ -597,8 +753,8 @@ function deleteEntry_(p, ctx) {
   const e = findEntry_(cleanStr_(p.id, 64));
   if (!e) fail_('not_found');
   if (e.type === 'Purchase') {
-    const car = entryContext_(e.car_id);
-    if ((car.used[e.id] || 0) > 0) fail_('purchase_in_use');
+    const c = entryContext_(e.car_id);
+    (c.itemsByEntry[e.id] || []).forEach(function (i) { if ((c.used[i.id] || 0) > 0) fail_('purchase_in_use'); });
   }
   Db.update('Entries', e._row, { deleted: true, updated_at: nowIso_(), updated_by: ctx.user.id, version: Number(e.version || 1) + 1 });
   audit_(ctx.user, 'entry_deleted', 'Entry', e.id, e.type + ' "' + e.title + '" deleted');
@@ -627,7 +783,7 @@ function getCarCosts_(p, ctx) {
     y.categories[category] = round2_((y.categories[category] || 0) + amount);
   }
   c.entries.forEach(function (e) {
-    if (e.type === 'Purchase') add(e.currency, e.date, 'parts', purchaseTotal_(e));
+    if (e.type === 'Purchase') add(e.currency, e.date, 'parts', purchaseSummary_(e, c).total);
     else if (e.type === 'Issue') add(e.currency, e.date, 'issues', numOr0_(e.cost));
     else if (e.type === 'Compliance') add(e.currency, e.date, 'compliance', numOr0_(e.cost));
     else if (e.cost_mode === 'lump') add(e.lump_currency || e.currency, e.date, 'invoices', numOr0_(e.lump_sum_cost));

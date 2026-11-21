@@ -101,7 +101,7 @@ test('the migration numbers every existing file, oldest first, removed ones too,
   assert.equal(env.sheets.Attachments._rows.find((r) => r[0] === a2.id)[colA], 'A-0003', 'a removed file keeps its number');
   assert.equal(env.call('listCarDocuments', { token: sam, carId: car.id }).data.documents.find((d) => d.id === d2.id).ref, 'A-0004');
   assert.equal(attach().data.attachment.ref, 'A-0005', 'new ones carry on after the old');
-  assert.equal(env.props.SCHEMA_VERSION, '19');
+  assert.equal(env.props.SCHEMA_VERSION, String(require('vm').runInContext('SCHEMA_VERSION', env.ctx)));
 });
 
 test('a file ID changes the car\'s revision, so phones pick up the numbers', () => {

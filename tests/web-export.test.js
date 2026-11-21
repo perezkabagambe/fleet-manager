@@ -193,6 +193,16 @@ test('the report opens with the short explanation, then every section in full', 
   assert.equal((raw.match(/\/Filter \/DCTDecode/g) || []).length, 2, 'the car photo and the one entry picture');
 });
 
+test('a purchase with several items lists every item, its quantity, price and use', () => {
+  const s = sample();
+  s.details.e3 = { entry: s.entries[2], car: { id: 'c1' }, attachments: [], items: [
+    { id: 'i1', name: 'Brake pads', partNumber: 'BP-1', quantity: 2, unitCost: 30, lineTotal: 60, used: 1, remaining: 1 },
+    { id: 'i2', name: 'Brake discs', partNumber: '', quantity: 2, unitCost: 45.5, lineTotal: 91, used: 0, remaining: 2 }],
+    stock: { used: 1, remaining: 3, status: 'Partly used', total: 151, perUnit: null }, usedIn: [{ id: 'e1', title: 'Front brake pads', quantity: 1, item: 'Brake pads' }] };
+  const t = pdfText(ExportReport.build(s)).join(' ');
+  for (const bit of ['Item 1 Brake pads [BP-1] · 2 x £30.00 = £60.00 · used 1, 1 left', 'Item 2 Brake discs · 2 x £45.50 = £91.00 · used 0, 2 left', 'Total £151.00', 'Partly used (used 1, 3 left)', 'Used in Front brake pads x 1 (Brake pads)']) assert.ok(t.includes(bit), bit);
+});
+
 test('the guest QR secret never appears, and an empty car still makes a valid document', () => {
   const s = sample();
   s.car.guestSecret = 'SECRET-SECRET-SECRET';

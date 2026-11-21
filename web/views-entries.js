@@ -197,6 +197,7 @@
       var tags = [];
       if (e.type === 'Issue') tags.push(el('span', { class: 'chip st-' + e.status.toLowerCase().replace(/[^a-z]/g, ''), text: e.status }));
       if (e.type === 'Purchase') tags.push(el('span', { class: 'chip ' + (e.stockStatus === 'In stock' ? 'active' : e.stockStatus === 'Fitted' ? 'sold' : 'pending'), text: e.stockStatus }));
+      if (e.type === 'Purchase' && e.itemCount > 1) tags.push(el('span', { class: 'muted small-text', text: e.itemCount + ' items' }));
       if (e.attachmentCount) tags.push(el('span', { class: 'muted small-text', text: '📎 ' + e.attachmentCount }));
       if (e.guestName) tags.push(GuestUI.chip(e));
       var cost = costText(e);
@@ -437,18 +438,21 @@
           line('Cost', e.cost === null ? '' : fmt.money(e.cost, e.currency)), line('Valid until', dateText(e.expiryDate))))]));
       } else if (e.type === 'Purchase') {
         var s = d.stock;
-        var pd = [].concat(
-          line('Part number', e.partNumber), line('Quantity bought', String(e.quantity)),
-          line('Price each', fmt.money(e.unitCost, e.currency)),
-          line('Total paid', fmt.money(s.total, e.currency)),
-          line('Used / left', s.used + ' used · ' + s.remaining + ' left')
-        );
+        var itemList = (d.items || []).map(function (i) {
+          return el('li', { class: 'purchase-item' }, [
+            el('div', { class: 'item-name', text: i.name + (i.partNumber ? ' · ' + i.partNumber : '') }),
+            el('div', { class: 'muted small-text', text: i.quantity + ' × ' + fmt.money(i.unitCost, e.currency) + ' = ' + fmt.money(i.lineTotal, e.currency) }),
+            el('div', { class: 'muted small-text', text: i.used + ' used · ' + i.remaining + ' left' + ((d.items || []).length > 1 ? ' · ' + i.status : '') }),
+          ]);
+        });
         cards.push(el('section', { class: 'card' }, [
-          el('h2', { text: 'Item' }), el('dl', { class: 'details' }, pd),
+          el('h2', { text: (d.items || []).length > 1 ? 'Items (' + d.items.length + ')' : 'Item' }),
+          el('ul', { class: 'purchase-items' }, itemList),
+          el('dl', { class: 'details' }, [].concat(line('Total paid', fmt.money(s.total, e.currency)))),
           e.productUrl ? el('p', {}, [el('a', { class: 'btn small secondary', href: e.productUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Link: ' + fmt.hostOf(e.productUrl) })]) : null,
           d.usedIn && d.usedIn.length
             ? el('div', {}, [el('div', { class: 'field-label', text: 'Used in' })].concat(d.usedIn.map(function (u) {
-              return el('div', {}, [el('a', { href: '#/car/' + carId + '/entry/' + u.id, text: u.title + ' × ' + u.quantity })]);
+              return el('div', {}, [el('a', { href: '#/car/' + carId + '/entry/' + u.id, text: u.title + ' × ' + u.quantity + (u.item ? ' (' + u.item + ')' : '') })]);
             })))
             : null,
         ]));
@@ -599,10 +603,12 @@
         if (existing && type === 'Maintenance') taskSelect.disabled = true;
         f.taskId = taskSelect;
       }
-      var top = [
-        UI.field(type === 'Purchase' ? 'Item *' : 'Title *', text('title', v.title || (preTask ? preTask.name : ''), { maxlength: '120', placeholder: meta.placeholder, required: true })),
+      // A purchase is a list of items, then date, currency, supplier and link for the whole purchase (see below).
+      var top = type === 'Purchase' ? [] : [
+        UI.field('Title *', text('title', v.title || (preTask ? preTask.name : ''), { maxlength: '120', placeholder: meta.placeholder, required: true })),
         UI.field(type === 'Compliance' ? 'Date done or paid *' : 'Date *', text('date', v.date || isoToday(), { type: 'date', max: isoToday(), required: true })),
       ];
+      var purchaseItems = []; // the items being edited (purchases only)
 
       // mileage (not for purchases), with an offer to update the car's odometer
       var odoCheck = el('input', { type: 'checkbox' });
@@ -654,21 +660,79 @@
         ];
       } else if (type === 'Purchase') {
         costTotal = el('div', { class: 'job-total' });
-        var updatePurchaseTotal = function () {
-          var t = num0(f.quantity.value) * num0(f.unitCost.value);
-          costTotal.replaceChildren(el('span', { text: 'Total' }), el('strong', { text: fmt.money(round2(t), currencySelect.value) }));
+        // what the purchase would be called if it had no name of its own (the server does the same)
+        var derivedName = function (rows) {
+          var first = rows[0] ? rows[0].name : '';
+          return first + (rows.length > 1 ? ' + ' + (rows.length - 1) + ' more' : '');
         };
+        var existingItems = existingData && existingData.items ? existingData.items : null;
+        purchaseItems = existingItems
+          ? existingItems.map(function (i) { return { id: i.id, name: i.name, partNumber: i.partNumber || '', quantity: String(i.quantity), unitCost: i.unitCost === null || i.unitCost === undefined ? '' : String(i.unitCost), used: i.used || 0 }; })
+          : [{ id: '', name: '', partNumber: '', quantity: '1', unitCost: '', used: 0 }];
+        var ownName = existing && existing.title !== derivedName(purchaseItems) ? existing.title : '';
+        var itemsBox = el('div', { class: 'stack items-edit' });
+        var updatePurchaseTotal = function () {
+          var t = purchaseItems.reduce(function (sum, r) { return sum + num0(r.quantity) * num0(r.unitCost); }, 0);
+          costTotal.replaceChildren(el('span', { text: purchaseItems.length > 1 ? 'Total of all items' : 'Total' }), el('strong', { text: fmt.money(round2(t), currencySelect.value) }));
+          itemsBox.querySelectorAll('[data-line]').forEach(function (n) {
+            var r = purchaseItems[Number(n.getAttribute('data-line'))];
+            if (r) n.textContent = 'This item: ' + fmt.money(round2(num0(r.quantity) * num0(r.unitCost)), currencySelect.value);
+          });
+        };
+        var drawItems = function () {
+          itemsBox.replaceChildren.apply(itemsBox, purchaseItems.map(itemEditor));
+          updatePurchaseTotal();
+        };
+        var itemEditor = function (row, idx) {
+          function inp(key, attrs) {
+            var input = el('input', Object.assign({ type: 'text', value: row[key] || '', autocomplete: 'off' }, attrs || {}));
+            input.addEventListener('input', function () { row[key] = input.value; updatePurchaseTotal(); });
+            return input;
+          }
+          var remove = null;
+          if (purchaseItems.length > 1) {
+            remove = el('button', { type: 'button', class: 'btn small danger', text: 'Remove item' });
+            if (row.used > 0) { remove.disabled = true; remove.title = 'This item has been used in maintenance'; }
+            remove.addEventListener('click', function () { purchaseItems.splice(purchaseItems.indexOf(row), 1); drawItems(); });
+          }
+          return el('div', { class: 'item-edit' }, [
+            el('div', { class: 'item-head' }, [el('strong', { text: 'Item ' + (idx + 1) }), remove]),
+            el('div', { class: 'field-pair' }, [
+              UI.field('Item *', inp('name', { maxlength: '120', placeholder: 'e.g. Front brake pads' })),
+              UI.field('Part number', inp('partNumber', { maxlength: '60' })),
+            ]),
+            el('div', { class: 'field-pair' }, [
+              UI.field('Quantity *', inp('quantity', { inputmode: 'decimal' })),
+              UI.field('Price of each *', inp('unitCost', { inputmode: 'decimal' })),
+            ]),
+            row.used > 0 ? el('div', { class: 'muted small-text', text: row.used + ' already used in maintenance, so it cannot be removed or bought fewer times.' }) : null,
+            el('div', { class: 'muted small-text', 'data-line': String(idx) }),
+          ]);
+        };
+        var addItem = el('button', { type: 'button', class: 'btn small secondary', text: 'Add another item' });
+        addItem.addEventListener('click', function () {
+          purchaseItems.push({ id: '', name: '', partNumber: '', quantity: '1', unitCost: '', used: 0 });
+          drawItems();
+          var last = itemsBox.querySelector('.item-edit:last-child input');
+          if (last) last.focus();
+        });
+        top = [
+          UI.field('Purchase name', text('title', ownName, { maxlength: '120', placeholder: 'e.g. Euro Car Parts order' }), 'Optional. If left empty, the purchase is named after its items.'),
+          el('div', { class: 'field' }, [el('div', { class: 'field-label', text: 'Items bought' }), itemsBox, el('div', { class: 'btn-row' }, [addItem])]),
+        ];
         body = [
-          UI.field('Supplier or shop', text('vendor', v.vendor, { maxlength: '80' }), 'Optional.'),
-          UI.field('Part number', text('partNumber', v.partNumber, { maxlength: '60' }), 'Optional, e.g. the OEM number from the catalogue.'),
-          UI.field('Quantity *', text('quantity', v.quantity === null || v.quantity === undefined ? '1' : v.quantity, { inputmode: 'decimal', required: true }), 'How many were bought, e.g. 1, 4 or 4.5 litres.'),
-          amountRow('Price of each *', text('unitCost', v.unitCost === null || v.unitCost === undefined ? '' : v.unitCost, { inputmode: 'decimal', required: true }), null, 'f-unit'),
-          UI.field('Product link', text('productUrl', v.productUrl, { inputmode: 'url', placeholder: 'https://…' }), 'Optional. A secure (https) link.'),
+          el('div', { class: 'field-pair' }, [
+            UI.field('Date *', text('date', v.date || isoToday(), { type: 'date', max: isoToday(), required: true })),
+            UI.field('Currency', currencySelect),
+          ]),
+          el('div', { class: 'field-pair' }, [
+            UI.field('Supplier or shop', text('vendor', v.vendor, { maxlength: '80' })),
+            UI.field('Product link', text('productUrl', v.productUrl, { inputmode: 'url', placeholder: 'https://…' })),
+          ]),
           costTotal,
         ];
-        ['quantity', 'unitCost'].forEach(function (k) { f[k].addEventListener('input', updatePurchaseTotal); });
         currencySelect.addEventListener('change', updatePurchaseTotal);
-        updatePurchaseTotal();
+        drawItems();
       } else {
         body = jobFields();
       }
@@ -781,7 +845,7 @@
           partRows.forEach(function (r) { if (r.kind === 'existing') chosen[r.purchaseId] = true; });
           var avail = lists.purchases.filter(function (p) { return !chosen[p.id] && p.available > 0; });
           pickBox.replaceChildren.apply(pickBox, avail.length ? avail.map(function (p) {
-            var b = el('button', { type: 'button', class: 'pick-item', text: p.name + ' — ' + p.available + ' left · ' + fmt.money(p.unitCost, p.currency) + ' each' });
+            var b = el('button', { type: 'button', class: 'pick-item', text: p.name + (p.from ? ' (' + p.from + ')' : '') + ' — ' + p.available + ' left · ' + fmt.money(p.unitCost, p.currency) + ' each' });
             b.addEventListener('click', function () {
               partRows.push({ kind: 'existing', purchaseId: p.id, name: p.name, quantity: String(Math.min(1, p.available)), unitCost: p.unitCost, currency: p.currency });
               pickBox.replaceChildren();
@@ -936,6 +1000,9 @@
               : { name: r.name, quantity: r.quantity, unitCost: r.unitCost, partNumber: r.partNumber, vendor: r.vendor, currency: r.currency };
           });
           if (f.resolve && f.linkedIssueId.value) payload.resolveIssue = f.resolve.checked;
+        }
+        if (type === 'Purchase') {
+          payload.items = purchaseItems.map(function (r) { return { id: r.id, name: r.name, partNumber: r.partNumber, quantity: r.quantity, unitCost: r.unitCost }; });
         }
         if (f.mileage && !odoRow.hidden && odoCheck.checked) payload.updateOdometer = true;
         if (taskSelect && taskSelect.value && !taskSelect.disabled) payload.taskId = taskSelect.value;

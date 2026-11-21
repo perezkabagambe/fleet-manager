@@ -10,7 +10,7 @@
 
 // Tab -> the columns that go into the fingerprint (null: all of them). Tabs not listed here never reach a car screen.
 const SYNC_TABS_ = {
-  Entries: null, Tasks: null, FluidSpecs: null, CarDocuments: null, Attachments: null, CarPeople: null,
+  Entries: null, PurchaseItems: null, Tasks: null, FluidSpecs: null, CarDocuments: null, Attachments: null, CarPeople: null,
   Guests: ['id', 'name'], // a guest's name is shown on the entries they added; their last_seen changes constantly and must not count
 };
 

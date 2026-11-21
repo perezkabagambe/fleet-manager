@@ -168,16 +168,23 @@
       kv('Cost', e.cost ? money(e.cost, e.currency) : '');
       kv('Expires', day(e.expiryDate));
     } else if (e.type === 'Purchase') {
-      kv('Part number', e.partNumber);
-      kv('Quantity', e.quantity === null || e.quantity === undefined ? '' : String(e.quantity));
-      kv('Unit cost', e.unitCost === null || e.unitCost === undefined ? '' : money(e.unitCost, e.currency));
-      kv('Shipping', e.shippingCost ? money(e.shippingCost, e.currency) : '');
+      if (d && d.items && d.items.length) {
+        // every item of the purchase on its own line, with what has been used
+        d.items.forEach(function (i, n) {
+          kv(d.items.length > 1 ? 'Item ' + (n + 1) : 'Item', i.name + (i.partNumber ? ' [' + i.partNumber + ']' : '') + '  ·  ' + i.quantity + ' x ' + money(i.unitCost, e.currency) + ' = ' + money(i.lineTotal, e.currency) + '  ·  used ' + i.used + ', ' + i.remaining + ' left');
+        });
+      } else {
+        kv('Part number', e.partNumber);
+        kv('Quantity', e.quantity === null || e.quantity === undefined ? '' : String(e.quantity));
+        kv('Unit cost', e.unitCost === null || e.unitCost === undefined ? '' : money(e.unitCost, e.currency));
+        kv('Shipping', e.shippingCost ? money(e.shippingCost, e.currency) : '');
+      }
       if (d && d.stock) {
         kv('Total', money(d.stock.total, e.currency));
         kv('Stock', d.stock.status + ' (used ' + d.stock.used + ', ' + d.stock.remaining + ' left)');
       }
       kv('Item link', e.productUrl);
-      if (d && d.usedIn && d.usedIn.length) kv('Used in', d.usedIn.map(function (u) { return u.title + ' x ' + u.quantity; }).join('; '));
+      if (d && d.usedIn && d.usedIn.length) kv('Used in', d.usedIn.map(function (u) { return u.title + ' x ' + u.quantity + (u.item ? ' (' + u.item + ')' : ''); }).join('; '));
     } else { // Maintenance
       if (e.costMode === 'lump') {
         kv('Invoice total', e.lumpSumCost === null || e.lumpSumCost === undefined ? '' : money(e.lumpSumCost, e.lumpCurrency));

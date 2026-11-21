@@ -136,6 +136,8 @@
     invalid_hours: 'Hours must be a number, such as 2 or 1.5.',
     invalid_cost_mode: 'Please choose itemised or invoice total.',
     unit_cost_required: 'Please enter the cost of each item.',
+    item_name_required: 'Please name every item in the purchase.',
+    item_in_use: 'An item in this purchase has been used in a maintenance entry, so it cannot be removed. Remove it from that entry first.',
     invalid_url: 'The link must be a secure web address starting with https://.',
     part_name_required: 'Every part needs a name.',
     not_enough_stock: 'You are using more of a purchased item than is left. Check the quantities.',

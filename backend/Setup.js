@@ -38,6 +38,8 @@ const SCHEMA = {
   // Documents kept against a whole car (logbook, insurance, import papers...); the files live in its Drive folder.
   CarDocuments: { base: true, cols: ['car_id', 'doc_type', 'note', 'drive_file_id', 'filename', 'mime', 'size', 'ref'] },
   PartUsage: { base: true, cols: ['purchase_id', 'event_id', 'quantity_used'] },
+  // The items of a purchase (one order can hold several). A purchase with no rows here has a single item described by its own columns.
+  PurchaseItems: { base: true, cols: ['car_id', 'entry_id', 'name', 'part_number', 'quantity', 'unit_cost', 'position'] },
   Attachments: { base: true, cols: ['car_id', 'entry_id', 'drive_file_id', 'filename', 'mime', 'size', 'thumb_file_id', 'ref'] },
   Tasks: {
     base: true,
@@ -51,7 +53,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 19; // 19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 20; // 20: a purchase can hold several items (PurchaseItems tab) (19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
