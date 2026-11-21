@@ -24,7 +24,7 @@
   // is made against. Saved copies belong to the signed-in person, are cleared on sign-out, and hold no photos.
   var READS = /^(ping$|me$|get|list|guestInfo|guestMe|guestList|guestGet)/;
   // These change nothing that a car screen shows, so they do not make saved copies stale.
-  var NO_CHANGE = /^(requestLogin|requestAccount|verifyLink|verifyCode|googleLogin|logout|sendFeedback|guest|aiFillCar|sendMyReminders|uploadReceipt|readReceipt|dismissReceipt)/;
+  var NO_CHANGE = /^(requestLogin|requestAccount|verifyLink|verifyCode|googleLogin|logout|sendFeedback|guest|aiFillCar|sendMyReminders|uploadReceipt|readReceipt|dismissReceipt|inspectReceiptMail|processReceiptsNow)/;
   var epoch = 0; // goes up whenever something changes, so an answer that was already on its way is not saved
   var revs = {}; // what this phone believes is the current revision of each car (and of the 'fleet' list)
 

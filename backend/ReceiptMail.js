@@ -218,10 +218,23 @@ function notifyReceiptQueued_(row, user) {
 
 /** The timer: read new mail sent to a car's receipt address. Runs every 5 minutes (see setupReceiptEmail). */
 function processReceiptEmails() {
-  props_().setProperty('RECEIPT_MAIL_LAST', nowIso_()); // so checkReceiptEmail can show that the timer is running
-  try { readQueuedReceipts_(); } catch (e) { console.error('queue failed: ' + (e && e.stack ? e.stack : JSON.stringify(e))); }
+  const props = props_();
+  props.setProperty('RECEIPT_MAIL_LAST', nowIso_()); // shown on the Diagnostics page, to prove the timer is running
+  try {
+    const r = runReceiptMail_();
+    props.setProperty('RECEIPT_MAIL_RESULT', 'ok: ' + r.looked + ' new thread' + (r.looked === 1 ? '' : 's') + ' looked at, ' + r.read + ' receipt' + (r.read === 1 ? '' : 's') + ' read from email, ' + r.retried + ' waiting receipt' + (r.retried === 1 ? '' : 's') + ' retried');
+    return { read: r.read };
+  } catch (e) {
+    props.setProperty('RECEIPT_MAIL_RESULT', 'error: ' + cleanStr_(e && e.message ? e.message : JSON.stringify(e), 200));
+    throw e;
+  }
+}
+
+function runReceiptMail_() {
+  let retried = 0;
+  try { retried = readQueuedReceipts_(); } catch (e) { console.error('queue failed: ' + (e && e.stack ? e.stack : JSON.stringify(e))); }
   const threads = GmailApp.search(RECEIPT_MAIL_QUERY, 0, RECEIPT_MAIL_THREADS);
-  if (!threads.length) return { read: 0 };
+  if (!threads.length) return { read: 0, retried: retried, looked: 0 };
   Db.resetRequest();
   const carsBySecret = {};
   const carsByReg = {}; // a registration shared by two cars is ambiguous, so it points to neither
@@ -250,7 +263,7 @@ function processReceiptEmails() {
     }
     if (finished) threads[t].addLabel(label); // handled (or ignored): not looked at again
   }
-  return { read: reads };
+  return { read: reads, retried: retried, looked: threads.length };
 }
 
 /**
@@ -259,6 +272,13 @@ function processReceiptEmails() {
  * why. It shows senders and tags only, never the contents of an email.
  */
 function checkReceiptEmail() {
+  const out = receiptMailReport_();
+  Logger.log(out.join('\n'));
+  return out;
+}
+
+/** The lines of the report: the state of the timer and key, then a decision for each recent email. */
+function receiptMailReport_() {
   const out = [];
   out.push('Timer on: ' + (receiptMailOn_() ? 'yes' : 'NO (run setupReceiptEmail once)'));
   out.push('Timer last ran: ' + (props_().getProperty('RECEIPT_MAIL_LAST') || 'never'));
@@ -285,6 +305,46 @@ function checkReceiptEmail() {
         (stored ? 'already in the Inbox' : v.skip ? 'IGNORED: ' + v.skip : 'would be accepted' + (v.car ? ' for ' + v.car.registration : ' (no car)')) + (labelled ? ' [labelled Fleet-handled]' : ' [not yet handled]'));
     });
   });
-  Logger.log(out.join('\n'));
   return out;
+}
+
+// ---------- for the Diagnostics page (admins) ----------
+
+/** How the receipt features are doing: the timer, the reading allowance, the Inbox, and the latest receipts. */
+function getReceiptHealth_(p, ctx) {
+  const props = props_();
+  const rows = Db.all('Inbox').filter(function (r) { return !isTrue_(r.deleted); });
+  const counts = { New: 0, Queued: 0, Pending: 0, Unreadable: 0, Approved: 0, Dismissed: 0 };
+  rows.forEach(function (r) { if (counts[r.status] !== undefined) counts[r.status]++; });
+  const open = rows.filter(function (r) { return RECEIPT_OPEN.indexOf(r.status) !== -1; }).sort(function (a, b) { return String(a.received_at).localeCompare(String(b.received_at)); });
+  const recent = rows.slice().sort(function (a, b) { return String(b.received_at).localeCompare(String(a.received_at)); }).slice(0, 12).map(function (r) {
+    const s = receiptShape_(r);
+    return { id: s.id, status: s.status, source: s.source, vendor: s.vendor, total: s.total, currency: s.currency, car: s.car, receivedAt: s.receivedAt, sender: s.sender, subject: s.subject,
+      note: s.note, attempts: Number(r.attempts || 0), retryAfter: r.status === 'Queued' ? r.retry_after : '' };
+  });
+  let quota = null;
+  try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { quota = null; }
+  return {
+    now: nowIso_(),
+    mail: {
+      timerOn: receiptMailOn_(), lastRun: props.getProperty('RECEIPT_MAIL_LAST') || '', lastResult: props.getProperty('RECEIPT_MAIL_RESULT') || '', mailbox: receiptMailbox_(),
+    },
+    reading: {
+      keyOn: !!geminiKey_(), model: geminiModel_(), usedToday: aiUsed_('rc_app'), appLimit: receiptLimit_('RECEIPT_APP_DAILY', RECEIPT_APP_DAILY), userLimit: receiptLimit_('RECEIPT_USER_DAILY', RECEIPT_USER_DAILY),
+    },
+    emails: { adminNoticesToday: aiUsed_('rc_mail'), confirmationsToday: aiUsed_('rc_ack'), dailyLimit: RECEIPT_MAIL_DAILY, quotaLeft: quota },
+    inbox: { counts: counts, oldestOpen: open.length ? open[0].received_at : '', openTotal: open.length },
+    recent: recent,
+  };
+}
+
+/** What the app decides for each recent email in the app's Gmail (senders and tags only, never contents). */
+function inspectReceiptMail_(p, ctx) {
+  return { lines: receiptMailReport_() };
+}
+
+/** Do the timer's work now instead of waiting for it (an admin pressing a button). */
+function processReceiptsNow_(p, ctx) {
+  const r = processReceiptEmails();
+  return { read: r.read, lastResult: props_().getProperty('RECEIPT_MAIL_RESULT') || '' };
 }

@@ -82,6 +82,9 @@ function actions_() {
     getReceiptStatus: { auth: 'user', fn: getReceiptStatus_ },
     getReceiptAddress: { auth: 'user', lock: true, fn: getReceiptAddress_ }, // makes the car's address on first use
     replaceReceiptSecret: { auth: 'admin', lock: true, fn: replaceReceiptSecret_ },
+    getReceiptHealth: { auth: 'admin', fn: getReceiptHealth_ },
+    inspectReceiptMail: { auth: 'admin', fn: inspectReceiptMail_ },
+    processReceiptsNow: { auth: 'admin', fn: processReceiptsNow_ }, // no script lock: it waits for outside services
     uploadReceipt: { auth: 'user', lock: true, fn: uploadReceipt_ },
     readReceipt: { auth: 'user', fn: readReceipt_ }, // no script lock: it waits for an outside service and must not block everyone else
     listInbox: { auth: 'user', fn: listInbox_ },

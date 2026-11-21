@@ -297,3 +297,38 @@ test('checkReceiptEmail explains what was decided for each recent email, without
   assert.equal(/Timer last ran: never/.test(after), false);
   assert.match(after, /already in the Inbox/);
 });
+
+test('the Diagnostics actions are for admins, and report the timer, the allowance and the Inbox', () => {
+  const { env, admin, sam, address, run } = setup();
+  assert.equal(env.call('getReceiptHealth', { token: sam }).error, 'forbidden');
+  assert.equal(env.call('inspectReceiptMail', { token: sam }).error, 'forbidden');
+  assert.equal(env.call('processReceiptsNow', { token: sam }).error, 'forbidden');
+  const before = env.call('getReceiptHealth', { token: admin }).data;
+  assert.equal(before.mail.timerOn, false);
+  assert.equal(before.mail.lastRun, '');
+  assert.equal(before.reading.keyOn, true);
+  assert.equal(before.reading.usedToday, 0);
+  assert.equal(before.inbox.openTotal, 0);
+  vm.runInContext('setupReceiptEmail()', env.ctx);
+  env.state.gmail = [thread([mail({ to: address(), from: 'sam@example.com' })])];
+  const now = env.call('processReceiptsNow', { token: admin }).data;
+  assert.equal(now.read, 1);
+  assert.match(now.lastResult, /^ok: 1 new thread/);
+  const after = env.call('getReceiptHealth', { token: admin }).data;
+  assert.equal(after.mail.timerOn, true);
+  assert.notEqual(after.mail.lastRun, '');
+  assert.equal(after.reading.usedToday, 1);
+  assert.equal(after.inbox.counts.Pending, 1);
+  assert.equal(after.recent.length, 1);
+  assert.equal(after.recent[0].source, 'email');
+  assert.equal(after.emails.confirmationsToday, 1);
+  assert.equal(after.emails.adminNoticesToday, 1);
+  assert.match(env.call('inspectReceiptMail', { token: admin }).data.lines.join('\n'), /already in the Inbox/);
+});
+
+test('a failure in the timer is recorded where the Diagnostics page can show it', () => {
+  const { env } = setup();
+  env.ctx.GmailApp.search = () => { throw new Error('Gmail is unavailable'); };
+  assert.throws(() => vm.runInContext('processReceiptEmails()', env.ctx));
+  assert.match(env.props.RECEIPT_MAIL_RESULT, /^error: Gmail is unavailable/);
+});

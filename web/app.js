@@ -300,6 +300,88 @@
     renderStatic();
     runBtn.addEventListener('click', run);
     root.replaceChildren(el('section', { class: 'card' }, [el('h1', { text: 'Diagnostics' }), list, runBtn, out]));
+    if (FleetAuth.isAdmin()) root.append(receiptDiagnostics());
+  }
+
+  // ---------- receipts: is everything working? (admins) ----------
+  function ago(iso) {
+    var t = Date.parse(iso);
+    if (!t) return 'never';
+    var m = Math.max(0, Math.round((Date.now() - t) / 60000));
+    return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago';
+  }
+
+  function receiptDiagnostics() {
+    var list = el('ul', { class: 'diag-list' });
+    var recent = el('div', { class: 'stack' });
+    var msg = el('div');
+    var report = el('pre', { class: 'diag-pre', hidden: true });
+    var timer = null;
+    function row(label, value, cls) { list.append(el('li', { class: cls || '' }, [el('span', { class: 'k', text: label }), el('span', { class: 'v', text: value })])); }
+
+    function draw(h) {
+      list.replaceChildren();
+      var mailAge = h.mail.lastRun ? (Date.parse(h.now) - Date.parse(h.mail.lastRun)) / 60000 : null;
+      row('Email timer', !h.mail.timerOn ? 'NOT SET UP (run setupReceiptEmail in the Apps Script editor)' : mailAge === null ? 'on, but has not run yet'
+        : mailAge > 15 ? 'on, but last ran ' + ago(h.mail.lastRun) + ' (it should run every 5 minutes)' : 'on, last ran ' + ago(h.mail.lastRun),
+        h.mail.timerOn && mailAge !== null && mailAge <= 15 ? 'ok' : 'bad');
+      row('Last timer run', h.mail.lastResult || 'nothing recorded yet', /^error/.test(h.mail.lastResult) ? 'bad' : '');
+      row('Receipt mailbox', h.mail.mailbox);
+      row('Gemini key', h.reading.keyOn ? 'set (' + h.reading.model + ')' : 'MISSING: add GEMINI_API_KEY in the Apps Script project settings', h.reading.keyOn ? 'ok' : 'bad');
+      row('Receipts read today', h.reading.usedToday + ' of ' + h.reading.appLimit + ' (up to ' + h.reading.userLimit + ' per person)', h.reading.usedToday >= h.reading.appLimit ? 'bad' : '');
+      row('Emails sent today', h.emails.adminNoticesToday + ' admin notices and ' + h.emails.confirmationsToday + ' confirmations (limit ' + h.emails.dailyLimit + ' of each)' + (h.emails.quotaLeft !== null ? '; ' + h.emails.quotaLeft + ' left in the mail allowance' : ''));
+      var c = h.inbox.counts;
+      row('Inbox now', h.inbox.openTotal + ' open: ' + c.Pending + ' ready to check, ' + c.Queued + ' waiting to be read, ' + c.Unreadable + ' to fill in by hand, ' + c.New + ' not read yet');
+      if (h.inbox.oldestOpen) row('Oldest open receipt', ago(h.inbox.oldestOpen), Date.parse(h.now) - Date.parse(h.inbox.oldestOpen) > 3 * 86400000 ? 'bad' : '');
+      row('Handled so far', c.Approved + ' approved, ' + c.Dismissed + ' dismissed');
+      recent.replaceChildren.apply(recent, h.recent.length ? h.recent.map(function (r) {
+        var what = [r.vendor || r.subject || 'Receipt', r.total !== null ? r.currency + ' ' + r.total : '', r.car].filter(Boolean).join(' · ');
+        return el('div', { class: 'diag-receipt' }, [
+          el('div', {}, [el('strong', { text: what }), el('span', { class: 'muted small-text', text: '  ' + ago(r.receivedAt) })]),
+          el('div', { class: 'muted small-text', text: (r.source === 'email' ? 'Emailed' : 'Uploaded') + (r.sender ? ' by ' + r.sender : '') + ' · ' + r.status +
+            (r.status === 'Queued' ? ' (tries again ' + (Date.parse(r.retryAfter) > Date.parse(h.now) ? 'in ' + Math.max(1, Math.round((Date.parse(r.retryAfter) - Date.parse(h.now)) / 60000)) + ' min' : 'at the next timer run') + (r.attempts ? ', ' + r.attempts + ' busy answers so far' : '') + ')' : '') }),
+          r.note ? el('div', { class: 'muted small-text', text: r.note }) : null,
+          el('a', { class: 'small-text', href: '#/inbox/' + r.id, text: 'Open' }),
+        ]);
+      }) : [el('p', { class: 'muted', text: 'No receipts yet.' })]);
+    }
+
+    function load() {
+      return FleetApi.call('getReceiptHealth', {}, { timeoutMs: 40000 }).then(function (r) { msg.replaceChildren(); draw(r.data); }).catch(function (e) {
+        if (e.code !== 'unauthorized') msg.replaceChildren(UI.notice('error', UI.errorText(e)));
+      });
+    }
+
+    var refresh = el('button', { type: 'button', class: 'btn small secondary', text: 'Refresh' });
+    refresh.addEventListener('click', function () { UI.busy(refresh, 'Refreshing…', load()); });
+    var now = el('button', { type: 'button', class: 'btn small', text: 'Check the mail now' });
+    now.addEventListener('click', function () {
+      msg.replaceChildren();
+      UI.busy(now, 'Checking…', FleetApi.call('processReceiptsNow', {}, { timeoutMs: 120000 }).then(function (r) {
+        msg.replaceChildren(UI.notice('ok', r.data.lastResult || 'Done.'));
+        return load();
+      })).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+    });
+    var inspect = el('button', { type: 'button', class: 'btn small secondary', text: 'Show how recent emails were handled' });
+    inspect.addEventListener('click', function () {
+      msg.replaceChildren();
+      UI.busy(inspect, 'Looking…', FleetApi.call('inspectReceiptMail', {}, { timeoutMs: 60000 }).then(function (r) {
+        report.hidden = false;
+        report.textContent = r.data.lines.join('\n');
+      })).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+    });
+
+    // keep it fresh while the page is open
+    timer = setInterval(function () { if (location.hash !== '#/diag' || !document.body.contains(list)) { clearInterval(timer); return; } load(); }, 30000);
+    load();
+    return el('section', { class: 'card' }, [
+      el('h2', { text: 'Receipts' }),
+      el('p', { class: 'muted small-text', text: 'Is everything behind emailed and photographed receipts working? This refreshes every 30 seconds.' }),
+      msg, list,
+      el('div', { class: 'btn-row' }, [now, inspect, refresh]),
+      report,
+      el('h3', { text: 'Latest receipts' }), recent,
+    ]);
   }
 
   // ---------- service worker + update banner ----------

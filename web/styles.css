@@ -598,3 +598,5 @@ dl.details dd.vin-line { white-space: nowrap; overflow: hidden; overflow-wrap: n
 .receipt-address { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .receipt-address code { overflow-wrap: anywhere; background: var(--border); padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; }
 .export-row .copy-section { text-align: left; }
+.diag-pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.8rem; background: var(--border); padding: 10px; border-radius: 8px; margin-top: 12px; }
+.diag-receipt { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; }
