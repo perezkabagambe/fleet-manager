@@ -461,11 +461,11 @@
 
       var cards = [el('div', { class: 'copy-row' }, [UI.shareButton(fmt.entryUrl(carId, e.id), { title: e.title + ' · ' + d.car.registration, aria: 'Share this entry' })]),
         el('section', { class: 'card' }, [
-        fmt.backLink('#/car/' + carId, car.registration),
+        // the entry's type tag lives in the top right corner, whatever the type
+        el('div', { class: 'entry-top' }, [fmt.backLink('#/car/' + carId, car.registration), el('div', { class: 'entry-tags head-tags' }, [typeChip(e.type), e.guestName ? GuestUI.chip(e) : null])]),
         el('div', { class: 'entry-head' }, [
           el('h1', { text: e.title }),
           el('div', { class: 'muted entry-sub', text: meta.join(' · ') }), // the date, mileage and the garage (left out if blank)
-          el('div', { class: 'entry-tags head-tags' }, [typeChip(e.type), e.guestName ? GuestUI.chip(e) : null]),
           e.ref ? el('div', { class: 'ref-line' }, [el('span', { class: 'ref-badge', text: e.ref }), UI.copyValueButton(e.ref, 'Copy reference ' + e.ref)]) : null,
           topThumb,
         ]),

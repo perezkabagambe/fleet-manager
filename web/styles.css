@@ -633,3 +633,7 @@ dl.details dd.vin-line { white-space: nowrap; overflow: hidden; overflow-wrap: n
 .ai-review { display: grid; gap: 8px; margin-top: 8px; }
 .ai-change { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; }
 .ai-change-name { font-weight: 600; }
+
+.entry-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.entry-top .back-link, .entry-top > a { margin: 0; min-width: 0; }
+.entry-top .head-tags { flex: none; justify-content: flex-end; margin: 0; max-width: none; flex-wrap: nowrap; }
