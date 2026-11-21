@@ -113,6 +113,54 @@
   window.EntryUI = window.EntryUI || {};
   window.EntryUI.fileRefLine = fileRefLine;
 
+  // ---------- copy an entry to other vehicles ----------
+  /**
+   * A list of the other vehicles with a tick box each. selected() gives the chosen car ids; onCount(n) is told how
+   * many other vehicles there are (so a section can hide itself when there are none).
+   */
+  function copyPicker(currentCarId, onCount) {
+    var box = el('div', { class: 'copy-picker stack' }, [el('p', { class: 'muted', text: 'Loading vehicles…' })]);
+    var names = {};
+    var checked = {};
+    function draw(cars) {
+      var others = cars.filter(function (c) { return c.id !== currentCarId; });
+      others.forEach(function (c) { names[c.id] = c.registration; });
+      if (onCount) onCount(others.length);
+      box.replaceChildren.apply(box, others.length ? others.map(function (c) {
+        var cb = el('input', { type: 'checkbox', value: c.id, checked: !!checked[c.id] });
+        cb.addEventListener('change', function () { checked[c.id] = cb.checked; });
+        return el('label', { class: 'check' }, [cb, el('span', { text: c.registration + ' · ' + c.make + ' ' + c.model + (c.year ? ' (' + c.year + ')' : '') })]);
+      }) : [el('p', { class: 'muted', text: 'There are no other vehicles to copy to.' })]);
+    }
+    FleetApi.cached('listCars', {}, function (data) { draw(data.cars); }).catch(function () {
+      box.replaceChildren(el('p', { class: 'muted', text: 'Could not load the vehicles just now.' }));
+    });
+    return {
+      el: box,
+      selected: function () { return Object.keys(checked).filter(function (id) { return checked[id]; }); },
+      nameOf: function (id) { return names[id] || 'the other vehicle'; },
+    };
+  }
+
+  var COPY_HINT = 'Each copy gets its own reference, and its photos and files are copied too. Its mileage is left blank, and it says which entry it was copied from. Parts used are listed in its notes.';
+
+  /** Copy the saved entry to each car in turn. Resolves to [{ carId, ok, entry, attachments, error }]. */
+  function copyEntryTo(entryId, carIds, onStep) {
+    var results = [];
+    var i = 0;
+    function next() {
+      if (i >= carIds.length) return Promise.resolve(results);
+      var carId = carIds[i++];
+      if (onStep) onStep(i, carIds.length);
+      return FleetApi.call('copyEntry', { id: entryId, carId: carId }, { timeoutMs: UPLOAD_TIMEOUT_MS }).then(function (r) {
+        results.push({ carId: carId, ok: true, entry: r.data.entry, attachments: r.data.attachments, skipped: r.data.skipped });
+      }, function (e) {
+        results.push({ carId: carId, ok: false, error: e });
+      }).then(next);
+    }
+    return next();
+  }
+
   /** The "add something" block: kept apart from the files that are already attached. */
   function addPanel(onFile, hint) {
     return el('div', { class: 'attach-add' }, [
@@ -268,6 +316,7 @@
   Views.entry = function (ctx, root) {
     var carId = ctx.params.id;
     var id = ctx.params.eid;
+    var flash = FleetApp.takeFlash();
     root.replaceChildren(el('section', { class: 'card' }, [fmt.loading()]));
     // the copy saved on this phone is used as it is when nothing has changed; otherwise it appears at once and the fresh one replaces it
     FleetApi.cached('getEntry', { id: id }, function (data) { render(data); }).catch(function (e) {
@@ -285,8 +334,7 @@
       var e = d.entry;
       var car = d.car;
       var msg = el('div');
-      var flash = FleetApp.takeFlash();
-      if (flash) msg.append(UI.notice(flash.kind, flash.text));
+      if (flash) msg.append(UI.notice(flash.kind, flash.text)); // taken once per visit: the page may be drawn again
 
       function line(label, value) { return value ? [el('dt', { text: label }), el('dd', { text: value })] : []; }
 
@@ -442,6 +490,34 @@
         el('h2', { text: 'Photos and documents' }),
         el('div', { class: 'attach-existing' }, [attHeading, attBox]),
         addPanel(addFile, 'Receipts, invoices, quotes, photos or any other file. Photos are shrunk automatically; other files can be up to 5 MB.'),
+      ]));
+
+      // Copy this entry to other vehicles (as it is saved now).
+      var picker = copyPicker(carId);
+      var copyBtn = el('button', { type: 'button', class: 'btn', text: 'Copy to the chosen vehicles' });
+      var copyMsg = el('div', { class: 'stack' });
+      copyBtn.addEventListener('click', function () {
+        var ids = picker.selected();
+        copyMsg.replaceChildren();
+        if (!ids.length) { copyMsg.append(UI.notice('error', 'Choose at least one vehicle to copy to.')); return; }
+        UI.busy(copyBtn, 'Copying…', copyEntryTo(e.id, ids, function (n, total) {
+          copyMsg.replaceChildren(UI.notice('ok', 'Copying to vehicle ' + n + ' of ' + total + '… a big entry with photos can take a minute.'));
+        })).then(function (results) {
+          Views.invalidateCars();
+          copyMsg.replaceChildren.apply(copyMsg, results.map(function (r) {
+            if (!r.ok) return UI.notice('error', 'Could not copy to ' + picker.nameOf(r.carId) + ': ' + UI.errorText(r.error));
+            var box = el('div', { class: 'notice ok', role: 'status' }, [
+              el('span', { text: 'Copied to ' + picker.nameOf(r.carId) + ' as ' + r.entry.ref + (r.attachments ? ' with ' + r.attachments + (r.attachments === 1 ? ' file' : ' files') : '') + (r.skipped ? ' (' + r.skipped + ' could not be copied)' : '') + '. ' }),
+              el('a', { href: '#/car/' + r.carId + '/entry/' + r.entry.id, text: 'Open the copy' }),
+            ]);
+            return box;
+          }));
+        });
+      });
+      cards.push(el('section', { class: 'card' }, [
+        el('h2', { text: 'Copy to another vehicle' }),
+        el('p', { class: 'muted small-text', text: COPY_HINT }),
+        picker.el, copyBtn, copyMsg,
       ]));
 
       cards.push(el('a', { class: 'btn block big edit-bottom', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit ' + BY_TYPE[e.type].label.toLowerCase() }));
@@ -795,9 +871,14 @@
         addBlock,
       ]);
 
+      // ----- copy to other vehicles (after saving) -----
+      var copySection = el('details', { class: 'copy-section', hidden: true });
+      var picker = copyPicker(car.id, function (n) { copySection.hidden = n === 0; });
+      copySection.append(el('summary', { text: 'Also copy to other vehicles' }), el('p', { class: 'muted small-text', text: 'Tick the vehicles. When you save, the entry is saved here first and then copied. ' + COPY_HINT }), picker.el);
+
       // ----- save -----
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: existing ? 'Save changes' : 'Add ' + meta.label.toLowerCase() });
-      var form = el('form', { novalidate: true }, top.concat(body, [notesField, attachSection, btn]));
+      var form = el('form', { novalidate: true }, top.concat(body, [notesField, attachSection, copySection, btn]));
 
       function collect() {
         var fields = {};
@@ -831,6 +912,20 @@
         return next();
       }
 
+      /** Copy the saved entry to the vehicles that were ticked. Resolves to { text, failed } for the message on the next screen. */
+      function copyAfterSave(entryId) {
+        var ids = picker.selected();
+        if (!ids.length) return Promise.resolve({ text: '', failed: false });
+        return copyEntryTo(entryId, ids).then(function (results) {
+          var ok = results.filter(function (r) { return r.ok; });
+          var bad = results.filter(function (r) { return !r.ok; });
+          var text = (ok.length ? 'Also copied to ' + ok.map(function (r) { return picker.nameOf(r.carId) + ' (' + r.entry.ref + ')'; }).join(', ') + '.' : '') +
+            (bad.length ? ' Could not copy to ' + bad.map(function (r) { return picker.nameOf(r.carId); }).join(', ') + ': ' + UI.errorText(bad[0].error) + ' You can copy it again from the entry page.' : '');
+          Views.invalidateCars();
+          return { text: text.trim(), failed: bad.length > 0 };
+        });
+      }
+
       function run() {
         var payload = { fields: collect() };
         if (state.entryId) { payload.id = state.entryId; payload.version = state.version; } else { payload.carId = car.id; payload.type = type; }
@@ -851,8 +946,9 @@
           state.version = entry.version;
           Views.invalidateCars();
           lastCurrency[car.id] = entry.currency;
-          return uploadStaged(entry.id).then(function () {
-            if (reminderNote && !uploadFailed) FleetApp.setFlash('ok', reminderNote);
+          return uploadStaged(entry.id).then(function () { return copyAfterSave(entry.id); }).then(function (copyNote) {
+            var note = [reminderNote, copyNote.text].filter(Boolean).join(' ');
+            if (note && !uploadFailed) FleetApp.setFlash(copyNote.failed ? 'error' : 'ok', note);
             FleetApp.go('/car/' + car.id + '/entry/' + entry.id);
           });
         });

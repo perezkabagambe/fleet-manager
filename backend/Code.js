@@ -67,6 +67,7 @@ function actions_() {
     listEntries: { auth: 'user', fn: listEntries_ },
     getEntry: { auth: 'user', fn: getEntry_ },
     listPurchases: { auth: 'user', fn: listPurchases_ },
+    copyEntry: { auth: 'user', lock: true, fn: copyEntry_ },
     saveEntry: { auth: 'user', lock: true, fn: saveEntry_ },
     setIssueStatus: { auth: 'user', lock: true, fn: setIssueStatus_ },
     deleteEntry: { auth: 'admin', lock: true, fn: deleteEntry_ },

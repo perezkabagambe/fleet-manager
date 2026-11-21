@@ -45,6 +45,7 @@
     if (!started) return;
     var r = parseHash();
     r.keepOpen = !!(opts && opts.keepOpen === true); // redrawing the same screen because its data changed: keep what was open
+    if (r.keepOpen) { if (shownFlash && !flash) flash = shownFlash; } else shownFlash = null; // a message is still there after such a redraw
     if (!isOpen(r)) {
       if (!FleetAuth.hasSession()) { go('/login', { next: r.raw }); return; }
       if (!FleetAuth.getUser()) {
@@ -323,12 +324,13 @@
   // ---------- start ----------
   // A one-shot message to show on the next screen (e.g. "saved, but the photo failed").
   var flash = null;
+  var shownFlash = null; // the message the screen just showed, so a redraw of the same screen can show it again
   window.FleetApp = {
     go: go,
     refreshNav: refreshNav,
     previousPage: function () { return lastPage; },
     setFlash: function (kind, text) { flash = { kind: kind, text: text }; },
-    takeFlash: function () { var f = flash; flash = null; return f; },
+    takeFlash: function () { var f = flash; flash = null; if (f) shownFlash = f; return f; },
   };
   window.addEventListener('hashchange', function () { route(); });
   function boot() {

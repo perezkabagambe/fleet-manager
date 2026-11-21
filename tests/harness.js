@@ -80,6 +80,11 @@ function createEnv() {
         getContentType: () => 'image/jpeg',
       }),
       setContent: (c) => { files[id].content = c; },
+      makeCopy: (name, folder) => {
+        const fid = 'file-' + Object.keys(files).length;
+        files[fid] = Object.assign({}, files[id], { name, folder: folder.getId(), trashed: false });
+        return fileObj(fid);
+      },
       setTrashed: (t) => { files[id].trashed = !!t; },
     };
   }
