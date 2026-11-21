@@ -213,7 +213,7 @@ function createEnv() {
       },
     },
     GmailApp: { // tests put threads in state.gmail (see tests/receiptmail.test.js)
-      search: (q, start, max) => { state.gmailQueries.push(q); return state.gmail.filter((t) => !t.labels.includes('Fleet-handled')).slice(start || 0, (start || 0) + (max || 25)); },
+      search: (q, start, max) => { state.gmailQueries.push(q); return state.gmail.filter((t) => !q.includes('-label:Fleet-handled') || !t.labels.includes('Fleet-handled')).slice(start || 0, (start || 0) + (max || 25)); },
       getUserLabelByName: (n) => state.gmailLabels[n] || null,
       createLabel: (n) => { state.gmailLabels[n] = { getName: () => n, name: n }; return state.gmailLabels[n]; },
     },

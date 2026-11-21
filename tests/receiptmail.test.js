@@ -17,12 +17,12 @@ function mail(opts) {
   return {
     getId: () => id, getFrom: () => opts.from || 'Shop <orders@shop.example>', getTo: () => opts.to || '', getCc: () => opts.cc || '',
     getSubject: () => opts.subject || 'Your order', getPlainBody: () => opts.body || 'Order ECP-1. 2 x Oil filter 10.00. Questions? help@shop.example',
-    getBody: () => opts.html || '<p>Your order</p>', getRawContent: () => opts.raw || '',
+    getDate: () => new Date('2026-11-21T18:00:00Z'), getBody: () => opts.html || '<p>Your order</p>', getRawContent: () => opts.raw || '',
     getAttachments: () => (opts.attachments || []).map((a) => ({ getContentType: () => a.type, getName: () => a.name, getBytes: () => a.bytes })),
   };
 }
 function thread(messages) {
-  const t = { labels: [], getMessages: () => messages, addLabel: (l) => { t.labels.push(l.name); } };
+  const t = { labels: [], getLabels: () => t.labels.map((n) => ({ getName: () => n })), getMessages: () => messages, addLabel: (l) => { t.labels.push(l.name); } };
   return t;
 }
 
@@ -276,4 +276,24 @@ test('a busy Gemini is retried after 15 minutes; after three busy answers the se
   env.advance(7 * 3600 * 1000); run();
   assert.equal(inbox()[0].status, 'Pending');
   assert.equal(env.outbox.filter((m) => m.to === 'sam@example.com' && /waiting for approval/.test(m.subject)).length, 1);
+});
+
+test('checkReceiptEmail explains what was decided for each recent email, without showing contents', () => {
+  const { env, address, run } = setup();
+  const to = address();
+  env.state.gmail = [
+    thread([mail({ to: 'potentiafleetmanager+ab12cde@gmail.com', from: 'Stranger <who@junk.example>', body: 'SECRET BODY TEXT' })]),
+    thread([mail({ to, from: 'Shop <orders@shop.example>' })]),
+    thread([mail({ to: 'potentiafleetmanager+ab12cde@gmail.com', from: 'sam@example.com' })]),
+  ];
+  const lines = vm.runInContext('checkReceiptEmail()', env.ctx).join('\n');
+  assert.match(lines, /Timer on: NO/);
+  assert.match(lines, /Timer last ran: never/);
+  assert.match(lines, /IGNORED: sent to the registration address by someone who is not an approved user \(who@junk\.example\)/);
+  assert.match(lines, /would be accepted for AB12 CDE/);
+  assert.equal(lines.includes('SECRET BODY TEXT'), false);
+  run();
+  const after = vm.runInContext('checkReceiptEmail()', env.ctx).join('\n');
+  assert.equal(/Timer last ran: never/.test(after), false);
+  assert.match(after, /already in the Inbox/);
 });

@@ -147,17 +147,32 @@ function receiptEmailFile_(message) {
   return { bytes: Utilities.newBlob(receiptEmailText_(message), 'text/plain', 'receipt-email.txt').getBytes(), mime: GENERIC_MIME, filename: 'receipt-email.txt' };
 }
 
-/** Store one email as an Inbox receipt and read it. Returns 'read' or 'skipped'. */
-function handleReceiptMessage_(message, carsBySecret, carsByReg, usersByEmail) {
+/** Decide what to do with one email: { car, user } to accept it, or { skip: 'why' }. */
+function receiptClassify_(message, carsBySecret, carsByReg, usersByEmail) {
   const emailId = String(message.getId() || '');
-  if (!emailId) return 'skipped';
+  if (!emailId) return { skip: 'no message id' };
   const from = senderEmail_(message.getFrom());
-  if (!from || from === appEmail_() || /^forwarding-noreply@google\.com$/.test(from)) return 'skipped'; // our own mail, and Gmail's forwarding set-up message
+  if (!from) return { skip: 'no sender address' };
+  if (from === appEmail_()) return { skip: 'sent by the app\'s own address' };
+  if (/^forwarding-noreply@google\.com$/.test(from)) return { skip: 'Gmail forwarding set-up message' };
   const tag = receiptTagOf_(message);
   const user = usersByEmail[from] || null;
   // the private address works for anyone; the registration address only for an approved user's mail
   const car = carsBySecret[tag] || (user ? carsByReg[tag] : null) || null;
-  if (!car && !user) return 'skipped'; // not a receipt address and not someone we know: never read, never sent anywhere
+  if (!car && !user) {
+    return { skip: tag ? (carsByReg[tag] !== undefined ? 'sent to the registration address by someone who is not an approved user (' + from + ')' : 'the address tag "' + tag + '" matches no car') : 'not sent to a receipt address, and the sender (' + from + ') is not an approved user' };
+  }
+  return { car: car, user: user, from: from };
+}
+
+/** Store one email as an Inbox receipt and read it. Returns 'read' or 'skipped'. */
+function handleReceiptMessage_(message, carsBySecret, carsByReg, usersByEmail) {
+  const emailId = String(message.getId() || '');
+  const verdict = receiptClassify_(message, carsBySecret, carsByReg, usersByEmail);
+  if (verdict.skip) return 'skipped'; // never read, never sent anywhere
+  const car = verdict.car;
+  const user = verdict.user;
+  const from = verdict.from;
   const seen = Db.all('Inbox').some(function (r) { return r.email_id === emailId; });
   if (seen) return 'skipped';
   if (Db.all('Inbox').filter(function (r) { return !isTrue_(r.deleted) && RECEIPT_OPEN.indexOf(r.status) !== -1; }).length >= RECEIPT_INBOX_MAX) return 'skipped';
@@ -203,6 +218,7 @@ function notifyReceiptQueued_(row, user) {
 
 /** The timer: read new mail sent to a car's receipt address. Runs every 5 minutes (see setupReceiptEmail). */
 function processReceiptEmails() {
+  props_().setProperty('RECEIPT_MAIL_LAST', nowIso_()); // so checkReceiptEmail can show that the timer is running
   try { readQueuedReceipts_(); } catch (e) { console.error('queue failed: ' + (e && e.stack ? e.stack : JSON.stringify(e))); }
   const threads = GmailApp.search(RECEIPT_MAIL_QUERY, 0, RECEIPT_MAIL_THREADS);
   if (!threads.length) return { read: 0 };
@@ -235,4 +251,40 @@ function processReceiptEmails() {
     if (finished) threads[t].addLabel(label); // handled (or ignored): not looked at again
   }
   return { read: reads };
+}
+
+/**
+ * Run this from the Apps Script editor when emailed receipts do not show up. It prints (in the Execution log) whether the
+ * timer is on and has run, whether the Gemini key is set, and for each recent email in the inbox what the app decided and
+ * why. It shows senders and tags only, never the contents of an email.
+ */
+function checkReceiptEmail() {
+  const out = [];
+  out.push('Timer on: ' + (receiptMailOn_() ? 'yes' : 'NO (run setupReceiptEmail once)'));
+  out.push('Timer last ran: ' + (props_().getProperty('RECEIPT_MAIL_LAST') || 'never'));
+  out.push('Gemini key set: ' + (geminiKey_() ? 'yes' : 'NO'));
+  out.push('App mailbox: ' + receiptMailbox_());
+  const carsBySecret = {};
+  const carsByReg = {};
+  Db.all('Cars').forEach(function (c) {
+    if (isTrue_(c.deleted)) return;
+    if (c.receipt_secret) carsBySecret[String(c.receipt_secret).toLowerCase()] = c;
+    const t = regTag_(c.registration);
+    if (t.length >= 2) carsByReg[t] = Object.prototype.hasOwnProperty.call(carsByReg, t) ? null : c;
+  });
+  const usersByEmail = {};
+  Db.all('Users').forEach(function (u) { if (!isTrue_(u.deleted) && u.status === 'Approved') usersByEmail[String(u.email).toLowerCase()] = u; });
+  const threads = GmailApp.search('in:inbox newer_than:7d', 0, 10);
+  out.push('Emails in the inbox from the last 7 days (newest 10 threads): ' + threads.length);
+  threads.forEach(function (t) {
+    const labelled = t.getLabels().some(function (l) { return l.getName() === RECEIPT_LABEL; });
+    t.getMessages().forEach(function (m) {
+      const v = receiptClassify_(m, carsBySecret, carsByReg, usersByEmail);
+      const stored = Db.all('Inbox').some(function (r) { return r.email_id === String(m.getId()); });
+      out.push('- ' + Utilities.formatDate(m.getDate(), TZ, 'yyyy-MM-dd HH:mm') + ' from ' + (senderEmail_(m.getFrom()) || '?') + ' to-tag "' + receiptTagOf_(m) + '": ' +
+        (stored ? 'already in the Inbox' : v.skip ? 'IGNORED: ' + v.skip : 'would be accepted' + (v.car ? ' for ' + v.car.registration : ' (no car)')) + (labelled ? ' [labelled Fleet-handled]' : ' [not yet handled]'));
+    });
+  });
+  Logger.log(out.join('\n'));
+  return out;
 }
