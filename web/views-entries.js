@@ -40,6 +40,18 @@
     var parts = Object.keys(map || {}).map(function (c) { return fmt.money(map[c], c); });
     return parts.join(' + ');
   }
+  // The picture a log row shows when the entry has no photo: a plain icon for its type, in the colour of its tag.
+  var TYPE_ICONS = {
+    Maintenance: '<path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5"/>',
+    Issue: '<path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z"/><path d="M12 16h.01"/>',
+    Compliance: '<path d="M11.46 20.846a12 12 0 0 1 -7.96 -14.846a12 12 0 0 0 8.5 -3a12 12 0 0 0 8.5 3a12 12 0 0 1 -.09 7.06"/><path d="M15 19l2 2l4 -4"/>',
+    Purchase: '<path d="M12 3l8 4.5v9l-8 4.5l-8 -4.5v-9l8 -4.5"/><path d="M12 12l8 -4.5"/><path d="M12 12v9"/><path d="M12 12l-8 -4.5"/>',
+  };
+  function typeThumb(type) {
+    var box = el('div', { class: 'type-thumb tt-' + String(type).toLowerCase(), 'aria-hidden': 'true' });
+    box.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (TYPE_ICONS[type] || '') + '</svg>'; // fixed drawings, nothing from the data
+    return box;
+  }
   function typeChip(type) { return el('span', { class: 'chip t-' + type.toLowerCase(), text: BY_TYPE[type].label }); }
   function num0(s) {
     var n = Number(String(s === null || s === undefined ? '' : s).replace(/[£$€,\s]/g, ''));
@@ -227,7 +239,7 @@
       if (e.guestName) tags.push(GuestUI.chip(e));
       var cost = costText(e);
       var link = el('a', { class: 'entry-row', href: '#/car/' + car.id + '/entry/' + e.id }, [
-        e.thumbAttachmentId ? Photos.thumbBox(e.thumbAttachmentId, 'row-thumb') : null,
+        e.thumbAttachmentId ? Photos.thumbBox(e.thumbAttachmentId, 'row-thumb') : typeThumb(e.type),
         // the title has the whole width; under it the reference, date and mileage, then the garage in grey,
         // then a footer with the tags (type, status, attachments) on the left and the cost on the right
         el('div', { class: 'entry-main' }, [

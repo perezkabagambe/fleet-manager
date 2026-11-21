@@ -663,3 +663,12 @@ body.lightbox-on { overflow: hidden; }
 .entry-line.is-editing .entry-row { flex-wrap: nowrap; }
 .entry-line.is-editing .entry-main { flex: 1 1 0; }
 .entry-line.is-editing .entry-row .row-thumb { width: 44px; height: 44px; }
+
+/* the picture of a log row with no photo: a soft tile with an icon for its type */
+.type-thumb { flex: none; width: 56px; height: 56px; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 4px; }
+.type-thumb.tt-maintenance { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.type-thumb.tt-issue { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); }
+.type-thumb.tt-compliance { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.type-thumb.tt-purchase { background: var(--warn-bg); color: var(--warn-text); }
+.entry-line.is-editing .type-thumb { width: 44px; height: 44px; }
+.entry-line.is-editing .type-thumb svg { width: 22px; height: 22px; }
