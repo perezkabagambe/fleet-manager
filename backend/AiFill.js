@@ -132,7 +132,9 @@ function aiSystemPrompt_() {
   ].join(' ');
 }
 
-const AI_DETAILS_JSON = [
+// (a function, not a constant: MARKETS is defined in another file, which Apps Script may load later)
+function aiDetailsJson_() {
+  return [
   '    "make": "", "model": "", "year": "",  // year as 4 digits',
   '    "colour": "",',
   '    "engineCode": "",  // the manufacturer engine code, e.g. D4HB',
@@ -141,6 +143,7 @@ const AI_DETAILS_JSON = [
   '    "driveSide": "",   // LHD or RHD',
   '    "fuelCapacity": "" // fuel tank size in litres, a number',
 ].join('\n');
+}
 
 function aiFillPrompt_(known) {
   const lines = aiKnownLines_(known);
@@ -149,7 +152,7 @@ function aiFillPrompt_(known) {
     'Return this JSON object (every key present; use "" or [] when unknown):',
     '{',
     '  "details": {',
-    AI_DETAILS_JSON,
+    aiDetailsJson_(),
     '  },',
     '  "fluids": [  // only from these names: ' + AI_FLUID_NAMES.join(', '),
     '    { "fluid": "Engine oil", "specification": "e.g. 5W-30 ACEA C3", "capacity": "e.g. 6.7 L", "notes": "" }',
@@ -178,7 +181,7 @@ function aiFindPrompt_(known) {
     '      "why": "one short sentence on what distinguishes this version",',
     '      "confidence": "high, medium or low",',
     '      "details": {',
-    AI_DETAILS_JSON,
+    aiDetailsJson_(),
     '      }',
     '    }',
     '  ]',
