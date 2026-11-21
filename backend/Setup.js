@@ -148,6 +148,42 @@ function setup() {
   Logger.log('Setup complete.\nDB: ' + ss.getUrl() + '\nRoot folder: ' + root.getUrl());
 }
 
+const ANDROID_APP_URL = 'https://github.com/perezkabagambe/fleet-manager/releases/download/android-v1.1/FleetManager-1.1.apk';
+const ANDROID_LINK_FILE = 'Fleet Manager - Android app download link.txt';
+
+/**
+ * Run once from the Apps Script editor (as the app account): saves the Android app's download link, with the install
+ * steps, as a text file in the app's Drive folder ("Fleet Manager"). Safe to run again: the same file is updated.
+ */
+function saveAndroidLinkToDrive() {
+  const props = props_();
+  const root = DriveApp.getFolderById(props.getProperty('ROOT_FOLDER_ID'));
+  const text = [
+    'Fleet Manager for Android (APK)',
+    '',
+    'Download: ' + ANDROID_APP_URL,
+    'All versions: https://github.com/perezkabagambe/fleet-manager/releases',
+    '',
+    'To install:',
+    '1. Open the download link on the Android phone.',
+    '2. When Android asks, allow installing apps from that source (your browser).',
+    '3. Open Fleet Manager and sign in.',
+    '',
+    'It opens the live app, so app updates reach it automatically. Needs Android 7.0 or newer.',
+    'Updated ' + new Date().toISOString().slice(0, 10) + '.',
+  ].join('\n');
+  const found = root.getFilesByName(ANDROID_LINK_FILE);
+  if (found.hasNext()) {
+    const file = found.next();
+    file.setContent(text);
+    Logger.log('Updated ' + ANDROID_LINK_FILE + ' in the Fleet Manager folder.');
+    return file.getId();
+  }
+  const file = root.createFile(ANDROID_LINK_FILE, text, 'text/plain');
+  Logger.log('Saved ' + ANDROID_LINK_FILE + ' in the Fleet Manager folder.');
+  return file.getId();
+}
+
 function ensureFolder_(props, propKey, name, parent) {
   const id = props.getProperty(propKey);
   if (id) {

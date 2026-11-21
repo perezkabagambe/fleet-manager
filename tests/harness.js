@@ -97,6 +97,11 @@ function createEnv() {
         folders[fid] = { name, parent: id };
         return folderObj(fid);
       },
+      getFilesByName: (name) => {
+        const ids = Object.keys(files).filter((k) => files[k].name === name && files[k].folder === id && !files[k].trashed);
+        let i = 0;
+        return { hasNext: () => i < ids.length, next: () => fileObj(ids[i++]) };
+      },
       createFile: (a, b) => {
         const fid = 'file-' + Object.keys(files).length;
         files[fid] = typeof a === 'string'
