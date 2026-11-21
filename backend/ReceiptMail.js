@@ -19,7 +19,7 @@ const RECEIPT_MAIL_QUERY = 'in:inbox newer_than:7d -label:' + RECEIPT_LABEL;
 const RECEIPT_MAIL_BATCH = 5;     // emails read per run (each takes a few seconds); the rest wait for the next run
 const RECEIPT_MAIL_THREADS = 25;  // threads looked at per run
 const RECEIPT_INBOX_MAX = 200;
-const RECEIPT_SECRET_RE = /\+([a-z0-9]{8,32})@/i;
+const RECEIPT_TAG_RE = /\+([a-z0-9]{2,32})@/i;
 
 // ---------- each car's address ----------
 
@@ -30,12 +30,27 @@ function receiptMailbox_() {
 
 function newReceiptSecret_() { return randomToken_().slice(0, 12); }
 
-function receiptAddress_(secret) {
+function receiptAddress_(tag) {
   const parts = receiptMailbox_().split('@');
-  return parts[0].split('+')[0] + '+' + secret + '@' + parts[1];
+  return parts[0].split('+')[0] + '+' + tag + '@' + parts[1];
 }
 
-/** The car's receipt address. Made on first use (so this action holds the script lock). */
+/** A registration number as it is written in an address: letters and digits only, lower case ("AB12 CDE" is "ab12cde"). */
+function regTag_(registration) {
+  return String(registration || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 32);
+}
+
+/**
+ * A car has two addresses. The easy one is made from its registration number: it only works for mail sent by an approved
+ * user (a number plate is public, so anyone could guess it). The private one has a secret in it and works for anyone,
+ * so it suits shops and automatic forwarding rules.
+ */
+function receiptAddresses_(car, secret) {
+  const tag = regTag_(car.registration);
+  return { address: tag.length >= 2 ? receiptAddress_(tag) : '', privateAddress: receiptAddress_(secret), emailOn: receiptMailOn_() };
+}
+
+/** The car's receipt addresses. The private one is made on first use (so this action holds the script lock). */
 function getReceiptAddress_(p, ctx) {
   const car = findCar_(cleanStr_(p.carId, 64), false);
   if (!car) fail_('not_found');
@@ -44,17 +59,17 @@ function getReceiptAddress_(p, ctx) {
     secret = newReceiptSecret_();
     Db.update('Cars', car._row, touch_(car, ctx, { receipt_secret: secret }));
   }
-  return { address: receiptAddress_(secret), emailOn: receiptMailOn_() };
+  return receiptAddresses_(car, secret);
 }
 
-/** Admin only: a new address for the car. The old one stops working at once (use it if the address has been shared too widely). */
+/** Admin only: a new private address for the car. The old one stops working at once (use it if the address has been shared too widely). */
 function replaceReceiptSecret_(p, ctx) {
   const car = findCar_(cleanStr_(p.carId, 64), false);
   if (!car) fail_('not_found');
   const secret = newReceiptSecret_();
   Db.update('Cars', car._row, touch_(car, ctx, { receipt_secret: secret }));
   audit_(ctx.user, 'receipt_address_replaced', 'Car', car.id, 'New receipt email address for ' + car.registration);
-  return { address: receiptAddress_(secret), emailOn: receiptMailOn_() };
+  return receiptAddresses_(car, secret);
 }
 
 /** Has the timer been set up (see setupReceiptEmail)? */
@@ -86,15 +101,15 @@ function senderEmail_(from) {
   return normEmail_(m ? m[1] : from);
 }
 
-/** The secret in the address the mail was sent to, or ''. */
-function receiptSecretOf_(message) {
-  let m = RECEIPT_SECRET_RE.exec(String(message.getTo() || '') + ' ' + String(message.getCc() || ''));
+/** The part after the "+" in the address the mail was sent to (a secret or a registration), or ''. */
+function receiptTagOf_(message) {
+  let m = RECEIPT_TAG_RE.exec(String(message.getTo() || '') + ' ' + String(message.getCc() || ''));
   if (!m) { // sent as a hidden copy or through a forward: the delivery headers still say where it was delivered
     let raw = '';
     try { raw = String(message.getRawContent() || '').slice(0, 8000); } catch (e) { raw = ''; }
     const header = /^(?:Delivered-To|X-Original-To):.*$/gim;
     let h;
-    while (!m && (h = header.exec(raw))) m = RECEIPT_SECRET_RE.exec(h[0]);
+    while (!m && (h = header.exec(raw))) m = RECEIPT_TAG_RE.exec(h[0]);
   }
   return m ? m[1].toLowerCase() : '';
 }
@@ -133,13 +148,15 @@ function receiptEmailFile_(message) {
 }
 
 /** Store one email as an Inbox receipt and read it. Returns 'read' or 'skipped'. */
-function handleReceiptMessage_(message, carsBySecret, usersByEmail) {
+function handleReceiptMessage_(message, carsBySecret, carsByReg, usersByEmail) {
   const emailId = String(message.getId() || '');
   if (!emailId) return 'skipped';
   const from = senderEmail_(message.getFrom());
   if (!from || from === appEmail_() || /^forwarding-noreply@google\.com$/.test(from)) return 'skipped'; // our own mail, and Gmail's forwarding set-up message
-  const car = carsBySecret[receiptSecretOf_(message)] || null;
+  const tag = receiptTagOf_(message);
   const user = usersByEmail[from] || null;
+  // the private address works for anyone; the registration address only for an approved user's mail
+  const car = carsBySecret[tag] || (user ? carsByReg[tag] : null) || null;
   if (!car && !user) return 'skipped'; // not a receipt address and not someone we know: never read, never sent anywhere
   const seen = Db.all('Inbox').some(function (r) { return r.email_id === emailId; });
   if (seen) return 'skipped';
@@ -162,7 +179,13 @@ function processReceiptEmails() {
   if (!threads.length) return { read: 0 };
   Db.resetRequest();
   const carsBySecret = {};
-  Db.all('Cars').forEach(function (c) { if (!isTrue_(c.deleted) && c.receipt_secret) carsBySecret[String(c.receipt_secret).toLowerCase()] = c; });
+  const carsByReg = {}; // a registration shared by two cars is ambiguous, so it points to neither
+  Db.all('Cars').forEach(function (c) {
+    if (isTrue_(c.deleted)) return;
+    if (c.receipt_secret) carsBySecret[String(c.receipt_secret).toLowerCase()] = c;
+    const t = regTag_(c.registration);
+    if (t.length >= 2) carsByReg[t] = Object.prototype.hasOwnProperty.call(carsByReg, t) ? null : c;
+  });
   const usersByEmail = {};
   Db.all('Users').forEach(function (u) { if (!isTrue_(u.deleted) && u.status === 'Approved') usersByEmail[String(u.email).toLowerCase()] = u; });
   const label = receiptLabel_();
@@ -174,7 +197,7 @@ function processReceiptEmails() {
       if (reads >= RECEIPT_MAIL_BATCH) { finished = false; break; }
       let outcome = 'skipped';
       try {
-        outcome = handleReceiptMessage_(messages[i], carsBySecret, usersByEmail);
+        outcome = handleReceiptMessage_(messages[i], carsBySecret, carsByReg, usersByEmail);
       } catch (e) {
         console.error('receipt email failed: ' + (e && e.stack ? e.stack : JSON.stringify(e)));
       }

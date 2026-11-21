@@ -35,7 +35,7 @@ function setup() {
   env.props.GEMINI_API_KEY = 'key';
   env.state.gemini = () => answer(PARTS);
   const car = env.call('saveCar', { token: sam, fields: CAR }).data.car;
-  const address = () => env.call('getReceiptAddress', { token: sam, carId: car.id }).data.address;
+  const address = () => env.call('getReceiptAddress', { token: sam, carId: car.id }).data.privateAddress;
   const run = () => JSON.parse(JSON.stringify(vm.runInContext('processReceiptEmails()', env.ctx)));
   const inbox = () => env.call('listInbox', { token: sam }).data.open;
   return { env, admin, sam, car, address, run, inbox };
@@ -46,13 +46,15 @@ test('each car has a private plus-address of the app mailbox; it is stable, and 
   assert.equal(env.call('getReceiptAddress', { carId: car.id }).error, 'unauthorized');
   const a = address();
   assert.match(a, /^potentiafleetmanager\+[a-f0-9]{12}@gmail\.com$/);
+  assert.equal(env.call('getReceiptAddress', { token: sam, carId: car.id }).data.address, 'potentiafleetmanager+ab12cde@gmail.com'); // the easy one: the registration without spaces
   assert.equal(address(), a);
   assert.equal(env.call('replaceReceiptSecret', { token: sam, carId: car.id }).error, 'forbidden');
-  const b = env.call('replaceReceiptSecret', { token: admin, carId: car.id }).data.address;
+  const b = env.call('replaceReceiptSecret', { token: admin, carId: car.id }).data.privateAddress;
   assert.notEqual(b, a);
   assert.equal(address(), b);
   env.props.RECEIPT_MAILBOX = 'Fleets@Example.org';
   assert.match(address(), /^fleets\+[a-f0-9]{12}@example\.org$/);
+  assert.equal(env.call('getReceiptAddress', { token: sam, carId: car.id }).data.address, 'fleets+ab12cde@example.org');
   assert.equal(env.call('getReceiptAddress', { token: sam, carId: 'nope' }).error, 'not_found');
 });
 
@@ -172,4 +174,26 @@ test('setupReceiptEmail makes the label and the 5-minute timer once', () => {
   vm.runInContext('setupReceiptEmail()', env.ctx);
   assert.ok(env.state.gmailLabels['Fleet-handled']);
   assert.equal(env.triggers.filter((t) => t.fn === 'processReceiptEmails').length, 1);
+});
+
+test('the registration address only works for mail from an approved user', () => {
+  const { env, car, run, inbox } = setup();
+  const reg = 'potentiafleetmanager+ab12cde@gmail.com';
+  env.state.gmail = [
+    thread([mail({ to: reg, from: 'Stranger <who@junk.example>' })]),
+    thread([mail({ to: reg, from: 'Sam <sam@example.com>', attachments: [{ type: 'application/pdf', name: 'r.pdf', bytes: pdfBytes() }] })]),
+  ];
+  assert.deepEqual(run(), { read: 1 });
+  assert.equal(inbox().length, 1);
+  assert.equal(inbox()[0].carId, car.id);
+  assert.equal(inbox()[0].sender, 'Sam');
+  assert.equal(env.state.geminiRequests.length, 1);
+});
+
+test('two cars with the same registration make the registration address ambiguous: no car is guessed', () => {
+  const { env, sam, run, inbox } = setup();
+  env.call('saveCar', { token: sam, fields: Object.assign({}, CAR, { registration: 'ab12 cde' }), force: true });
+  env.state.gmail = [thread([mail({ to: 'potentiafleetmanager+ab12cde@gmail.com', from: 'sam@example.com' })])];
+  run();
+  assert.equal(inbox()[0].carId, '');
 });
