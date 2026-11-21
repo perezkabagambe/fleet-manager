@@ -205,7 +205,8 @@
     ]);
     var d = el('details', { class: 'card collapsible' }, [summary, el('div', { class: 'collapse-body' }, rest)]);
     d.open = !!openCards.keys[key];
-    d.addEventListener('toggle', function () { openCards.keys[key] = d.open; });
+    d.addEventListener('toggle', function () { openCards.keys[key] = d.open; if (d.open && typeof card.onOpen === 'function') card.onOpen(); });
+    if (d.open && typeof card.onOpen === 'function') card.onOpen();
     return d;
   }
 
@@ -375,6 +376,7 @@
           odoForm,
         ]), car.odometer === null ? 'Not set' : num(car.odometer) + ' mi'),
         collapsible('Maintenance & Issues Log', EntryUI.historyCard(car, page && page.entries), page && page.entries ? countText(page.entries.length, 'entry', 'entries') : ''),
+        FleetAuth.isAdmin() ? collapsible('Recycle bin', EntryUI.binCard(car)) : null,
         collapsible('Reminders', RemindersUI.card(car, page && page.tasks), page && page.tasks ? reminderHint(page.tasks) : ''),
         collapsible('Fluids, Bulbs & Specifications', el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids, Bulbs & Specifications' }),
