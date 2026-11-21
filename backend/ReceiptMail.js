@@ -19,6 +19,8 @@ const RECEIPT_MAIL_QUERY = 'in:inbox newer_than:7d -label:' + RECEIPT_LABEL;
 const RECEIPT_MAIL_BATCH = 5;     // emails read per run (each takes a few seconds); the rest wait for the next run
 const RECEIPT_MAIL_THREADS = 25;  // threads looked at per run
 const RECEIPT_INBOX_MAX = 200;
+const MAX_EMAIL_FILE = 10000000;   // a photo straight from a phone camera is often 3 to 6 MB
+const MIN_EMAIL_IMAGE = 15000;     // smaller pictures are logos and tracking pixels, not receipts
 const RECEIPT_TAG_RE = /\+([a-z0-9]{2,32})@/i;
 
 // ---------- each car's address ----------
@@ -124,21 +126,43 @@ function receiptEmailText_(message) {
   return text.slice(0, RECEIPT_TEXT_MAX);
 }
 
-/** The file to keep as the receipt: the first PDF or photo attached, otherwise the email itself as a PDF (or, failing that, plain text). */
+/** The kind of file an email attachment is, from its type or (when the type is vague) its name. '' if it is not a receipt-like file. */
+function receiptFileKind_(mime, name) {
+  mime = String(mime || '').toLowerCase();
+  if (mime === 'image/jpg') mime = 'image/jpeg';
+  if (RECEIPT_READABLE.indexOf(mime) !== -1) return mime;
+  const ext = (/\.([a-z0-9]+)$/i.exec(String(name || '')) || [])[1];
+  const byExt = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
+  return (mime === '' || mime === 'application/octet-stream') && ext && byExt[ext.toLowerCase()] ? byExt[ext.toLowerCase()] : '';
+}
+
+/**
+ * The file to keep as the receipt: the best PDF or picture in the email (pictures pasted into the body count, as a photo
+ * sent from a phone usually is one), otherwise the email itself as a PDF (or, failing that, plain text).
+ */
 function receiptEmailFile_(message) {
-  let pdf = null;
-  let jpg = null;
   let attachments = [];
-  try { attachments = message.getAttachments({ includeInlineImages: false, includeAttachments: true }) || []; } catch (e) { attachments = []; }
+  try { attachments = message.getAttachments({ includeInlineImages: true, includeAttachments: true }) || []; } catch (e) { attachments = []; }
+  let pdf = null;
+  let image = null;
   attachments.forEach(function (a) {
-    const mime = String(a.getContentType() || '').toLowerCase();
     let bytes;
     try { bytes = a.getBytes(); } catch (e) { return; }
-    if (mime === 'application/pdf' && !pdf && bytes.length <= MAX_ATTACH_FILE && isPdf_(bytes)) pdf = { bytes: bytes, mime: mime, name: a.getName() };
-    else if (mime === 'image/jpeg' && !jpg && bytes.length <= MAX_ATTACH_JPEG && bytes.length > 4 && (bytes[0] & 0xff) === 0xff && (bytes[1] & 0xff) === 0xd8) jpg = { bytes: bytes, mime: mime, name: a.getName() };
+    const kind = receiptFileKind_(a.getContentType(), a.getName());
+    if (!kind || bytes.length > MAX_EMAIL_FILE) return;
+    const found = { bytes: bytes, mime: kind, name: a.getName() };
+    if (kind === 'application/pdf') {
+      if (isPdf_(bytes) && (!pdf || bytes.length > pdf.bytes.length)) pdf = found;
+    } else if (bytes.length >= MIN_EMAIL_IMAGE && (!image || bytes.length > image.bytes.length)) {
+      image = found; // the biggest picture is the receipt; the rest are logos and decoration
+    }
   });
-  const chosen = pdf || jpg;
-  if (chosen) return { bytes: chosen.bytes, mime: chosen.mime, filename: safeFilename_(chosen.name || 'receipt', chosen.mime) };
+  const chosen = pdf || image;
+  if (chosen) {
+    const ext = { 'application/pdf': ['.pdf', /\.pdf$/i], 'image/jpeg': ['.jpg', /\.jpe?g$/i], 'image/png': ['.png', /\.png$/i], 'image/webp': ['.webp', /\.webp$/i], 'image/heic': ['.heic', /\.heic$/i], 'image/heif': ['.heif', /\.heif$/i] }[chosen.mime];
+    const base = cleanStr_(chosen.name, 100).replace(/[\\/:*?"<>|]/g, '_') || 'receipt';
+    return { bytes: chosen.bytes, mime: chosen.mime, filename: ext[1].test(base) ? base : base + ext[0] };
+  }
   try {
     const blob = Utilities.newBlob('<html><body>' + String(message.getBody() || '') + '</body></html>', 'text/html', 'receipt.html').getAs('application/pdf');
     const bytes = blob.getBytes();

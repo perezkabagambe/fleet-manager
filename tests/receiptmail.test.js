@@ -9,7 +9,7 @@ const CAR = { registration: 'AB12 CDE', make: 'Toyota', model: 'Hilux', year: '2
 const PARTS = { documentType: 'parts_receipt', vendor: 'Euro Car Parts', date: '2026-10-02', currency: 'GBP', orderNumber: 'ECP-1', total: 20, items: [{ name: 'Oil filter', quantity: 2, unitPrice: 10 }], confidence: 'high' };
 const answer = (obj) => ({ code: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }] } });
 const pdfBytes = () => { const b = Buffer.alloc(60, 32); Buffer.from('%PDF-1.4\n').copy(b); return Array.from(b).map((x) => (x > 127 ? x - 256 : x)); };
-const jpgBytes = () => { const b = Buffer.alloc(60, 5); b[0] = 0xff; b[1] = 0xd8; b[2] = 0xff; return Array.from(b).map((x) => (x > 127 ? x - 256 : x)); };
+const jpgBytes = (n) => { const b = Buffer.alloc(n || 20000, 5); b[0] = 0xff; b[1] = 0xd8; b[2] = 0xff; return Array.from(b).map((x) => (x > 127 ? x - 256 : x)); };
 
 let counter = 0;
 function mail(opts) {
@@ -18,7 +18,7 @@ function mail(opts) {
     getId: () => id, getFrom: () => opts.from || 'Shop <orders@shop.example>', getTo: () => opts.to || '', getCc: () => opts.cc || '',
     getSubject: () => opts.subject || 'Your order', getPlainBody: () => opts.body || 'Order ECP-1. 2 x Oil filter 10.00. Questions? help@shop.example',
     getDate: () => new Date('2026-11-21T18:00:00Z'), getBody: () => opts.html || '<p>Your order</p>', getRawContent: () => opts.raw || '',
-    getAttachments: () => (opts.attachments || []).map((a) => ({ getContentType: () => a.type, getName: () => a.name, getBytes: () => a.bytes })),
+    getAttachments: (o) => (opts.attachments || []).filter((a) => !a.inline || (o && o.includeInlineImages)).map((a) => ({ getContentType: () => a.type, getName: () => a.name, getBytes: () => a.bytes })),
   };
 }
 function thread(messages) {
@@ -94,7 +94,7 @@ test('an email with no attachment is kept as a PDF of the email; a photo attachm
   })(env.ctx.Utilities.newBlob);
   env.state.gmail = [
     thread([mail({ to, html: '<p>Receipt body</p>' })]),
-    thread([mail({ to, attachments: [{ type: 'image/png', name: 'logo.png', bytes: jpgBytes() }, { type: 'image/jpeg', name: 'scan.jpg', bytes: jpgBytes() }] })]),
+    thread([mail({ to, attachments: [{ type: 'image/png', name: 'logo.png', bytes: jpgBytes(3000) }, { type: 'image/jpeg', name: 'scan.jpg', bytes: jpgBytes() }] })]),
   ];
   run();
   const byName = Object.fromEntries(inbox().map((r) => [r.filename, r]));
@@ -331,4 +331,48 @@ test('a failure in the timer is recorded where the Diagnostics page can show it'
   env.ctx.GmailApp.search = () => { throw new Error('Gmail is unavailable'); };
   assert.throws(() => vm.runInContext('processReceiptEmails()', env.ctx));
   assert.match(env.props.RECEIPT_MAIL_RESULT, /^error: Gmail is unavailable/);
+});
+
+test('a photo pasted into the email body (as a phone does) is found, and is not limited to 1.5 MB', () => {
+  const { env, address, run, inbox } = setup();
+  env.state.gmail = [thread([mail({ to: address(), html: '<img src="cid:x">', attachments: [
+    { type: 'image/jpeg', name: 'IMG_0001.jpeg', bytes: jpgBytes(4000000), inline: true },   // the receipt: 4 MB, inline
+    { type: 'image/png', name: 'logo.png', bytes: jpgBytes(3000), inline: true },            // a logo: too small to be a receipt
+  ] })])];
+  run();
+  const [r] = inbox();
+  assert.equal(r.mime, 'image/jpeg');
+  assert.equal(r.filename, 'IMG_0001.jpeg');
+  assert.equal(r.size, 4000000);
+  assert.equal(r.status, 'Pending');
+  assert.equal(env.state.geminiRequests[0].body.contents[0].parts[1].inline_data.mime_type, 'image/jpeg');
+});
+
+test('the biggest picture wins; a PDF beats a picture; a vague type is read from the file name; too-big files are skipped', () => {
+  const { env, address, run, inbox } = setup();
+  const to = address();
+  env.state.gmail = [
+    thread([mail({ to, id: 'p1', attachments: [{ type: 'image/jpeg', name: 'small.jpg', bytes: jpgBytes(20000) }, { type: 'image/jpeg', name: 'big.jpg', bytes: jpgBytes(90000) }] })]),
+    thread([mail({ to, id: 'p2', attachments: [{ type: 'image/jpeg', name: 'photo.jpg', bytes: jpgBytes(90000) }, { type: 'application/pdf', name: 'inv.pdf', bytes: pdfBytes() }] })]),
+    thread([mail({ to, id: 'p3', attachments: [{ type: 'application/octet-stream', name: 'scan.HEIC', bytes: jpgBytes(90000) }] })]),
+    thread([mail({ to, id: 'p4', html: '<p>x</p>', attachments: [{ type: 'image/jpeg', name: 'huge.jpg', bytes: jpgBytes(10000001) }] })]),
+  ];
+  run();
+  const names = inbox().map((r) => r.filename + ':' + r.mime).sort();
+  assert.deepEqual(names, ['big.jpg:image/jpeg', 'inv.pdf:application/pdf', 'receipt-email.txt:application/octet-stream', 'scan.HEIC:image/heic'].sort());
+});
+
+test('a PNG receipt is read as a PNG and attached as an ordinary file when approved', () => {
+  const { env, sam, car, address, run, inbox } = setup();
+  const png = Array.from(Buffer.alloc(30000, 7)).map((x) => x);
+  env.state.gmail = [thread([mail({ to: address(), attachments: [{ type: 'image/png', name: 'shot.png', bytes: png }] })])];
+  run();
+  const [r] = inbox();
+  assert.equal(r.mime, 'image/png');
+  assert.equal(env.state.geminiRequests[0].body.contents[0].parts[1].inline_data.mime_type, 'image/png');
+  const entry = env.call('saveEntry', { token: sam, carId: car.id, type: 'Purchase', fields: { date: '2026-10-03' }, items: [{ name: 'Bulb', quantity: '1', unitCost: '3' }] }).data.entry;
+  env.call('resolveReceipt', { token: sam, id: r.id, entryId: entry.id });
+  const att = env.call('getEntry', { token: sam, id: entry.id }).data.attachments[0];
+  assert.equal(att.mime, 'application/octet-stream');
+  assert.equal(att.filename, 'shot.png');
 });

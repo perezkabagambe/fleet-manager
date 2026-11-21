@@ -34,8 +34,8 @@
   // ---------- looking at the stored receipt ----------
   /** A "View receipt" button: a photo is shown on the page, a PDF is saved/opened by the phone. */
   function viewer(receipt, onError) {
-    var isImage = receipt.mime === 'image/jpeg';
-    var btn = el('button', { type: 'button', class: 'btn small secondary', text: isImage ? 'View the receipt' : 'Open the receipt (PDF)' });
+    var isImage = /^image\/(jpeg|png|webp)$/.test(receipt.mime);
+    var btn = el('button', { type: 'button', class: 'btn small secondary', text: isImage ? 'View the receipt' : receipt.mime === 'application/pdf' ? 'Open the receipt (PDF)' : 'Download the receipt' });
     var holder = el('div');
     btn.addEventListener('click', function () {
       UI.busy(btn, 'Loading…', FleetApi.call('getReceiptFile', { id: receipt.id }, { timeoutMs: UPLOAD_TIMEOUT_MS })).then(function (r) {
@@ -171,19 +171,50 @@
       var d = r.data || {};
       var open = r.status === 'New' || r.status === 'Pending' || r.status === 'Queued' || r.status === 'Unreadable';
 
+      // Everything that was read from the receipt, including what was not found.
+      var money = function (n) { return n === null || n === undefined ? '' : fmt().money(n, r.currency || 'GBP'); };
       var rows = [];
-      function line(label, value) { if (value) rows.push(el('dt', { text: label }), el('dd', { text: value })); }
-      line('Seems to be', KIND_LABEL[r.kind] || '');
-      line('Shop', r.vendor);
+      function line(label, value, extra) {
+        rows.push(el('dt', { text: label }), el('dd', { class: value ? '' : 'muted', text: value || 'Not found on the receipt' }));
+        if (extra) rows.push(extra);
+      }
+      var carName = '';
+      cars.forEach(function (c) { if (c.id === r.carId) carName = c.registration + ' · ' + c.make + ' ' + c.model; });
+      line('Looks like', KIND_LABEL[r.kind] || '');
+      line('Shop or garage', r.vendor);
       line('Date', r.date ? when(r.date) : '');
-      line('Total', r.total !== null ? fmt().money(r.total, r.currency || 'GBP') : '');
-      line('Order number', d.orderNumber);
-      line('Vehicle on it', [d.registration, d.vehicle].filter(Boolean).join(' · '));
-      line('Mileage on it', d.mileage ? String(d.mileage) : '');
+      line('Currency', r.currency);
+      line('Total', money(r.total));
+      line('Order or invoice number', d.orderNumber);
+      line('Vehicle registration on it', d.registration);
+      line('Vehicle described', d.vehicle);
+      line('Mileage on it', d.mileage ? fmt().num(d.mileage) + ' mi' : '');
       line('Work described', d.work);
-      var items = (d.items || []).map(function (i) {
-        return el('li', { text: i.name + (i.partNumber ? ' [' + i.partNumber + ']' : '') + ' · ' + i.quantity + (i.unitCost !== null && i.unitCost !== undefined ? ' × ' + fmt().money(i.unitCost, r.currency || 'GBP') : '') });
-      });
+      line('Vehicle chosen', carName ? carName + (r.source === 'email' || d.registration ? '' : '') : '');
+      line('How sure the AI is', d.confidence);
+      line('AI summary', d.summary);
+
+      var itemList = d.items || [];
+      var sum = 0;
+      var complete = itemList.length > 0;
+      var table = null;
+      if (itemList.length) {
+        var body = itemList.map(function (i) {
+          var known = i.unitCost !== null && i.unitCost !== undefined;
+          var lineTotal = known ? Math.round(i.quantity * i.unitCost * 100) / 100 : null;
+          if (known) sum += i.quantity * i.unitCost; else complete = false;
+          return el('tr', {}, [el('td', { text: i.name }), el('td', { text: i.partNumber || '' }), el('td', { class: 'num', text: String(i.quantity) }),
+            el('td', { class: 'num', text: known ? money(i.unitCost) : '?' }), el('td', { class: 'num', text: known ? money(lineTotal) : '?' })]);
+        });
+        table = el('div', { class: 'receipt-table-wrap' }, [el('table', { class: 'receipt-table' }, [
+          el('thead', {}, [el('tr', {}, ['Item', 'Part no.', 'Qty', 'Each', 'Line'].map(function (h) { return el('th', { text: h }); }))]),
+          el('tbody', {}, body),
+        ])]);
+      }
+      var itemsNote = !itemList.length ? 'No individual items were found.'
+        : complete ? 'Items add up to ' + money(Math.round(sum * 100) / 100) + (r.total !== null ? (Math.abs(sum - r.total) > 0.011 ? ', but the total reads ' + money(r.total) + ' (a difference of ' + money(Math.round(Math.abs(sum - r.total) * 100) / 100) + ').' : ', which matches the total.') : '.')
+        : 'Some items have no price, so they cannot be added up.';
+      var raw = el('details', { class: 'copy-section' }, [el('summary', { text: 'Show the raw data the AI returned' }), el('pre', { class: 'diag-pre', text: JSON.stringify(d, null, 2) })]);
 
       var carSelect = el('select', { name: 'carId' }, [el('option', { value: '', text: 'Choose a vehicle…' })].concat(
         cars.map(function (c) { return el('option', { value: c.id, text: c.registration + ' · ' + c.make + ' ' + c.model, selected: c.id === r.carId }); })));
@@ -233,9 +264,12 @@
         msg,
         r.note ? UI.notice(r.status === 'Pending' ? 'warn' : 'info', r.note) : null,
         viewer(r, function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); }),
-        rows.length ? el('dl', { class: 'details' }, rows) : null,
-        d.summary ? el('p', { class: 'muted small-text', text: 'AI summary: ' + d.summary + (d.confidence ? ' (confidence: ' + d.confidence + ')' : '') }) : null,
-        items.length ? el('div', {}, [el('div', { class: 'field-label', text: 'Items it lists' }), el('ul', { class: 'receipt-items' }, items)]) : null,
+        r.status === 'New' ? null : el('h2', { text: 'What was read from it' }),
+        r.status === 'New' ? null : el('dl', { class: 'details' }, rows),
+        r.status === 'New' ? null : el('div', { class: 'field-label', text: 'Items' }),
+        r.status === 'New' ? null : table,
+        r.status === 'New' ? null : el('p', { class: 'muted small-text', text: itemsNote }),
+        r.status === 'New' ? null : raw,
         d.kind || r.status === 'Pending' ? el('p', { class: 'muted small-text', text: 'The AI can get things wrong. You will check every box on the next screen before anything is saved.' }) : null,
         done,
         open ? el('div', { class: 'stack' }, [

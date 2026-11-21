@@ -23,6 +23,7 @@ const RECEIPT_TEXT_MAX = 20000;    // characters of an email's text that are sen
 const RECEIPT_OPEN = ['New', 'Pending', 'Queued', 'Unreadable'];
 const RECEIPT_KINDS = ['Purchase', 'Maintenance'];
 const MAX_RECEIPT_ITEMS = 30;
+const RECEIPT_READABLE = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']; // what Gemini can be shown
 
 function geminiKey_() { return String(props_().getProperty('GEMINI_API_KEY') || '').trim(); }
 function geminiModel_() { return String(props_().getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL).trim() || GEMINI_DEFAULT_MODEL; }
@@ -269,7 +270,7 @@ function readStoredReceipt_(row, userId, extraText, notifyExcept) {
   } else {
     try {
       const parts = [{ text: 'Read this document.' + (extraText ? '\n\nThe text of the email it came with:\n' + extraText : '') }];
-      if (row.drive_file_id && (row.mime === 'image/jpeg' || row.mime === 'application/pdf')) {
+      if (row.drive_file_id && RECEIPT_READABLE.indexOf(row.mime) !== -1) {
         const bytes = DriveApp.getFileById(row.drive_file_id).getBlob().getBytes();
         parts.push({ inline_data: { mime_type: row.mime, data: Utilities.base64Encode(bytes) } });
       }
@@ -425,7 +426,7 @@ function resolveReceipt_(p, ctx) {
   if (existing.length < MAX_ATTACHMENTS_PER_ENTRY) {
     try { DriveApp.getFileById(row.drive_file_id).moveTo(carFolder_(car.id)); } catch (e) { /* it stays where it is: the attachment still points at it */ }
     attached = Object.assign(baseColumns_(ctx), {
-      car_id: car.id, entry_id: entry.id, drive_file_id: row.drive_file_id, filename: row.filename, mime: row.mime, size: row.size, thumb_file_id: '', ref: nextFileRef_(),
+      car_id: car.id, entry_id: entry.id, drive_file_id: row.drive_file_id, filename: row.filename, mime: attachmentKind_(row.mime), size: row.size, thumb_file_id: '', ref: nextFileRef_(),
     });
     Db.insert('Attachments', attached);
   }
