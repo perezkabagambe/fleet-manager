@@ -12,6 +12,7 @@ const { createEnv } = require('./harness');
 const PORT = 8124;
 const WEB = path.join(__dirname, '..', 'web');
 const env = createEnv();
+let kept = null;
 
 env.seedUser({ name: 'Perez Kabagambe', email: 'perez@example.com', role: 'admin' });
 env.seedUser({ name: 'Sam', email: 'sam@example.com', role: 'user' });
@@ -71,6 +72,17 @@ http.createServer((req, res) => {
   if (url === '/__outbox') { // the emails the backend would have sent, for checking them by eye
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(env.outbox));
+    return;
+  }
+  if (url === '/__keep' && req.method === 'POST') { // dev only: keep a file the page made (e.g. an exported PDF) so it can be opened in the browser
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => { kept = Buffer.concat(chunks); res.writeHead(200); res.end('ok'); });
+    return;
+  }
+  if (url === '/__kept.pdf') {
+    res.writeHead(kept ? 200 : 404, { 'Content-Type': 'application/pdf' });
+    res.end(kept || '');
     return;
   }
   if (url === '/__reminders') { // pretend it is Monday morning: run the weekly job now

@@ -308,6 +308,10 @@
       var fluidRows = fluids.filter(function (f) { return !isBulbRow(f); }).map(function (f) { return specRow(f, f.fluid, 'fluid'); });
       var bulbRows = fluids.filter(isBulbRow).map(function (f) { return specRow(f, f.fluid, 'bulb'); });
 
+      // Export everything about this car (every section, all photos and files) as one zip.
+      var exportBtn = el('button', { type: 'button', class: 'btn block secondary', text: 'Export all vehicle data' });
+      exportBtn.addEventListener('click', function () { ExportAll.run(car); });
+
       root.replaceChildren(
         el('section', { class: 'card' }, [
           backLink('#/', 'Fleet'),
@@ -357,6 +361,10 @@
           el('img', { class: 'qr', src: qrDataUrl(qrLink(car)), alt: 'QR code for ' + car.registration, width: '140', height: '140' }),
           el('p', {}, [el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/label', text: 'Print label' })]),
         ])),
+        el('div', { class: 'export-row' }, [
+          exportBtn,
+          el('p', { class: 'muted small-text', text: 'Downloads one zip: a PDF of everything on this page, plus a folder for every photo, file and document, named by its unique ID.' }),
+        ]),
         el('p', { class: 'muted small-text center', text: 'Car details last changed ' + fmtDate(car.updatedAt) }),
       );
     }

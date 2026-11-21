@@ -107,7 +107,12 @@
   }
 
   // ---------- the progress screen ----------
-  function overlay(title) {
+  /**
+   * A full-screen card with a progress bar. o.intro and o.footnote replace the default wording.
+   * Returns { set(fraction, text), fail(message, onRetry, onSkip, labels), done(message, buttons), close() }.
+   */
+  function overlay(title, o) {
+    o = o || {};
     var fill = el('div', { class: 'sync-bar-fill' });
     var track = el('div', { class: 'sync-bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0', 'aria-label': 'Progress' }, [fill]);
     var status = el('p', { class: 'sync-status', role: 'status', text: 'Starting…' });
@@ -116,10 +121,10 @@
     var errorBox = el('div');
     var card = el('div', { class: 'sync-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'sync-title' }, [
       el('h2', { id: 'sync-title', text: title }),
-      el('p', { class: 'muted', text: 'This makes the app much faster on this phone. Please keep this screen open until it finishes.' }),
+      el('p', { class: 'muted', text: o.intro || 'This makes the app much faster on this phone. Please keep this screen open until it finishes.' }),
       el('div', { class: 'sync-bar-row' }, [track, percent]),
       status, errorBox, actions,
-      el('p', { class: 'muted small-text', text: 'Attached files and documents are not included: they download when you open them.' }),
+      el('p', { class: 'muted small-text', text: o.footnote || 'Attached files and documents are not included: they download when you open them.' }),
     ]);
     var wrap = el('div', { class: 'sync-overlay' }, [card]);
     document.body.append(wrap);
@@ -133,13 +138,27 @@
         track.setAttribute('aria-valuenow', String(pct));
         if (text) status.textContent = text;
       },
-      fail: function (message, onRetry, onSkip) {
+      fail: function (message, onRetry, onSkip, labels) {
+        labels = labels || {};
         errorBox.replaceChildren(UI.notice('error', message));
-        var again = el('button', { type: 'button', class: 'btn', text: 'Try again' });
-        var skip = el('button', { type: 'button', class: 'btn secondary', text: 'Carry on without it' });
+        var again = el('button', { type: 'button', class: 'btn', text: labels.retry || 'Try again' });
+        var skip = el('button', { type: 'button', class: 'btn secondary', text: labels.skip || 'Carry on without it' });
         again.addEventListener('click', function () { errorBox.replaceChildren(); actions.replaceChildren(); onRetry(); });
         skip.addEventListener('click', onSkip);
         actions.replaceChildren(again, skip);
+      },
+      // The finished state: a message and buttons ([{ label, primary, onClick }]).
+      done: function (message, buttons) {
+        shown = 1;
+        fill.style.width = '100%';
+        percent.textContent = '100%';
+        track.setAttribute('aria-valuenow', '100');
+        status.textContent = message;
+        actions.replaceChildren.apply(actions, (buttons || []).map(function (b) {
+          var btn = el('button', { type: 'button', class: 'btn' + (b.primary ? '' : ' secondary'), text: b.label });
+          btn.addEventListener('click', b.onClick);
+          return btn;
+        }));
       },
       close: function () { wrap.remove(); },
     };
@@ -339,6 +358,7 @@
     refreshAll: refreshAll,
     quickCheck: quickCheck,
     lastSaved: function () { return lastSavedAt; },
+    overlay: overlay,
     forget: function () { userId = ''; running = null; again = false; clearTimeout(changeTimer); },
     // for tests
     _pool: pool,
