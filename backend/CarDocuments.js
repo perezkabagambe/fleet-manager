@@ -9,7 +9,7 @@
 const DOCUMENT_TYPES = ['Logbook', 'Import papers', 'Other'];
 
 function documentShape_(d) {
-  return { id: d.id, ref: d.ref || '', type: d.doc_type || 'Other', note: d.note || '', filename: d.filename, mime: d.mime, size: Number(d.size) || 0, createdAt: d.created_at };
+  return { id: d.id, ref: d.ref || '', version: Number(d.version || 1), type: d.doc_type || 'Other', note: d.note || '', filename: d.filename, mime: d.mime, size: Number(d.size) || 0, createdAt: d.created_at };
 }
 
 /** The live documents of one car, newest first (a stable order: date added, then position in the sheet). */
@@ -65,6 +65,47 @@ function getCarDocument_(p, ctx) {
     fail_('not_found');
   }
   return { filename: d.filename, mime: d.mime, data: Utilities.base64Encode(bytes) };
+}
+
+/**
+ * Rename a document, change its type or edit its note (any signed-in user). Send only what changes. The file itself
+ * and its ID never change. `version` (from the list) guards against two people editing at once.
+ */
+function updateCarDocument_(p, ctx) {
+  const d = liveCarDocument_(cleanStr_(p.id, 64));
+  if (!d) fail_('not_found');
+  const car = findCar_(d.car_id, false);
+  if (!car) fail_('not_found');
+  if (p.version !== undefined && p.version !== null && Number(d.version || 1) !== Number(p.version)) fail_('conflict');
+
+  const patch = {};
+  if (p.type !== undefined) {
+    const type = cleanStr_(p.type, 20);
+    // an older document keeps the type it was saved with (such as Insurance); only the current list can be chosen for a change
+    if (!type || (type !== (d.doc_type || '') && DOCUMENT_TYPES.indexOf(type) === -1)) fail_('invalid_document_type');
+    if (type !== d.doc_type) patch.doc_type = type;
+  }
+  if (p.note !== undefined) {
+    const note = cleanStr_(p.note, 200);
+    if (note !== (d.note || '')) patch.note = note;
+  }
+  if (p.filename !== undefined) {
+    const raw = cleanStr_(p.filename, 100);
+    if (!raw) fail_('filename_required');
+    // a PDF stays a .pdf and a photo a .jpg, whatever it is renamed to
+    const ext = d.mime === 'application/pdf' ? '.pdf' : d.mime === 'image/jpeg' ? '.jpg' : '';
+    const name = ext ? raw.replace(/\.(jpe?g|pdf)$/i, '') + ext : raw;
+    const filename = safeFilename_(name, d.mime);
+    if (isBlockedFilename_(filename)) fail_('file_type_not_allowed');
+    if (filename !== d.filename) patch.filename = filename;
+  }
+  if (!Object.keys(patch).length) return { document: documentShape_(d) };
+
+  const changes = Object.keys(patch).map(function (k) { return k + ' "' + (d[k] || '') + '" to "' + patch[k] + '"'; }).join(', ');
+  const stamped = Object.assign({}, patch, { updated_at: nowIso_(), updated_by: ctx.user.id, version: Number(d.version || 1) + 1 });
+  Db.update('CarDocuments', d._row, stamped);
+  audit_(ctx.user, 'document_edited', 'Car', d.car_id, (d.ref || 'Document') + ' on ' + car.registration + ': ' + changes);
+  return { document: documentShape_(Object.assign({}, d, stamped)) };
 }
 
 /** Admin only. The file goes to the Drive trash (recoverable for 30 days). */

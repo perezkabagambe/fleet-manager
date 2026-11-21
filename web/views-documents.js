@@ -52,6 +52,37 @@
         }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
       });
       var actions = [view];
+      // Edit: rename it, change its type or its note (anyone signed in). Remove stays with admins.
+      var editBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Edit' });
+      var formBox = el('div', { class: 'doc-formbox' });
+      actions.push(editBtn);
+      editBtn.addEventListener('click', function () {
+        var types = TYPES.indexOf(d.type) === -1 ? [d.type].concat(TYPES) : TYPES; // an older document keeps its old type in the list
+        var nameIn = el('input', { type: 'text', maxlength: '100', autocomplete: 'off', value: d.filename });
+        var typeIn = el('select', {}, types.map(function (t) { return el('option', { value: t, text: t, selected: t === d.type }); }));
+        var noteField = el('input', { type: 'text', maxlength: '200', autocomplete: 'off', value: d.note || '', placeholder: 'Optional note, e.g. valid to March 2027' });
+        var save = el('button', { type: 'submit', class: 'btn small', text: 'Save' });
+        var cancel = el('button', { type: 'button', class: 'btn small secondary', text: 'Cancel' });
+        var errBox = el('div');
+        var form = el('form', { class: 'stack doc-edit', novalidate: true }, [
+          UI.field('Name', nameIn, 'The file keeps its ID (' + (d.ref || 'none') + ') and folder in an export.'),
+          UI.field('Type', typeIn),
+          UI.field('Note', noteField),
+          errBox,
+          el('div', { class: 'btn-row' }, [save, cancel]),
+        ]);
+        cancel.addEventListener('click', function () { formBox.replaceChildren(); editBtn.hidden = false; });
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          errBox.replaceChildren();
+          UI.busy(save, 'Saving…', FleetApi.call('updateCarDocument', { id: d.id, version: d.version, filename: nameIn.value, type: typeIn.value, note: noteField.value }))
+            .then(function () { msg.replaceChildren(UI.notice('ok', 'Saved.')); return load(); })
+            .catch(function (e) { errBox.replaceChildren(UI.notice('error', UI.errorText(e))); });
+        });
+        editBtn.hidden = true;
+        formBox.replaceChildren(form);
+        nameIn.focus();
+      });
       if (FleetAuth.isAdmin()) {
         var rm = el('button', { type: 'button', class: 'btn small danger', text: 'Remove' });
         rm.addEventListener('click', function () {
@@ -70,7 +101,7 @@
           el('div', { class: 'muted small-text', text: d.filename + ' · ' + kb(d.size) + (d.createdAt ? ' · added ' + fmt.date(d.createdAt) : '') }),
           d.note ? el('div', { class: 'muted small-text', text: d.note }) : null,
         ]),
-        el('div', { class: 'btn-row' }, actions), holder,
+        el('div', { class: 'btn-row' }, actions), formBox, holder,
       ]);
     }
 

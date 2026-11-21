@@ -144,3 +144,78 @@ test('guests can never reach car documents', () => {
   const page = env.call('guestInfo', { carId: car.id, secret: 'x' });
   assert.equal(JSON.stringify(page).includes('policy.pdf'), false);
 });
+
+// ---------- editing ----------
+
+test('anyone signed in can rename a document, change its type and edit its note; its ID and file stay', () => {
+  const { env, admin, sam, car, up, list } = setup();
+  const d = up({ type: 'Other', note: 'old note', filename: 'policy.pdf' }).data.document;
+  const r = env.call('updateCarDocument', { token: sam, id: d.id, version: d.version, filename: 'Logbook 2024', type: 'Logbook', note: 'V5C, valid to 2027' });
+  assert.equal(r.ok, true);
+  assert.deepEqual([r.data.document.filename, r.data.document.type, r.data.document.note, r.data.document.ref], ['Logbook 2024.pdf', 'Logbook', 'V5C, valid to 2027', d.ref], 'a PDF stays a .pdf; the ID is unchanged');
+  assert.equal(r.data.document.version, d.version + 1);
+  const got = list().data.documents[0];
+  assert.deepEqual([got.id, got.filename, got.type, got.note, got.ref, got.size], [d.id, 'Logbook 2024.pdf', 'Logbook', 'V5C, valid to 2027', d.ref, d.size]);
+  assert.equal(env.call('getCarDocument', { token: sam, id: d.id }).data.data, pdf(2000), 'the stored file is untouched');
+  assert.equal(env.call('getCarDocument', { token: sam, id: d.id }).data.filename, 'Logbook 2024.pdf', 'and downloads under its new name');
+  assert.ok(admin && car);
+});
+
+test('only what is sent changes; clearing the note works; nothing sent changes nothing', () => {
+  const { env, sam, up, list } = setup();
+  const d = up({ type: 'Logbook', note: 'keep me' }).data.document;
+  const a = env.call('updateCarDocument', { token: sam, id: d.id, note: '' }).data.document;
+  assert.deepEqual([a.note, a.type, a.filename], ['', 'Logbook', 'policy.pdf']);
+  const v = list().data.documents[0].version;
+  const same = env.call('updateCarDocument', { token: sam, id: d.id, type: 'Logbook', note: '', filename: 'policy.pdf' }).data.document;
+  assert.equal(same.version, v, 'no change, no new version');
+});
+
+test('a photo keeps its .jpg, a PDF its .pdf, and a program file name is refused', () => {
+  const { env, sam, up } = setup();
+  const pdfDoc = up().data.document;
+  assert.equal(env.call('updateCarDocument', { token: sam, id: pdfDoc.id, filename: 'scan.jpg' }).data.document.filename, 'scan.pdf', 'a PDF cannot be renamed into a photo');
+  const photo = up({ mime: 'image/jpeg', data: jpeg(2000), filename: 'front.jpg' }).data.document;
+  assert.equal(env.call('updateCarDocument', { token: sam, id: photo.id, filename: 'Front of car.PDF' }).data.document.filename, 'Front of car.jpg');
+  assert.equal(env.call('updateCarDocument', { token: sam, id: photo.id, filename: 'x/y\\z:?.jpg' }).data.document.filename, 'x_y_z__.jpg', 'unsafe characters are replaced');
+  const other = up({ mime: 'application/octet-stream', data: Buffer.from('hello').toString('base64'), filename: 'sheet.xlsx' }).data.document;
+  assert.equal(env.call('updateCarDocument', { token: sam, id: other.id, filename: 'run.exe' }).error, 'file_type_not_allowed');
+  assert.equal(env.call('updateCarDocument', { token: sam, id: other.id, filename: 'Costs.xlsx' }).data.document.filename, 'Costs.xlsx');
+});
+
+test('bad input is refused: empty name, unknown type, wrong version, missing or removed document, no session', () => {
+  const { env, admin, sam, up } = setup();
+  const d = up().data.document;
+  assert.equal(env.call('updateCarDocument', { token: sam, id: d.id, filename: '   ' }).error, 'filename_required');
+  assert.equal(env.call('updateCarDocument', { token: sam, id: d.id, type: 'Receipt/invoice' }).error, 'invalid_document_type', 'a type that is no longer offered cannot be newly chosen');
+  assert.equal(env.call('updateCarDocument', { token: sam, id: d.id, type: '' }).error, 'invalid_document_type');
+  assert.equal(env.call('updateCarDocument', { token: sam, id: d.id, version: d.version + 5, note: 'x' }).error, 'conflict');
+  assert.equal(env.call('updateCarDocument', { token: sam, id: 'nope', note: 'x' }).error, 'not_found');
+  assert.equal(env.call('updateCarDocument', { id: d.id, note: 'x' }).error, 'unauthorized');
+  env.call('deleteCarDocument', { token: admin, id: d.id });
+  assert.equal(env.call('updateCarDocument', { token: sam, id: d.id, note: 'x' }).error, 'not_found');
+});
+
+test('a document saved with an older type keeps it when only its note is edited, and can still be re-saved with it', () => {
+  const { env, sam, car, up } = setup();
+  const d = up().data.document;
+  const col = env.sheets.CarDocuments._rows[0].indexOf('doc_type');
+  env.sheets.CarDocuments._rows.find((r) => r[0] === d.id)[col] = 'Insurance'; // saved before the list was shortened
+  env.invalidate();
+  const r = env.call('updateCarDocument', { token: sam, id: d.id, type: 'Insurance', note: 'renews in May' });
+  assert.equal(r.ok, true);
+  assert.deepEqual([r.data.document.type, r.data.document.note], ['Insurance', 'renews in May']);
+  assert.equal(env.call('updateCarDocument', { token: sam, id: d.id, type: 'Logbook' }).data.document.type, 'Logbook', 'it can move to a current type');
+  assert.ok(car);
+});
+
+test('editing is audited and moves the car\'s revision so phones refresh', () => {
+  const { env, sam, car, up } = setup();
+  const d = up().data.document;
+  const before = env.call('getChanges', { token: sam }).data.cars[car.id];
+  env.call('updateCarDocument', { token: sam, id: d.id, note: 'new note' });
+  assert.notEqual(env.call('getChanges', { token: sam }).data.cars[car.id], before);
+  const audit = env.sheets.Audit._rows.filter((r) => r.includes('document_edited'));
+  assert.equal(audit.length, 1);
+  assert.ok(audit[0].join(' ').includes(d.ref) && audit[0].join(' ').includes('new note'));
+});

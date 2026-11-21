@@ -81,6 +81,7 @@ function actions_() {
     listCarDocuments: { auth: 'user', fn: listCarDocuments_ },
     uploadCarDocument: { auth: 'user', lock: true, fn: uploadCarDocument_ },
     getCarDocument: { auth: 'user', fn: getCarDocument_ },
+    updateCarDocument: { auth: 'user', lock: true, fn: updateCarDocument_ },
     deleteCarDocument: { auth: 'admin', lock: true, fn: deleteCarDocument_ },
     getUserCars: { auth: 'user', fn: getUserCars_ },
     saveUserCars: { auth: 'user', lock: true, fn: saveUserCars_ },
