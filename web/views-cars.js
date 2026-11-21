@@ -133,7 +133,7 @@
     ]));
 
     function card(c, mine) {
-      return el('a', { class: 'car-card', href: '#/car/' + c.id }, [
+      var link = el('a', { class: 'car-card', href: '#/car/' + c.id }, [
         photo(c),
         el('div', { class: 'car-card-body' }, [
           el('div', { class: 'reg', text: c.registration }),
@@ -144,6 +144,11 @@
           ]),
           mine && mine.owner ? el('div', { class: 'mine' }, [el('span', { class: 'chip sold', text: 'Yours' })]) : null,
         ]),
+      ]);
+      // the share symbol sits on the car's picture (beside the link, not inside it, so tapping it never opens the car)
+      return el('div', { class: 'car-card-wrap' }, [
+        link,
+        UI.shareButton(carUrl(c.id), { title: c.registration + ' · ' + carTitle(c), aria: 'Share ' + c.registration }),
       ]);
     }
 
