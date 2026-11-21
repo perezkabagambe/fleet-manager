@@ -325,6 +325,8 @@
       row('Email timer', !h.mail.timerOn ? 'NOT SET UP (run setupReceiptEmail in the Apps Script editor)' : mailAge === null ? 'on, but has not run yet'
         : mailAge > 15 ? 'on, but last ran ' + ago(h.mail.lastRun) + ' (it should run every 5 minutes)' : 'on, last ran ' + ago(h.mail.lastRun),
         h.mail.timerOn && mailAge !== null && mailAge <= 15 ? 'ok' : 'bad');
+      row('Timers in this project', (h.mail.timers || []).map(function (t) { return t.handler + (t.count > 1 ? ' ×' + t.count : ''); }).join(', ') || 'none', (h.mail.timers || []).some(function (t) { return t.handler === 'processReceiptEmails' && t.count === 1; }) ? '' : 'bad');
+      if (h.mail.timerMade) row('Timer re-created', ago(h.mail.timerMade));
       row('Last timer run', h.mail.lastResult || 'nothing recorded yet', /^error/.test(h.mail.lastResult) ? 'bad' : '');
       row('Receipt mailbox', h.mail.mailbox);
       row('Gemini key', h.reading.keyOn ? 'set (' + h.reading.model + ')' : 'MISSING: add GEMINI_API_KEY in the Apps Script project settings', h.reading.keyOn ? 'ok' : 'bad');
@@ -362,6 +364,15 @@
         return load();
       })).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
     });
+    var reset = el('button', { type: 'button', class: 'btn small secondary', text: 'Re-create the timer' });
+    reset.addEventListener('click', function () {
+      UI.confirm('Throw away the receipt email timer and make a new one that runs every 5 minutes?', { okLabel: 'Re-create it' }).then(function (yes) {
+        if (!yes) return;
+        msg.replaceChildren();
+        UI.busy(reset, 'Working…', FleetApi.call('resetReceiptTimer').then(function () { msg.replaceChildren(UI.notice('ok', 'A new timer was made. It should run within 5 minutes; this page shows when it does.')); return load(); }))
+          .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+      });
+    });
     var inspect = el('button', { type: 'button', class: 'btn small secondary', text: 'Show how recent emails were handled' });
     inspect.addEventListener('click', function () {
       msg.replaceChildren();
@@ -378,7 +389,7 @@
       el('h2', { text: 'Receipts' }),
       el('p', { class: 'muted small-text', text: 'Is everything behind emailed and photographed receipts working? This refreshes every 30 seconds.' }),
       msg, list,
-      el('div', { class: 'btn-row' }, [now, inspect, refresh]),
+      el('div', { class: 'btn-row' }, [now, inspect, reset, refresh]),
       report,
       el('h3', { text: 'Latest receipts' }), recent,
     ]);

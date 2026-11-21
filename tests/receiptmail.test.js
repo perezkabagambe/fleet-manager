@@ -376,3 +376,17 @@ test('a PNG receipt is read as a PNG and attached as an ordinary file when appro
   assert.equal(att.mime, 'application/octet-stream');
   assert.equal(att.filename, 'shot.png');
 });
+
+test('an admin can re-create the receipt timer; it ends up as exactly one, and Diagnostics lists the timers', () => {
+  const { env, admin, sam } = setup();
+  assert.equal(env.call('resetReceiptTimer', { token: sam }).error, 'forbidden');
+  vm.runInContext('setupReceiptEmail()', env.ctx);
+  vm.runInContext('ensureTrigger_("flushTextLog", 10)', env.ctx);
+  env.triggers.push({ fn: 'processReceiptEmails' }); // a stray duplicate
+  const r = env.call('resetReceiptTimer', { token: admin }).data;
+  assert.equal(JSON.stringify(r.timers.filter((t) => t.handler === 'processReceiptEmails')), JSON.stringify([{ handler: 'processReceiptEmails', count: 1 }]));
+  assert.ok(r.timers.some((t) => t.handler === 'flushTextLog')); // other timers are left alone
+  const h = env.call('getReceiptHealth', { token: admin }).data;
+  assert.notEqual(h.mail.timerMade, '');
+  assert.equal(h.mail.timerOn, true);
+});

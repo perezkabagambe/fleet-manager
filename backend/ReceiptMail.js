@@ -74,6 +74,22 @@ function replaceReceiptSecret_(p, ctx) {
   return receiptAddresses_(car, secret);
 }
 
+/** The timers this project has, as { handler, count } (shown on the Diagnostics page). */
+function receiptTimerList_() {
+  const counts = {};
+  try { ScriptApp.getProjectTriggers().forEach(function (t) { const h = t.getHandlerFunction(); counts[h] = (counts[h] || 0) + 1; }); } catch (e) { return []; }
+  return Object.keys(counts).sort().map(function (h) { return { handler: h, count: counts[h] }; });
+}
+
+/** Admin only: throw away the receipt timer (or timers) and make a fresh one that runs every 5 minutes. */
+function resetReceiptTimer_(p, ctx) {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'processReceiptEmails') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('processReceiptEmails').timeBased().everyMinutes(5).create();
+  props_().setProperty('RECEIPT_MAIL_TIMER_MADE', nowIso_());
+  audit_(ctx.user, 'receipt_timer_reset', 'Inbox', '', 'The receipt email timer was re-created');
+  return { timers: receiptTimerList_() };
+}
+
 /** Has the timer been set up (see setupReceiptEmail)? */
 function receiptMailOn_() {
   try { return ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'processReceiptEmails'; }); } catch (e) { return false; }
@@ -351,7 +367,7 @@ function getReceiptHealth_(p, ctx) {
   return {
     now: nowIso_(),
     mail: {
-      timerOn: receiptMailOn_(), lastRun: props.getProperty('RECEIPT_MAIL_LAST') || '', lastResult: props.getProperty('RECEIPT_MAIL_RESULT') || '', mailbox: receiptMailbox_(),
+      timerOn: receiptMailOn_(), timers: receiptTimerList_(), timerMade: props.getProperty('RECEIPT_MAIL_TIMER_MADE') || '', lastRun: props.getProperty('RECEIPT_MAIL_LAST') || '', lastResult: props.getProperty('RECEIPT_MAIL_RESULT') || '', mailbox: receiptMailbox_(),
     },
     reading: {
       keyOn: !!geminiKey_(), model: geminiModel_(), usedToday: aiUsed_('rc_app'), appLimit: receiptLimit_('RECEIPT_APP_DAILY', RECEIPT_APP_DAILY), userLimit: receiptLimit_('RECEIPT_USER_DAILY', RECEIPT_USER_DAILY),

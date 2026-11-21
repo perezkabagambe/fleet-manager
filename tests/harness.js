@@ -150,7 +150,8 @@ function createEnv() {
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     ScriptApp: {
       WeekDay: { MONDAY: 'MONDAY' },
-      getProjectTriggers: () => triggers.map((t) => ({ getHandlerFunction: () => t.fn })),
+      getProjectTriggers: () => triggers.map((t) => ({ getHandlerFunction: () => t.fn, _t: t })),
+      deleteTrigger: (o) => { const i = triggers.indexOf(o._t); if (i >= 0) triggers.splice(i, 1); },
       newTrigger: (fn) => {
         const t = { fn };
         const chain = {
