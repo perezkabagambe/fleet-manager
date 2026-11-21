@@ -1,25 +1,24 @@
 /**
- * "Fill in the rest with AI" for a new car.
+ * "Fill in the rest with AI" for a car, and "Refresh specs with AI".
  *
- * Given a registration number and a VIN, asks Anthropic's Claude (with its web search tool, so it looks the car up
- * rather than only remembering) for the car's details, its standard fluids and its bulbs. Nothing is saved here:
- * the answer goes back to the Add car form, which fills only the empty boxes, so the person checks it before saving.
+ * Asks Google's Gemini (with Google Search, so it looks the car up rather than only remembering) for a car's details,
+ * its standard fluids and its bulbs. Nothing is saved here: the answer goes back to the form, which shows it, so the
+ * person checks it before keeping anything.
  *
- * AI answers are not always right. Everything this returns is marked as an AI suggestion so it is never mistaken for
- * a checked fact. The key lives in the Script Property ANTHROPIC_API_KEY and is never sent to the phone.
- * Optional Script Properties: AI_MODEL (default claude-opus-5-5), AI_USER_DAILY and AI_APP_DAILY (limits).
+ * What is used, in order: the VIN when there is one (it identifies the exact car and decodes to its build); otherwise the
+ * make, model, year and whatever else was typed (registration, engine code, market...), and then the AI first offers a few
+ * likely matches (aiFindCar) for the person to pick from before it fills in the specs.
+ *
+ * AI answers are not always right. Everything this returns is marked as an AI suggestion so it is never mistaken for a
+ * checked fact. It uses the same key as the receipt reader (Script Property GEMINI_API_KEY). Optional Script Properties:
+ * GEMINI_CAR_MODEL (a different model for car lookups), AI_USER_DAILY and AI_APP_DAILY (limits).
  */
 
-const AI_ENDPOINT = 'https://api.anthropic.com/v1/messages';
-const AI_API_VERSION = '2026-10-21';
-const AI_DEFAULT_MODEL = 'claude-opus-5-5';
 const AI_USER_DAILY = 10;   // lookups per person per day
-const AI_APP_DAILY = 100;   // lookups for everyone together per day (keeps the cost predictable)
-const AI_MAX_SEARCHES = 3;  // web searches per lookup
-const AI_BUDGET_MS = 45000; // Apps Script gives one outside request about a minute: do not start another after this
-const AI_MAX_CONTINUES = 2; // how often a paused lookup is resumed
+const AI_APP_DAILY = 100;   // lookups for everyone together per day (keeps the free allowance safe)
+const AI_MAX_CANDIDATES = 3;
 const AI_MARK = 'AI suggestion: check before relying on it.';
-const AI_SOURCE = 'AI suggestion (Claude with web search), not verified';
+const AI_SOURCE = 'AI suggestion (Gemini with Google Search), not verified';
 
 // The names the app uses (they must match the standard lists in web/views-cars.js).
 const AI_FLUID_NAMES = ['Engine oil', 'Gearbox oil / ATF', 'Front differential oil', 'Rear differential oil', 'Transfer case oil',
@@ -27,9 +26,8 @@ const AI_FLUID_NAMES = ['Engine oil', 'Gearbox oil / ATF', 'Front differential o
 const AI_BULB_NAMES = ['Dipped beam', 'Full beam', 'Front side light', 'Front indicator', 'Rear indicator', 'Front fog', 'Rear fog',
   'Front daytime running', 'Rear light', 'Rear brake light', 'Rear reverse light'];
 
-function aiKey_() {
-  return String(props_().getProperty('ANTHROPIC_API_KEY') || '').trim();
-}
+function aiKey_() { return geminiKey_(); }
+function aiModel_() { return String(props_().getProperty('GEMINI_CAR_MODEL') || '').trim() || geminiModel_(); }
 
 function aiLimit_(propName, fallback) {
   const n = Number(props_().getProperty(propName));
@@ -88,12 +86,45 @@ function aiStatus_(p, ctx) {
   return { available: !!aiKey_(), limit: limit, remaining: Math.max(0, limit - aiUsed_(aiUserName_(ctx))) };
 }
 
-// ---------- the question ----------
+// ---------- what the person has told us ----------
+
+/** The car as known so far, from a request or a saved car, cleaned. */
+function aiKnown_(src) {
+  const known = {
+    registration: cleanStr_(src.registration, 20).toUpperCase(),
+    vin: cleanStr_(src.vin, 30).toUpperCase().replace(/\s+/g, ''),
+    country: src.country === 'UG' ? 'UG' : 'UK',
+    make: cleanStr_(src.make, 40), model: cleanStr_(src.model, 40), year: cleanStr_(src.year, 4),
+    colour: cleanStr_(src.colour, 30), engineCode: cleanStr_(src.engineCode, 30), gearboxCode: cleanStr_(src.gearboxCode, 30),
+    market: cleanStr_(src.market, 30), driveSide: cleanStr_(src.driveSide, 4).toUpperCase(), fuelCapacity: cleanStr_(src.fuelCapacity, 8),
+  };
+  if (known.vin && !/^[A-Z0-9-]{5,25}$/.test(known.vin)) fail_('invalid_vin');
+  return known;
+}
+
+/** Enough to look a car up: a VIN, or at least the make and the model. */
+function aiNeedEnough_(known) {
+  if (!known.vin && !(known.make && known.model)) fail_('ai_need_more');
+}
+
+function aiKnownLines_(known) {
+  const lines = [];
+  if (known.vin) lines.push('VIN: ' + known.vin + '  (the most reliable thing we know: it identifies this exact car)');
+  if (known.registration) lines.push('Registration number: ' + known.registration);
+  lines.push('The car is kept in: ' + (known.country === 'UG' ? 'Uganda' : 'the United Kingdom'));
+  const typed = [['make', known.make], ['model', known.model], ['year', known.year], ['colour', known.colour], ['engine code', known.engineCode],
+    ['gearbox code', known.gearboxCode], ['market', known.market], ['drive side', known.driveSide], ['fuel tank (litres)', known.fuelCapacity]]
+    .filter(function (x) { return x[1]; });
+  if (typed.length) lines.push('The person has already typed: ' + typed.map(function (x) { return x[0] + ' ' + x[1]; }).join(', ') + (known.vin ? ' (if any of this disagrees with what the VIN decodes to, trust the VIN and say so in the summary)' : ' (trust these)') + '.');
+  return lines;
+}
+
+// ---------- the questions ----------
 
 function aiSystemPrompt_() {
   return [
-    'You research vehicles for a small fleet-records app. You are given a registration number and a VIN and you look the vehicle up',
-    '(use web search: search for the VIN, the registration and the model and year) to fill in its record.',
+    'You research vehicles for a small fleet-records app. You look a vehicle up (use Google Search: search for the VIN, the registration and the make, model and year)',
+    'to fill in its record. A VIN, when given, decodes to the exact vehicle, so it comes before everything else.',
     'Be accurate rather than complete. Fill a field only if you are reasonably sure it is right for this exact vehicle;',
     'otherwise leave it as an empty string or leave the item out. A wrong value is worse than a blank one.',
     'Never invent a colour: only give one if a source states it for this specific vehicle.',
@@ -101,29 +132,24 @@ function aiSystemPrompt_() {
   ].join(' ');
 }
 
-function aiUserPrompt_(input) {
-  const lines = [
-    'Registration number: ' + input.registration,
-    'VIN: ' + input.vin,
-    'The car is kept in: ' + (input.country === 'UG' ? 'Uganda' : 'the United Kingdom'),
-  ];
-  const typed = [];
-  if (input.make) typed.push('make ' + input.make);
-  if (input.model) typed.push('model ' + input.model);
-  if (input.year) typed.push('year ' + input.year);
-  if (typed.length) lines.push('The person has already typed: ' + typed.join(', ') + ' (trust these).');
+const AI_DETAILS_JSON = [
+  '    "make": "", "model": "", "year": "",  // year as 4 digits',
+  '    "colour": "",',
+  '    "engineCode": "",  // the manufacturer engine code, e.g. D4HB',
+  '    "gearboxCode": "", // the transmission code if known',
+  '    "market": "",      // exactly one of: ' + MARKETS.join(' | ') + ' (where it was built and sold for)',
+  '    "driveSide": "",   // LHD or RHD',
+  '    "fuelCapacity": "" // fuel tank size in litres, a number',
+].join('\n');
+
+function aiFillPrompt_(known) {
+  const lines = aiKnownLines_(known);
   lines.push(
     '',
     'Return this JSON object (every key present; use "" or [] when unknown):',
     '{',
     '  "details": {',
-    '    "make": "", "model": "", "year": "",  // year as 4 digits',
-    '    "colour": "",',
-    '    "engineCode": "",  // the manufacturer engine code, e.g. D4HB',
-    '    "gearboxCode": "", // the transmission code if known',
-    '    "market": "",      // exactly one of: ' + MARKETS.join(' | ') + ' (where it was built and sold for)',
-    '    "driveSide": "",   // LHD or RHD',
-    '    "fuelCapacity": "" // fuel tank size in litres, a number',
+    AI_DETAILS_JSON,
     '  },',
     '  "fluids": [  // only from these names: ' + AI_FLUID_NAMES.join(', '),
     '    { "fluid": "Engine oil", "specification": "e.g. 5W-30 ACEA C3", "capacity": "e.g. 6.7 L", "notes": "" }',
@@ -139,66 +165,65 @@ function aiUserPrompt_(input) {
   return lines.join('\n');
 }
 
-function aiRequestBody_(input) {
-  const model = String(props_().getProperty('AI_MODEL') || AI_DEFAULT_MODEL).trim() || AI_DEFAULT_MODEL;
+function aiFindPrompt_(known) {
+  const lines = aiKnownLines_(known);
+  lines.push(
+    '',
+    'There is no VIN, so the exact car is not certain. List the ' + AI_MAX_CANDIDATES + ' or fewer most likely versions this could be (differing in engine, market, generation or fuel type),',
+    'most likely first. Give one only if it is clearly the only sensible match. Return this JSON object:',
+    '{',
+    '  "candidates": [',
+    '    {',
+    '      "label": "short, e.g. 2013 Kia Sorento 2.2 CRDi (D4HB), European market",',
+    '      "why": "one short sentence on what distinguishes this version",',
+    '      "confidence": "high, medium or low",',
+    '      "details": {',
+    AI_DETAILS_JSON,
+    '      }',
+    '    }',
+    '  ]',
+    '}'
+  );
+  return lines.join('\n');
+}
+
+// ---------- talking to Gemini ----------
+
+/** Ask, with Google Search; if the request is refused for using search, ask again without it. Returns { text, sources }. */
+function aiAsk_(prompt) {
   const body = {
-    model: model,
-    max_tokens: 4000,
-    system: aiSystemPrompt_(),
-    messages: [{ role: 'user', content: aiUserPrompt_(input) }],
-    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: AI_MAX_SEARCHES }],
+    systemInstruction: { parts: [{ text: aiSystemPrompt_() }] },
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    tools: [{ google_search: {} }],
+    generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
   };
-  // A quick, light lookup suits this job (and Apps Script waits about a minute at most for the answer).
-  if (/^claude-(opus|sonnet|haiku|fable|mythos)-5/.test(model)) body.output_config = { effort: 'low' };
-  return body;
-}
-
-// ---------- talking to Claude ----------
-
-/** One request. Returns the parsed response, or throws an API error code. */
-function aiPost_(body) {
-  let res;
+  let json;
   try {
-    res = UrlFetchApp.fetch(AI_ENDPOINT, {
-      method: 'post',
-      contentType: 'application/json',
-      headers: { 'x-api-key': aiKey_(), 'anthropic-version': AI_API_VERSION },
-      payload: JSON.stringify(body),
-      muteHttpExceptions: true,
-    });
+    json = geminiCall_(body, aiModel_());
   } catch (e) {
-    fail_('ai_unavailable'); // no answer in time, or the service could not be reached
+    if (!(e && e.apiError === 'ai_bad_request')) throw e;
+    delete body.tools; // searching was refused: answer from what the model knows (still marked as unverified)
+    try { json = geminiCall_(body, aiModel_()); } catch (e2) { if (e2 && e2.apiError === 'ai_bad_request') fail_('ai_unavailable'); throw e2; }
   }
-  const code = res.getResponseCode();
-  let json = null;
-  try { json = JSON.parse(res.getContentText()); } catch (e) { json = null; }
-  if (code === 401 || code === 403) fail_('ai_not_set_up');
-  if (code === 429 || code === 529) fail_('ai_busy');
-  if (code === 400 && json && json.error && /web search/i.test(String(json.error.message || ''))) fail_('ai_search_disabled');
-  if (code >= 400 || !json) fail_('ai_unavailable');
-  return json;
+  const text = geminiText_(json);
+  if (!text) fail_('ai_bad_answer');
+  return { text: text, sources: aiSources_(json) };
 }
 
-/** Ask, and if the lookup was paused part-way, resume it (within the time we have). */
-function aiAsk_(input) {
-  const started = Date.now();
-  const body = aiRequestBody_(input);
-  let response = aiPost_(body);
-  for (let i = 0; i < AI_MAX_CONTINUES && response.stop_reason === 'pause_turn' && Date.now() - started < AI_BUDGET_MS; i++) {
-    // resume by sending the paused answer back unchanged; the server carries on where it stopped
-    body.messages = [body.messages[0], { role: 'assistant', content: response.content }];
-    response = aiPost_(body);
-  }
-  if (response.stop_reason === 'pause_turn' || response.stop_reason === 'max_tokens' || response.stop_reason === 'refusal') fail_('ai_bad_answer');
-  return response;
+/** Web pages the answer was based on: { url, title }, https only, at most five. */
+function aiSources_(json) {
+  const cand = json.candidates && json.candidates[0];
+  const chunks = (cand && cand.groundingMetadata && cand.groundingMetadata.groundingChunks) || [];
+  const seen = {};
+  const out = [];
+  chunks.forEach(function (c) {
+    const web = c && c.web;
+    if (web && web.uri && /^https:\/\//i.test(web.uri) && !seen[web.uri] && out.length < 5) { seen[web.uri] = true; out.push({ url: web.uri, title: cleanStr_(web.title, 60) }); }
+  });
+  return out;
 }
 
 // ---------- reading the answer ----------
-
-/** The answer's text: every text block, joined. (Search results and citations are other kinds of block.) */
-function aiText_(response) {
-  return (response.content || []).filter(function (b) { return b && b.type === 'text'; }).map(function (b) { return b.text || ''; }).join('\n');
-}
 
 /** The biggest JSON object in the text, or null. Tolerates words before or after it and a markdown fence. */
 function aiExtractJson_(text) {
@@ -211,19 +236,6 @@ function aiExtractJson_(text) {
     } catch (e) { /* try from the next brace */ }
   }
   return null;
-}
-
-/** Web addresses the answer used, for "where did this come from". Only https links, at most five. */
-function aiSources_(response) {
-  const seen = {};
-  const out = [];
-  (response.content || []).forEach(function (b) {
-    (b && b.citations || []).forEach(function (c) {
-      const url = c && c.url;
-      if (url && /^https:\/\//i.test(url) && !seen[url] && out.length < 5) { seen[url] = true; out.push(url); }
-    });
-  });
-  return out;
 }
 
 function aiNote_(note) {
@@ -275,37 +287,75 @@ function aiClean_(raw) {
   return { details: details, fluids: fluids, bulbs: bulbs, summary: cleanStr_(raw && raw.summary, 300), confidence: confidence };
 }
 
-// ---------- the action ----------
+/** The candidate versions from a no-VIN search, cleaned. */
+function aiCleanCandidates_(raw) {
+  const list = Array.isArray(raw && raw.candidates) ? raw.candidates : [];
+  const candidates = [];
+  list.slice(0, AI_MAX_CANDIDATES).forEach(function (c) {
+    const cleaned = aiClean_({ details: c && c.details });
+    const d = cleaned.details;
+    if (!d.make || !d.model) return;
+    const label = cleanStr_(c.label, 120) || [d.year, d.make, d.model, d.engineCode].filter(Boolean).join(' ');
+    const confidence = /^(high|medium|low)$/i.test(String(c.confidence)) ? String(c.confidence).toLowerCase() : 'low';
+    candidates.push({ label: label, why: cleanStr_(c.why, 200), confidence: confidence, details: d });
+  });
+  return { candidates: candidates };
+}
 
-function aiFillCar_(p, ctx) {
+// ---------- the actions ----------
+
+/** The shared steps of a lookup: check there is a key and enough to go on, take an allowance, ask, read, and give back the allowance if it failed. */
+function aiRun_(ctx, known, prompt, shape, auditText) {
   if (!aiKey_()) fail_('ai_not_set_up');
-  const registration = cleanStr_(p.registration, 20).toUpperCase();
-  const vin = cleanStr_(p.vin, 30).toUpperCase().replace(/\s+/g, '');
-  if (!registration) fail_('registration_required');
-  if (!vin) fail_('ai_need_vin');
-  if (!/^[A-Z0-9-]{5,25}$/.test(vin)) fail_('invalid_vin');
-  const input = {
-    registration: registration, vin: vin, country: p.country === 'UG' ? 'UG' : 'UK',
-    make: cleanStr_(p.make, 40), model: cleanStr_(p.model, 40), year: cleanStr_(p.year, 4),
-  };
-
+  aiNeedEnough_(known);
   const refused = aiTake_(ctx);
   if (refused) fail_(refused);
-  let response;
+  let asked;
+  let raw;
   try {
-    response = aiAsk_(input);
+    asked = aiAsk_(prompt);
+    raw = aiExtractJson_(asked.text);
+    if (!raw) fail_('ai_bad_answer');
   } catch (e) {
     aiRefund_(ctx); // a lookup that did not work does not use up the allowance
     throw e;
   }
-  const raw = aiExtractJson_(aiText_(response));
-  if (!raw) {
-    aiRefund_(ctx);
-    fail_('ai_bad_answer');
-  }
-  const out = aiClean_(raw);
-  out.sources = aiSources_(response);
+  const out = shape(raw);
+  out.sources = asked.sources;
+  out.usedVin = !!known.vin;
   out.remaining = Math.max(0, aiLimit_('AI_USER_DAILY', AI_USER_DAILY) - aiUsed_(aiUserName_(ctx)));
-  audit_(ctx.user, 'ai_lookup', 'Car', '', 'AI lookup for ' + registration + ' (' + out.confidence + ' confidence, ' + out.fluids.length + ' fluids, ' + out.bulbs.length + ' bulbs)');
+  audit_(ctx.user, 'ai_lookup', 'Car', '', auditText(out));
+  return out;
+}
+
+/** The car's details, fluids and bulbs, from a VIN or (when the person has settled on one version) the make, model and year. */
+function aiFillCar_(p, ctx) {
+  const known = aiKnown_(p);
+  return aiRun_(ctx, known, aiFillPrompt_(known), aiClean_, function (out) {
+    return 'AI lookup for ' + (known.registration || known.vin || known.make + ' ' + known.model) + ' (' + (known.vin ? 'by VIN' : 'by make and model') + ', ' + out.confidence + ' confidence, ' + out.fluids.length + ' fluids, ' + out.bulbs.length + ' bulbs)';
+  });
+}
+
+/** No VIN: a few likely versions of the car for the person to choose from. */
+function aiFindCar_(p, ctx) {
+  const known = aiKnown_(p);
+  known.vin = ''; // this step is only for cars without one
+  return aiRun_(ctx, known, aiFindPrompt_(known), aiCleanCandidates_, function (out) {
+    return 'AI search for ' + (known.registration || known.make + ' ' + known.model) + ': ' + out.candidates.length + ' possible match' + (out.candidates.length === 1 ? '' : 'es');
+  });
+}
+
+/** Fresh suggestions for a saved car's fluids and bulbs, from what is known about it (its VIN first). Changes nothing. */
+function aiRefreshSpecs_(p, ctx) {
+  const car = findCar_(cleanStr_(p.carId, 64), false);
+  if (!car) fail_('not_found');
+  const known = aiKnown_({
+    registration: car.registration, vin: car.vin, country: car.country, make: car.make, model: car.model, year: car.year, colour: car.colour,
+    engineCode: car.engine_code, gearboxCode: car.gearbox_code, market: car.market, driveSide: car.drive_side, fuelCapacity: car.fuel_capacity,
+  });
+  const out = aiRun_(ctx, known, aiFillPrompt_(known), aiClean_, function (r) {
+    return 'AI specs refresh for ' + car.registration + ' (' + (known.vin ? 'by VIN' : 'by make and model') + ', ' + r.confidence + ' confidence, ' + r.fluids.length + ' fluids, ' + r.bulbs.length + ' bulbs)';
+  });
+  delete out.details; // a refresh is about the specs only: the car's own details are left alone
   return out;
 }

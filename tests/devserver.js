@@ -19,28 +19,28 @@ env.seedUser({ name: 'Sam', email: 'sam@example.com', role: 'user' });
 const tokens = { admin: env.signInAs('perez@example.com'), sam: env.signInAs('sam@example.com') };
 let persona = 'admin';
 
-// A pretend AI service, so the "Fill in the rest with AI" button can be tried locally (it takes 2 seconds, like a quick lookup)
-env.props.ANTHROPIC_API_KEY = 'sk-ant-local-test';
-env.state.anthropic = () => ({
-  code: 200,
-  body: {
-    stop_reason: 'end_turn',
-    content: [{ type: 'text', text: JSON.stringify({
-      details: { make: 'Kia', model: 'Sorento', year: '2013', colour: 'Black', engineCode: 'D4HB', gearboxCode: '', market: 'European', driveSide: 'RHD', fuelCapacity: '71' },
-      fluids: [{ fluid: 'Engine oil', specification: '5W-30 ACEA C3', capacity: '6.7 L', notes: '' }, { fluid: 'Brake fluid', specification: 'DOT 4', capacity: '', notes: '' }],
-      bulbs: [{ location: 'Dipped beam', type: 'Xenon D3S 35 W', quantity: '2', notes: 'Halogen versions use H7' }, { location: 'Full beam', type: 'Halogen H1 55 W', quantity: '2', notes: '' }],
-      summary: 'A 2013 Kia Sorento 2.2 CRDi (local test answer).', confidence: 'medium',
-    }), citations: [{ type: 'web_search_result_location', url: 'https://example.com/sorento', title: 'x', cited_text: 'x' }] }],
-  },
-});
-
 // A pretend Gemini, so the receipt Inbox can be tried locally. A file whose name contains "invoice" reads as a garage invoice.
 env.props.GEMINI_API_KEY = 'local-test';
+const FILL = {
+  details: { make: 'Kia', model: 'Sorento', year: '2013', colour: 'Black', engineCode: 'D4HB', gearboxCode: '', market: 'European', driveSide: 'RHD', fuelCapacity: '71' },
+  fluids: [{ fluid: 'Engine oil', specification: '5W-30 ACEA C3', capacity: '6.7 L', notes: '' }, { fluid: 'Brake fluid', specification: 'DOT 4', capacity: '', notes: '' }, { fluid: 'Coolant', specification: 'Long-life 50/50', capacity: '', notes: '' }],
+  bulbs: [{ location: 'Dipped beam', type: 'Xenon D3S 35 W', quantity: '2', notes: 'Halogen versions use H7' }, { location: 'Full beam', type: 'Halogen H1 55 W', quantity: '2', notes: '' }],
+  summary: 'A 2013 Kia Sorento 2.2 CRDi (local test answer).', confidence: 'medium',
+};
+const MATCHES = { candidates: [
+  { label: '2013 Kia Sorento 2.2 CRDi (D4HB), European', why: 'The common diesel', confidence: 'medium', details: FILL.details },
+  { label: '2013 Kia Sorento 2.4 petrol (G4KE), European', why: 'The petrol version', confidence: 'low', details: { make: 'Kia', model: 'Sorento', year: '2013', engineCode: 'G4KE', market: 'European', driveSide: 'RHD' } },
+] };
 env.state.gemini = (req) => {
+  const prompt = (req.body.contents[0].parts[0] || {}).text || '';
+  if (req.body.tools || /Return this JSON object/.test(prompt)) { // car lookups (with Google Search)
+    const answer = /There is no VIN/.test(prompt) ? MATCHES : FILL;
+    return { code: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify(answer) }] }, groundingMetadata: { groundingChunks: [{ web: { uri: 'https://example.com/sorento', title: 'example.com' } }] } }] } };
+  }
   const part = req.body.contents[0].parts.filter((x) => x.inline_data)[0];
   const garage = !!part && /invoice/i.test(Buffer.from(part.inline_data.data, 'base64').toString('latin1'));
   return { code: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify(garage
-    ? { documentType: 'garage_invoice', vendor: 'Kampala Motors', date: '2026-09-15', currency: 'UGX', total: 450000, workDescription: 'Full service and brake check', mileage: 51234, confidence: 'medium' }
+    ? { documentType: 'garage_invoice', title: 'Full service and brake check', vendor: 'Kampala Motors', date: '2026-09-15', currency: 'UGX', total: 450000, workDescription: 'Full service and brake check', mileage: 51234, confidence: 'medium' }
     : { documentType: 'parts_receipt', vendor: 'Euro Car Parts', date: '2026-10-02', currency: 'GBP', orderNumber: 'ECP-5521', total: 71.97, items: [{ name: 'Front brake pads', partNumber: 'BP123', quantity: 1, unitPrice: 41.99 }, { name: 'Oil filter', quantity: 2, lineTotal: 19.98 }, { name: 'Delivery', quantity: 1, unitPrice: 0 }], vehicleRegistration: 'AB12CDE', confidence: 'high', summary: 'Brake pads and oil filters (local test answer).' }) }] } }] } };
 };
 

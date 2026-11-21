@@ -16,7 +16,7 @@ const PARTS = {
   items: [{ name: 'Front brake pads', partNumber: 'BP123', quantity: 1, unitPrice: 41.99 }, { name: 'Oil filter', quantity: 2, lineTotal: 19.98 }, { name: 'Delivery', quantity: 1, unitPrice: 0 }],
   vehicleRegistration: 'ab12cde', confidence: 'high', summary: 'Brake pads and oil filters.',
 };
-const GARAGE = { documentType: 'garage_invoice', vendor: 'Kampala Motors', date: '2026-09-15', currency: 'UGX', total: 450000, workDescription: 'Full service', mileage: 51234, vehicleRegistration: '', confidence: 'medium' };
+const GARAGE = { documentType: 'garage_invoice', title: 'Full service', vendor: 'Kampala Motors', date: '2026-09-15', currency: 'UGX', total: 450000, workDescription: 'Full service', mileage: 51234, vehicleRegistration: '', confidence: 'medium' };
 
 const answer = (obj) => ({ code: 200, body: { candidates: [{ content: { parts: [{ text: typeof obj === 'string' ? obj : JSON.stringify(obj) }] } }] } });
 
@@ -77,6 +77,8 @@ test('a garage invoice is suggested as Maintenance, with no car when the registr
   assert.equal(r.kind, 'Maintenance');
   assert.equal(r.carId, '');
   assert.equal(r.data.mileage, 51234);
+  assert.equal(r.data.title, 'Full service'); // the entry's own title, without the garage's name
+  assert.match(env.state.geminiRequests[0].body.systemInstruction.parts[0].text, /Do not put the shop or garage name/);
   assert.equal(r.currency, 'UGX');
 });
 

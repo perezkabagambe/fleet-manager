@@ -615,3 +615,21 @@ dl.details dd.vin-line { white-space: nowrap; overflow: hidden; overflow-wrap: n
 .entry-line.is-editing .entry-main { flex: 1 1 6rem; }
 .entry-line.is-editing .entry-tags { order: 3; flex: 1 1 100%; max-width: 100%; justify-content: flex-start; margin-top: 4px; }
 .entry-line.is-editing .row-thumb { width: 40px; height: 40px; }
+
+/* entry page header: the title has the full width; the thumbnail sits below, larger */
+.entry-head h1 { margin: 0 0 4px; font-size: 1.45rem; line-height: 1.2; overflow-wrap: break-word; }
+.entry-sub { overflow-wrap: break-word; }
+.entry-head .head-tags { justify-content: flex-start; margin: 8px 0 0; max-width: none; }
+.entry-head .ref-line { flex-wrap: nowrap; }
+.ref-badge { white-space: nowrap; }
+.entry-head .top-thumb { margin-top: 12px; cursor: pointer; }
+.thumb-box.entry-thumb { width: 150px; height: 150px; }
+.entry-delete { text-align: center; margin: 4px 0 24px; }
+.entry-delete .btn { min-height: 36px; padding: 4px 14px; font-size: 0.85rem; }
+
+/* AI help for cars */
+.ai-matches { display: grid; gap: 8px; margin-top: 8px; }
+.ai-match { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; justify-items: start; }
+.ai-review { display: grid; gap: 8px; margin-top: 8px; }
+.ai-change { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; }
+.ai-change-name { font-weight: 600; }

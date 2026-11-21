@@ -65,7 +65,7 @@ function createEnv() {
   const outbox = [];
   const sleeps = [];
   const files = {};
-  const state = { tokeninfo: null, mailQuota: 100, cacheCalls: 0, anthropic: null, aiRequests: [], gemini: null, geminiRequests: [], gmail: [], gmailLabels: {}, gmailQueries: [] }; // cacheCalls: round trips to the script cache
+  const state = { tokeninfo: null, mailQuota: 100, cacheCalls: 0, gemini: null, geminiRequests: [], gmail: [], gmailLabels: {}, gmailQueries: [] }; // cacheCalls: round trips to the script cache
   const folders = {};
   const triggers = [];
   let folderCount = 0;
@@ -185,14 +185,6 @@ function createEnv() {
     },
     UrlFetchApp: {
       fetch: (url, opts) => {
-        if (/api\.anthropic\.com/.test(url)) { // the AI service: tests set state.anthropic = (request) => ({ code, body })
-          const sent = { url, headers: opts.headers, body: JSON.parse(opts.payload) };
-          state.aiRequests.push(sent);
-          if (!state.anthropic) throw new Error('no AI mock');
-          const r = state.anthropic(sent);
-          if (r instanceof Error) throw r;
-          return { getResponseCode: () => r.code, getContentText: () => typeof r.body === 'string' ? r.body : JSON.stringify(r.body) };
-        }
         if (/generativelanguage\.googleapis\.com/.test(url)) { // Gemini: tests set state.gemini = (request) => ({ code, body })
           const sent = { url, headers: opts.headers, body: JSON.parse(opts.payload) };
           state.geminiRequests.push(sent);

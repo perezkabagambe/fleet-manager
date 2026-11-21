@@ -181,6 +181,7 @@
       var carName = '';
       cars.forEach(function (c) { if (c.id === r.carId) carName = c.registration + ' · ' + c.make + ' ' + c.model; });
       line('Looks like', KIND_LABEL[r.kind] || '');
+      line('Title it would get', d.title);
       line('Shop or garage', r.vendor);
       line('Date', r.date ? when(r.date) : '');
       line('Currency', r.currency);

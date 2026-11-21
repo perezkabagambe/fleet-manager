@@ -513,6 +513,24 @@
       return added;
     }
 
+    function findRow(kind, name) {
+      return rows.filter(function (r) { return (r.kind === 'bulb') === (kind === 'bulb') && (r.fluid || '').toLowerCase() === (name || '').toLowerCase(); })[0] || null;
+    }
+
+    // Suggestions the person ticked: a row of that name is updated, otherwise a new row is added. Nothing is saved until Save.
+    function applySuggestions(list) {
+      list.forEach(function (s) {
+        var r = findRow(s.kind, s.fluid);
+        if (!r) { r = { kind: s.kind === 'bulb' ? 'bulb' : 'fluid', fluid: s.fluid }; rows.push(r); }
+        r.specification = s.specification || '';
+        r.capacity = s.capacity || '';
+        r.notes = s.notes || '';
+        r.source = s.source || '';
+      });
+      draw();
+      return list.length;
+    }
+
     // Rows with nothing in them are ignored when saving.
     function payload() {
       return rows
@@ -527,6 +545,8 @@
       bulbsNode: el('div', {}, [bulbDatalist, bulbList, el('div', { class: 'btn-row' }, [addBulbBtn, bulbBtn])]),
       payload: payload,
       addSuggested: addSuggested,
+      findRow: findRow,
+      applySuggestions: applySuggestions,
       dirty: function () { return JSON.stringify(payload()) !== snapshot; },
       // After a save the server gives every row its id; keep them so a retry never duplicates a row.
       markSaved: function (saved) {
@@ -683,20 +703,23 @@
       function aiAssist() {
         var box = el('div', { class: 'ai-box' });
         var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Fill in the rest with AI' });
-        var hint = el('div', { class: 'hint', text: 'Enter the registration number and the VIN first. AI looks the car up and fills the empty boxes. Its answers are not always right: you must check them.' });
+        var HINT = 'Enter the VIN if you have it: it is used first. Without a VIN, enter at least the make and model (the year, engine and registration help). AI looks the car up and fills the empty boxes. Its answers are not always right: you must check them.';
+        var hint = el('div', { class: 'hint', text: HINT });
+        var picker = el('div', { class: 'ai-matches' });
         var status = el('div', { class: 'ai-status' });
-        box.append(btn, hint, status);
+        box.append(btn, hint, status, picker);
         box.hidden = true; // shown only once we know AI is switched on
 
-        function ready() { return f.registration.value.trim() !== '' && f.vin.value.replace(/\s+/g, '').length >= 5; }
-        function refresh() { btn.disabled = !ready(); }
-        f.registration.addEventListener('input', refresh);
-        f.vin.addEventListener('input', refresh);
+        function hasVin() { return f.vin.value.replace(/\s+/g, '').length >= 5; }
+        // a VIN is enough; without one, the make and the model are the least we need
+        function ready() { return hasVin() || (f.make.value.trim() !== '' && f.model.value.trim() !== ''); }
+        function refresh() { btn.disabled = !ready(); btn.textContent = hasVin() || !ready() ? '✨ Fill in the rest with AI' : '✨ Find this car with AI'; }
+        ['registration', 'vin', 'make', 'model'].forEach(function (k) { f[k].addEventListener('input', refresh); });
         refresh();
         FleetApi.call('aiStatus', {}).then(function (r) {
           if (!r.data.available) return;
           box.hidden = false;
-          hint.textContent = 'Enter the registration number and the VIN first. AI looks the car up and fills the empty boxes. Its answers are not always right: you must check them. ' + r.data.remaining + ' of ' + r.data.limit + ' lookups left today.';
+          hint.textContent = HINT + ' ' + r.data.remaining + ' of ' + r.data.limit + ' lookups left today.';
         }).catch(function () { /* no AI box: the form works without it */ });
 
         function setIfEmpty(input, value, label, filled) {
@@ -735,27 +758,68 @@
             : 'AI had nothing new to add. ' + (d.summary || '')));
           kids.push(el('p', { class: 'ai-warning', text: 'AI answers are not perfect, and it is up to you to check every entry before you save. The fluids and bulbs it added are marked as AI suggestions; open each section to review them.' }));
           if (d.sources && d.sources.length) {
-            kids.push(el('div', { class: 'small-text muted' }, [el('span', { text: 'Sources: ' })].concat(d.sources.map(function (u, i) {
-              return el('a', { href: u, target: '_blank', rel: 'noopener noreferrer', text: (i ? ', ' : '') + (function () { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return 'link'; } })() });
+            kids.push(el('div', { class: 'small-text muted' }, [el('span', { text: 'Sources: ' })].concat(d.sources.map(function (s, i) {
+              return el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer', text: (i ? ', ' : '') + (s.title || 'link') });
             }))));
           }
           status.replaceChildren.apply(status, kids);
           hint.textContent = d.remaining + ' AI lookups left today.';
         }
 
-        function run() {
+        /** Everything typed so far goes to the AI (never the owner, the notes or any costs). */
+        function typed() {
+          return {
+            registration: f.registration.value, vin: f.vin.value, country: f.country.value, make: f.make.value, model: f.model.value, year: f.year.value,
+            colour: f.colour.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value,
+          };
+        }
+
+        function fillFrom(extra) {
           status.replaceChildren(UI.notice('ok', 'Asking AI to look the car up… this can take up to a minute. Please wait.'));
+          picker.replaceChildren();
           btn.disabled = true;
-          FleetApi.call('aiFillCar', {
-            registration: f.registration.value, vin: f.vin.value, country: f.country.value,
-            make: f.make.value, model: f.model.value, year: f.year.value,
-          }, { timeoutMs: 120000 }).then(function (r) { apply(r.data); })
+          return FleetApi.call('aiFillCar', Object.assign(typed(), extra || {}), { timeoutMs: 120000 }).then(function (r) { apply(r.data); })
             .catch(function (e) { status.replaceChildren(UI.notice('error', UI.errorText(e))); })
             .then(refresh);
         }
 
+        // No VIN: AI first suggests a few versions this could be; the person picks one, and then the specs are filled in for it.
+        function findFirst() {
+          status.replaceChildren(UI.notice('ok', 'Asking AI which cars this could be… this can take up to a minute. Please wait.'));
+          picker.replaceChildren();
+          btn.disabled = true;
+          FleetApi.call('aiFindCar', typed(), { timeoutMs: 120000 }).then(function (r) {
+            hint.textContent = r.data.remaining + ' AI lookups left today.';
+            if (!r.data.candidates.length) {
+              status.replaceChildren(UI.notice('error', 'AI could not tell which car this is from what you entered. Add the year, engine or market, or a VIN, and try again.'));
+              return;
+            }
+            status.replaceChildren(el('p', { class: 'muted small-text', text: 'Which of these is your car? AI is only guessing from the make, model and year, so check it carefully. Tap one and the specs are filled in for it. Look at the engine and the market, they change the oil and bulbs.' }));
+            var cards = r.data.candidates.map(function (c) {
+              var pick = el('button', { type: 'button', class: 'btn small', text: 'This one' });
+              pick.addEventListener('click', function () {
+                var d = c.details || {};
+                var chosen = Object.assign(typed(), { vin: '' });
+                ['make', 'model', 'year', 'engineCode', 'gearboxCode', 'market', 'driveSide', 'fuelCapacity', 'colour'].forEach(function (k) { if (d[k]) chosen[k] = d[k]; });
+                fillFrom(chosen);
+              });
+              return el('div', { class: 'ai-match' }, [
+                el('div', {}, [el('strong', { text: c.label }), el('span', { class: 'muted small-text', text: '  (' + c.confidence + ' confidence)' })]),
+                c.why ? el('div', { class: 'muted small-text', text: c.why }) : null,
+                pick,
+              ]);
+            });
+            var none = el('button', { type: 'button', class: 'linklike', text: 'None of these' });
+            none.addEventListener('click', function () { picker.replaceChildren(); status.replaceChildren(); });
+            picker.replaceChildren.apply(picker, cards.concat([none]));
+          }).catch(function (e) { status.replaceChildren(UI.notice('error', UI.errorText(e))); })
+            .then(refresh);
+        }
+
+        function run() { return hasVin() ? fillFrom() : findFirst(); }
+
         btn.addEventListener('click', function () {
-          UI.confirm('AI can get things wrong. Its answers are suggestions, not facts, and they are not always right. It is up to you to check every entry it fills in before you save the car.\n\nTo look the car up, the registration number and VIN are sent to Anthropic\'s AI service, which may search the web. It can take up to a minute.', { okLabel: 'Ask AI' })
+          UI.confirm('AI can get things wrong. Its answers are suggestions, not facts. It is up to you to check every entry it fills in before you save the car.\n\nTo look the car up, the details you have typed (registration, VIN, make, model, year and similar) are sent to Google\'s Gemini AI service, which may search the web. Google may use what is sent to improve its products. No owner details, notes or costs are sent. It can take up to a minute.', { okLabel: 'Ask AI' })
             .then(function (yes) { if (yes) run(); });
         });
         return box;
@@ -840,7 +904,84 @@
       }
       var detailsSection = section('Vehicle details', detailFields, !car);
       var ownersSection = section('Owner/Custodian', ownerFields);
-      var fluidsSection = section('💧 Fluids & Specifications', [fluidsEd.node], false, 'kind-fluid');
+      // ---- "Refresh specs with AI" (a saved car): shows what AI would change and lets the person tick what to use ----
+      function refreshSpecsBox() {
+        var box = el('div', { class: 'ai-box' });
+        var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Refresh specs with AI' });
+        var hint = el('div', { class: 'hint', text: 'AI looks the car up (by its VIN if it has one, otherwise by its make, model and year) and suggests its fluids and bulbs. You tick which suggestions to use, and nothing changes until you tap Save changes.' });
+        var status = el('div', { class: 'ai-status' });
+        var panel = el('div', { class: 'ai-review' });
+        box.append(btn, hint, status, panel);
+        box.hidden = true;
+        FleetApi.call('aiStatus', {}).then(function (r) {
+          if (!r.data.available) return;
+          box.hidden = false;
+          hint.textContent += ' ' + r.data.remaining + ' of ' + r.data.limit + ' lookups left today.';
+        }).catch(function () { /* no AI box */ });
+
+        var isAi = function (row) { return /^AI suggestion/.test((row && row.source) || ''); };
+        var shown = function (x) { return [x.specification, x.capacity].filter(Boolean).join(' · ') || 'nothing'; };
+
+        function review(d) {
+          var items = (d.fluids || []).concat(d.bulbs || []);
+          var checks = [];
+          var rowsEl = items.map(function (s) {
+            var now = fluidsEd.findRow(s.kind, s.fluid);
+            var has = !!(now && ((now.specification || '').trim() || (now.capacity || '').trim()));
+            var same = has && (now.specification || '').trim() === (s.specification || '').trim() && (now.capacity || '').trim() === (s.capacity || '').trim();
+            var tick = null;
+            if (!same) {
+              tick = el('input', { type: 'checkbox' });
+              // new rows, empty rows and earlier AI suggestions are ticked; anything you entered yourself is left unticked
+              tick.checked = !has || isAi(now);
+              checks.push({ tick: tick, item: s });
+            }
+            return el('div', { class: 'ai-change ' + (s.kind === 'bulb' ? 'kind-bulb' : 'kind-fluid') }, [
+              el('label', { class: 'check' }, [tick, el('span', { class: 'ai-change-name', text: (s.kind === 'bulb' ? '💡 ' : '💧 ') + s.fluid })]),
+              el('div', { class: 'small-text' }, [el('span', { class: 'muted', text: 'Now: ' }), el('span', { text: has ? shown(now) : 'nothing yet' })]),
+              el('div', { class: 'small-text' }, [el('span', { class: 'muted', text: 'AI: ' }), el('span', { text: same ? 'the same' : shown(s) })]),
+              !same && s.notes ? el('div', { class: 'muted small-text', text: s.notes }) : null,
+              has && !isAi(now) && !same ? el('div', { class: 'muted small-text', text: 'You entered this yourself, so it is not ticked.' }) : null,
+            ]);
+          });
+          var apply = el('button', { type: 'button', class: 'btn small', text: 'Use the ticked ones' });
+          var cancel = el('button', { type: 'button', class: 'btn small secondary', text: 'Cancel' });
+          apply.addEventListener('click', function () {
+            var chosen = checks.filter(function (c) { return c.tick.checked; }).map(function (c) { return c.item; });
+            var n = fluidsEd.applySuggestions(chosen);
+            panel.replaceChildren();
+            status.replaceChildren(UI.notice(n ? 'ok' : 'error', n ? n + ' suggestion' + (n === 1 ? '' : 's') + ' put into the form. They are saved when you tap Save changes. AI answers are not perfect: check each one.' : 'Nothing was ticked, so nothing changed.'));
+          });
+          cancel.addEventListener('click', function () { panel.replaceChildren(); status.replaceChildren(); });
+          panel.replaceChildren.apply(panel, [
+            el('p', { class: 'small-text' }, [el('strong', { text: 'AI suggests these' }), el('span', { class: 'muted', text: ' (' + d.confidence + ' confidence). ' + (d.summary || '') })]),
+            checks.length ? null : el('p', { class: 'muted', text: 'Nothing differs from what you already have.' }),
+          ].concat(rowsEl, [
+            d.sources && d.sources.length ? el('div', { class: 'small-text muted' }, [el('span', { text: 'Sources: ' })].concat(d.sources.map(function (s, i) {
+              return el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer', text: (i ? ', ' : '') + (s.title || 'link') });
+            }))) : null,
+            el('div', { class: 'btn-row' }, checks.length ? [apply, cancel] : [cancel]),
+          ]));
+        }
+
+        btn.addEventListener('click', function () {
+          UI.confirm('AI can get things wrong. Its answers are suggestions, not facts, and you choose which to use.\n\nTo look the car up, its registration, VIN, make, model and year are sent to Google\'s Gemini AI service, which may search the web. Google may use what is sent to improve its products. It can take up to a minute.', { okLabel: 'Ask AI' }).then(function (yes) {
+            if (!yes) return;
+            panel.replaceChildren();
+            status.replaceChildren(UI.notice('ok', 'Asking AI to look the car up… this can take up to a minute. Please wait.'));
+            btn.disabled = true;
+            FleetApi.call('aiRefreshSpecs', { carId: car.id }, { timeoutMs: 120000 }).then(function (r) {
+              status.replaceChildren();
+              hint.textContent = r.data.remaining + ' AI lookups left today.';
+              review(r.data);
+            }).catch(function (e) { status.replaceChildren(UI.notice('error', UI.errorText(e))); })
+              .then(function () { btn.disabled = false; });
+          });
+        });
+        return box;
+      }
+
+      var fluidsSection = section('💧 Fluids & Specifications', car ? [refreshSpecsBox(), fluidsEd.node] : [fluidsEd.node], false, 'kind-fluid');
       var bulbsSection = section('💡 Bulbs', [fluidsEd.bulbsNode], false, 'kind-bulb');
       var photoSection = section('Photo', photoFields);
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: car ? 'Save changes' : 'Add car' });

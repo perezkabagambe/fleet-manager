@@ -1,9 +1,10 @@
 'use strict';
+// AI help for cars: "Fill in the rest" (VIN first, else make and model), a few likely matches when there is no VIN, and "Refresh specs".
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createEnv } = require('./harness');
 
-const KEY = 'sk-ant-test-key-1234567890';
+const KEY = 'AIza-test-key-1234567890';
 
 function setup(opts) {
   const env = createEnv();
@@ -11,25 +12,22 @@ function setup(opts) {
   env.seedUser({ name: 'Ann', email: 'ann@example.com', role: 'user' });
   const sam = env.signInAs('sam@example.com');
   const ann = env.signInAs('ann@example.com');
-  if (!opts || opts.key !== false) env.props.ANTHROPIC_API_KEY = KEY;
+  if (!opts || opts.key !== false) env.props.GEMINI_API_KEY = KEY;
   const fill = (extra, token) => env.call('aiFillCar', Object.assign({ token: token || sam, registration: 'ua 132fp', vin: 'knaku814se5455201' }, extra || {}));
-  return { env, sam, ann, fill };
+  const find = (extra, token) => env.call('aiFindCar', Object.assign({ token: token || sam, registration: 'MV56 HUH', make: 'Kia', model: 'Sorento', year: '2013' }, extra || {}));
+  return { env, sam, ann, fill, find };
 }
 
-// A reply like the real one: a search, its results, then the answer (with citations) as text.
+// Gemini's reply: text, with the search sources it used.
 function reply(obj, extra) {
   return {
     code: 200,
-    body: Object.assign({
-      stop_reason: 'end_turn',
-      content: [
-        { type: 'text', text: 'I will search for the vehicle.' },
-        { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'KNAKU814SE5455201' } },
-        { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_1', content: [{ type: 'web_search_result', url: 'https://example.com/a', title: 'A', encrypted_content: 'xyz' }] },
-        { type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj), citations: [{ type: 'web_search_result_location', url: 'https://example.com/a', title: 'A', cited_text: '...' }, { type: 'web_search_result_location', url: 'http://insecure.example.com/b', title: 'B', cited_text: '...' }] },
-      ],
-      usage: { input_tokens: 1000, output_tokens: 500 },
-    }, extra || {}),
+    body: {
+      candidates: [Object.assign({
+        content: { parts: [{ text: typeof obj === 'string' ? obj : JSON.stringify(obj) }] },
+        groundingMetadata: { groundingChunks: [{ web: { uri: 'https://example.com/a', title: 'example.com' } }, { web: { uri: 'http://insecure.example.com/b', title: 'insecure.example.com' } }] },
+      }, extra || {})],
+    },
   };
 }
 
@@ -39,46 +37,58 @@ const GOOD = {
   bulbs: [{ location: 'Full beam', type: 'Halogen H1 55 W', quantity: '2', notes: '' }, { location: 'Dipped beam', type: 'Xenon D3S 35 W', quantity: '2', notes: 'Halogen versions use H7' }],
   summary: '2013 Kia Sorento 2.2 CRDi.', confidence: 'medium',
 };
+const MATCHES = {
+  candidates: [
+    { label: '2013 Kia Sorento 2.2 CRDi (D4HB), European', why: 'The common diesel', confidence: 'medium', details: { make: 'Kia', model: 'Sorento', year: '2013', engineCode: 'D4HB', market: 'European', driveSide: 'RHD', fuelCapacity: '71', colour: 'Red' } },
+    { label: '2013 Kia Sorento 2.4 petrol', why: 'The petrol', confidence: 'low', details: { make: 'Kia', model: 'Sorento', year: '2013', engineCode: 'G4KE' } },
+    { label: 'Not a car', details: { make: '', model: '' } },
+    { label: 'Fourth', details: { make: 'Kia', model: 'Sorento' } },
+    { label: 'Fifth', details: { make: 'Kia', model: 'Sorento' } },
+  ],
+};
 
-test('AI lookup needs a session', () => {
+test('AI lookups need a session', () => {
   const { env } = setup();
   assert.equal(env.call('aiFillCar', { registration: 'A', vin: 'B' }).error, 'unauthorized');
+  assert.equal(env.call('aiFindCar', {}).error, 'unauthorized');
+  assert.equal(env.call('aiRefreshSpecs', {}).error, 'unauthorized');
   assert.equal(env.call('aiStatus', {}).error, 'unauthorized');
 });
 
 test('without a key AI says it is not set up, and nothing is sent', () => {
-  const { env, sam, fill } = setup({ key: false });
+  const { env, sam, fill, find } = setup({ key: false });
   assert.deepEqual(env.call('aiStatus', { token: sam }).data, { available: false, limit: 10, remaining: 10 });
   assert.equal(fill().error, 'ai_not_set_up');
-  assert.equal(env.state.aiRequests.length, 0);
+  assert.equal(find().error, 'ai_not_set_up');
+  assert.equal(env.state.geminiRequests.length, 0);
 });
 
-test('a lookup sends the right request to Claude and returns tidy, marked suggestions', () => {
+test('a VIN is used first: the request carries it, everything typed, and a warning to trust the VIN', () => {
   const { env, sam, fill } = setup();
-  env.state.anthropic = () => reply('```json\n' + JSON.stringify(GOOD) + '\n```');
+  env.state.gemini = () => reply('```json\n' + JSON.stringify(GOOD) + '\n```');
   assert.deepEqual(env.call('aiStatus', { token: sam }).data, { available: true, limit: 10, remaining: 10 });
-  const r = fill({ make: 'Kia', country: 'UG' });
+  const r = fill({ make: 'Kia', country: 'UG', engineCode: 'D4HB', colour: 'Black' });
   assert.equal(r.ok, true, r.error);
-
-  // the request
-  assert.equal(env.state.aiRequests.length, 1);
-  const q = env.state.aiRequests[0];
-  assert.equal(q.url, 'https://api.anthropic.com/v1/messages');
-  assert.equal(q.headers['x-api-key'], KEY);
-  assert.ok(q.headers['anthropic-version']);
-  assert.equal(q.body.model, 'claude-opus-5-5');
-  assert.deepEqual(q.body.tools, [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
-  assert.deepEqual(q.body.output_config, { effort: 'low' });
-  assert.equal(q.body.messages.length, 1);
-  assert.match(q.body.messages[0].content, /UA 132FP/);
-  assert.match(q.body.messages[0].content, /KNAKU814SE5455201/);
-  assert.match(q.body.messages[0].content, /Uganda/);
-  assert.match(q.body.messages[0].content, /make Kia/);
+  assert.equal(env.state.geminiRequests.length, 1);
+  const q = env.state.geminiRequests[0];
+  assert.match(q.url, /models\/gemini-3\.5-flash-lite:generateContent$/);
+  assert.equal(q.headers['x-goog-api-key'], KEY);
+  assert.equal(q.url.includes(KEY), false);
+  assert.deepEqual(q.body.tools, [{ google_search: {} }]);
+  const prompt = q.body.contents[0].parts[0].text;
+  assert.match(prompt, /VIN: KNAKU814SE5455201/);
+  assert.match(prompt, /UA 132FP/);
+  assert.match(prompt, /Uganda/);
+  assert.match(prompt, /make Kia/);
+  assert.match(prompt, /engine code D4HB/);
+  assert.match(prompt, /colour Black/);
+  assert.match(prompt, /trust the VIN/);
+  assert.match(q.body.systemInstruction.parts[0].text, /VIN, when given, decodes to the exact vehicle, so it comes before everything else/);
   assert.ok(!JSON.stringify(q.body).includes(KEY), 'the key is never put in the question');
 
-  // the answer
   const d = r.data;
-  assert.deepEqual(d.details, GOOD.details && { make: 'Kia', model: 'Sorento', year: '2013', colour: 'Black', engineCode: 'D4HB', market: 'European', driveSide: 'RHD', fuelCapacity: '71' });
+  assert.equal(d.usedVin, true);
+  assert.deepEqual(d.details, { make: 'Kia', model: 'Sorento', year: '2013', colour: 'Black', engineCode: 'D4HB', market: 'European', driveSide: 'RHD', fuelCapacity: '71' });
   assert.deepEqual(d.fluids.map((f) => f.fluid), ['Engine oil', 'Coolant'], 'in the app\'s order');
   assert.deepEqual(d.bulbs.map((b) => b.fluid), ['Dipped beam', 'Full beam'], 'in the app\'s order, with no "Bulb: " prefix');
   [].concat(d.fluids, d.bulbs).forEach((row) => {
@@ -88,18 +98,86 @@ test('a lookup sends the right request to Claude and returns tidy, marked sugges
   });
   assert.equal(d.bulbs[0].kind, 'bulb');
   assert.equal(d.fluids[0].kind, 'fluid');
-  assert.equal(d.bulbs[0].capacity, '2');
-  assert.match(d.bulbs[0].notes, /^Halogen versions use H7 AI suggestion/);
-  assert.deepEqual(d.sources, ['https://example.com/a'], 'only secure links');
+  assert.deepEqual(d.sources, [{ url: 'https://example.com/a', title: 'example.com' }], 'only secure links');
   assert.equal(d.confidence, 'medium');
   assert.equal(d.remaining, 9);
   assert.ok(!JSON.stringify(r).includes(KEY));
   assert.ok(env.sheets.Audit._rows.slice(1).some((row) => row[3] === 'ai_lookup'));
 });
 
+test('without a VIN the make, model and everything else typed is used; the make and model are needed', () => {
+  const { env, sam, fill } = setup();
+  env.state.gemini = () => reply(GOOD);
+  assert.equal(fill({ vin: '', make: '', model: '' }).error, 'ai_need_more');
+  assert.equal(fill({ vin: '', make: 'Kia', model: '' }).error, 'ai_need_more');
+  assert.equal(fill({ vin: 'a b' }).error, 'invalid_vin');
+  assert.equal(env.state.geminiRequests.length, 0);
+  const r = fill({ vin: '', registration: 'MV56 HUH', make: 'Kia', model: 'Sorento', year: '2013', engineCode: 'D4HB', market: 'European' });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.usedVin, false);
+  const prompt = env.state.geminiRequests[0].body.contents[0].parts[0].text;
+  assert.equal(/VIN:/.test(prompt), false);
+  assert.match(prompt, /MV56 HUH/);
+  assert.match(prompt, /make Kia, model Sorento, year 2013, engine code D4HB, market European \(trust these\)/);
+  assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 9);
+});
+
+test('with no VIN, a few likely matches are offered: at most three, only usable ones, cleaned', () => {
+  const { env, sam, find } = setup();
+  env.state.gemini = () => reply(MATCHES);
+  const r = find({ vin: 'KNAKU814SE5455201' }); // a VIN is ignored by this step: it is only for cars without one
+  assert.equal(r.ok, true, r.error);
+  assert.equal(/VIN:/.test(env.state.geminiRequests[0].body.contents[0].parts[0].text), false);
+  assert.match(env.state.geminiRequests[0].body.contents[0].parts[0].text, /There is no VIN/);
+  const c = r.data.candidates;
+  assert.deepEqual(c.map((x) => x.label), ['2013 Kia Sorento 2.2 CRDi (D4HB), European', '2013 Kia Sorento 2.4 petrol'], 'the empty one is dropped, and only the first three are looked at');
+  assert.deepEqual(c[0].details, { make: 'Kia', model: 'Sorento', year: '2013', colour: 'Red', engineCode: 'D4HB', market: 'European', driveSide: 'RHD', fuelCapacity: '71' });
+  assert.equal(c[0].confidence, 'medium');
+  assert.equal(c[1].confidence, 'low');
+  assert.equal(c[0].why, 'The common diesel');
+  assert.equal(r.data.remaining, 9);
+  assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 9);
+  assert.equal(find({ make: 'Kia', model: '' }).error, 'ai_need_more');
+  env.state.gemini = () => reply({ candidates: [] });
+  assert.deepEqual(find().data.candidates, []);
+});
+
+test('refresh specs: a saved car is looked up by its VIN first, then its make and model; details are left alone', () => {
+  const { env, sam } = setup();
+  env.state.gemini = () => reply(GOOD);
+  const car = env.call('saveCar', { token: sam, fields: { registration: 'MV56 HUH', make: 'Kia', model: 'Sorento', year: '2013', vin: 'KNAKU814SE5455201', engineCode: 'D4HB', odometer: '1' } }).data.car;
+  const r = env.call('aiRefreshSpecs', { token: sam, carId: car.id });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.usedVin, true);
+  assert.equal(r.data.details, undefined);
+  assert.deepEqual(r.data.fluids.map((f) => f.fluid), ['Engine oil', 'Coolant']);
+  const prompt = env.state.geminiRequests[0].body.contents[0].parts[0].text;
+  assert.match(prompt, /VIN: KNAKU814SE5455201/);
+  assert.match(prompt, /engine code D4HB/);
+  const noVin = env.call('saveCar', { token: sam, fields: { registration: 'ZZ99 ZZZ', make: 'Toyota', model: 'Hilux', year: '2012', odometer: '1' } }).data.car;
+  const r2 = env.call('aiRefreshSpecs', { token: sam, carId: noVin.id });
+  assert.equal(r2.data.usedVin, false);
+  assert.equal(/VIN:/.test(env.state.geminiRequests[1].body.contents[0].parts[0].text), false);
+  assert.equal(env.call('aiRefreshSpecs', { token: sam, carId: 'nope' }).error, 'not_found');
+  // nothing was changed on the car
+  assert.equal(env.call('getCar', { token: sam, id: car.id }).data.car.engineCode, 'D4HB');
+});
+
+test('if Google Search is refused the question is asked again without it', () => {
+  const { env, fill } = setup();
+  let n = 0;
+  env.state.gemini = (q) => (q.body.tools ? (++n, { code: 400, body: { error: { message: 'Search tool is not supported' } } }) : reply(GOOD));
+  assert.equal(fill().ok, true);
+  assert.equal(env.state.geminiRequests.length, 2);
+  assert.equal(env.state.geminiRequests[1].body.tools, undefined);
+  env.state.geminiRequests.length = 0;
+  env.state.gemini = () => ({ code: 400, body: { error: { message: 'bad' } } });
+  assert.equal(fill().error, 'ai_unavailable');
+});
+
 test('only values the app can use get through', () => {
   const { env, fill } = setup();
-  env.state.anthropic = () => reply({
+  env.state.gemini = () => reply({
     details: { make: 'K'.repeat(100), model: 'Sorento', year: '1850', colour: '', engineCode: '<b>D4HB</b>', gearboxCode: 5, market: 'Martian', driveSide: 'left', fuelCapacity: 'lots' },
     fluids: [
       { fluid: 'Rocket fuel', specification: 'x' }, { fluid: 'Bulb: Dipped beam', specification: 'x' }, { fluid: 'Coolant', specification: '' },
@@ -125,51 +203,30 @@ test('only values the app can use get through', () => {
 
 test('the answer can have words around the JSON, but an answer with no JSON is refused and does not use up a lookup', () => {
   const { env, sam, fill } = setup();
-  env.state.anthropic = () => reply('Here is the vehicle: ' + JSON.stringify({ details: { make: 'Kia' }, fluids: [], bulbs: [] }) + ' Hope that helps!');
+  env.state.gemini = () => reply('Here is the vehicle: ' + JSON.stringify({ details: { make: 'Kia' }, fluids: [], bulbs: [] }) + ' Hope that helps!');
   assert.equal(fill().data.details.make, 'Kia');
-  env.state.anthropic = () => reply('Sorry, I could not find that vehicle.');
+  env.state.gemini = () => reply('Sorry, I could not find that vehicle.');
   assert.equal(fill().error, 'ai_bad_answer');
-  env.state.anthropic = () => ({ code: 200, body: { stop_reason: 'refusal', content: [] } });
+  env.state.gemini = () => ({ code: 200, body: { candidates: [] } });
   assert.equal(fill().error, 'ai_bad_answer');
-  env.state.anthropic = () => ({ code: 200, body: { stop_reason: 'max_tokens', content: [{ type: 'text', text: '{"details":' }] } });
+  env.state.gemini = () => ({ code: 200, body: { candidates: [{ finishReason: 'SAFETY' }] } });
   assert.equal(fill().error, 'ai_bad_answer');
   assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 9, 'only the one that worked was counted');
-});
-
-test('a paused lookup is resumed by sending the paused answer back, and a lookup that stays paused gives up', () => {
-  const { env, sam, fill } = setup();
-  const paused = { stop_reason: 'pause_turn', content: [{ type: 'text', text: 'Searching' }, { type: 'server_tool_use', id: 'srvtoolu_9', name: 'web_search', input: { query: 'x' } }] };
-  let n = 0;
-  env.state.anthropic = () => (++n === 1 ? { code: 200, body: paused } : reply(GOOD));
-  const r = fill();
-  assert.equal(r.ok, true, r.error);
-  assert.equal(env.state.aiRequests.length, 2);
-  const second = env.state.aiRequests[1].body.messages;
-  assert.deepEqual(second.map((m) => m.role), ['user', 'assistant'], 'no extra "continue" message');
-  assert.deepEqual(second[1].content, paused.content);
-  assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 9, 'a resumed lookup is still one lookup');
-
-  env.state.aiRequests.length = 0;
-  env.state.anthropic = () => ({ code: 200, body: paused });
-  assert.equal(fill().error, 'ai_bad_answer');
-  assert.equal(env.state.aiRequests.length, 3, 'one try and two resumes, then it stops');
-  assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 9);
 });
 
 test('problems with the service are named, and none of them uses up a lookup', () => {
   const { env, sam, fill } = setup();
   const cases = [
-    [{ code: 401, body: { error: { type: 'authentication_error', message: 'invalid x-api-key' } } }, 'ai_not_set_up'],
+    [{ code: 401, body: { error: { message: 'unauthenticated' } } }, 'ai_not_set_up'],
     [{ code: 403, body: {} }, 'ai_not_set_up'],
-    [{ code: 429, body: { error: { type: 'rate_limit_error' } } }, 'ai_busy'],
-    [{ code: 529, body: {} }, 'ai_busy'],
-    [{ code: 400, body: { error: { type: 'invalid_request_error', message: 'Web search is not enabled for your organization' } } }, 'ai_search_disabled'],
+    [{ code: 400, body: { error: { message: 'API key not valid. Please pass a valid API key.' } } }, 'ai_not_set_up'],
+    [{ code: 429, body: { error: { status: 'RESOURCE_EXHAUSTED' } } }, 'ai_busy'],
+    [{ code: 503, body: {} }, 'ai_busy'],
     [{ code: 500, body: 'oops' }, 'ai_unavailable'],
-    [{ code: 400, body: { error: { message: 'something else' } } }, 'ai_unavailable'],
-    [new Error('Timeout: https://api.anthropic.com'), 'ai_unavailable'],
+    [new Error('Timeout: https://generativelanguage.googleapis.com'), 'ai_unavailable'],
   ];
   cases.forEach(([resp, code]) => {
-    env.state.anthropic = () => resp;
+    env.state.gemini = () => resp;
     assert.equal(fill().error, code, code);
   });
   assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 10);
@@ -177,47 +234,42 @@ test('problems with the service are named, and none of them uses up a lookup', (
 
 test('each person has a daily allowance, the app has one too, and they reset the next day', () => {
   const { env, sam, ann, fill } = setup();
-  env.state.anthropic = () => reply(GOOD);
+  env.state.gemini = () => reply(GOOD);
   for (let i = 0; i < 10; i++) assert.equal(fill().ok, true, 'lookup ' + (i + 1));
   assert.equal(fill().error, 'ai_limit_user');
   assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 0);
   assert.equal(fill({}, ann).ok, true, 'another person has their own');
-  assert.equal(env.state.aiRequests.length, 11, 'the refused one never reached the service');
+  assert.equal(env.state.geminiRequests.length, 11, 'the refused one never reached the service');
   env.advance(26 * 3600 * 1000);
-  assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 10, 'a new day');
-  assert.equal(fill().ok, true);
+  const again = env.signInAs('sam@example.com');
+  assert.equal(env.call('aiStatus', { token: again }).data.remaining, 10, 'a new day');
+  assert.equal(fill({}, again).ok, true);
 
   // the whole app's limit (here set low): the person is not charged for the refused one
   env.props.AI_APP_DAILY = '2';
   env.advance(26 * 3600 * 1000);
-  assert.equal(fill().ok, true);
-  assert.equal(fill({}, ann).ok, true);
-  assert.equal(fill().error, 'ai_limit_app');
-  assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 9, 'only the lookup that ran was counted');
+  const sam3 = env.signInAs('sam@example.com');
+  const ann3 = env.signInAs('ann@example.com');
+  assert.equal(fill({}, sam3).ok, true);
+  assert.equal(fill({}, ann3).ok, true);
+  assert.equal(fill({}, sam3).error, 'ai_limit_app');
+  assert.equal(env.call('aiStatus', { token: sam3 }).data.remaining, 9, 'only the lookup that ran was counted');
 });
 
 test('the person limit and the model can be changed with script properties', () => {
   const { env, sam, fill } = setup();
-  env.state.anthropic = () => reply(GOOD);
+  env.state.gemini = () => reply(GOOD);
   env.props.AI_USER_DAILY = '2';
-  env.props.AI_MODEL = 'claude-sonnet-5-5';
+  env.props.GEMINI_CAR_MODEL = 'gemini-custom-pro';
   assert.equal(fill().ok, true);
-  assert.equal(env.state.aiRequests[0].body.model, 'claude-sonnet-5-5');
+  assert.match(env.state.geminiRequests[0].url, /models\/gemini-custom-pro:generateContent$/);
   assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 1);
   assert.equal(fill().ok, true);
   assert.equal(fill().error, 'ai_limit_user');
-  env.props.AI_MODEL = 'some-older-model';
+  delete env.props.GEMINI_CAR_MODEL;
+  env.props.GEMINI_MODEL = 'gemini-other';
   env.props.AI_USER_DAILY = '5';
-  env.state.aiRequests.length = 0;
+  env.state.geminiRequests.length = 0;
   assert.equal(fill().ok, true);
-  assert.equal(env.state.aiRequests[0].body.output_config, undefined, 'the effort setting is only sent to models that take it');
-});
-
-test('a registration and a valid VIN are needed', () => {
-  const { env, fill } = setup();
-  env.state.anthropic = () => reply(GOOD);
-  assert.equal(fill({ registration: '' }).error, 'registration_required');
-  assert.equal(fill({ vin: '' }).error, 'ai_need_vin');
-  assert.equal(fill({ vin: 'no good!' }).error, 'invalid_vin');
-  assert.equal(env.state.aiRequests.length, 0);
+  assert.match(env.state.geminiRequests[0].url, /models\/gemini-other:generateContent$/);
 });

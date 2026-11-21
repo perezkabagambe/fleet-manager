@@ -444,6 +444,9 @@
         topThumb.replaceChildren();
         topThumb.hidden = !first;
         if (!first) return;
+        topThumb.onclick = function () { var f = document.getElementById('entry-files'); if (f) f.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+        topThumb.setAttribute('role', 'button');
+        topThumb.setAttribute('aria-label', 'Go to the photos and documents');
         if (first.thumb) { topThumb.append(Photos.thumbBox(first.id, 'entry-thumb')); return; }
         Photos.fetchAttachment(first.id).then(function (att) { return Photos.thumbFromBase64(att.data); }).then(function (b64) {
           if (d.attachments.filter(function (a) { return a.mime === 'image/jpeg'; })[0] !== first) return; // it was removed meanwhile
@@ -459,11 +462,16 @@
       var cards = [el('div', { class: 'copy-row' }, [UI.shareButton(fmt.entryUrl(carId, e.id), { title: e.title + ' · ' + d.car.registration, aria: 'Share this entry' })]),
         el('section', { class: 'card' }, [
         fmt.backLink('#/car/' + carId, car.registration),
-        el('div', { class: 'page-head' }, [el('div', { class: 'head-with-thumb' }, [topThumb, el('div', {}, [el('h1', { text: e.title }), el('div', { class: 'muted', text: meta.join(' · ') }), e.ref ? el('div', { class: 'ref-line' }, [el('span', { class: 'ref-badge', text: e.ref }), UI.copyValueButton(e.ref, 'Copy reference ' + e.ref)]) : null])]), el('div', { class: 'entry-tags' }, [typeChip(e.type), e.guestName ? GuestUI.chip(e) : null])]),
+        el('div', { class: 'entry-head' }, [
+          el('h1', { text: e.title }),
+          el('div', { class: 'muted entry-sub', text: meta.join(' · ') }), // the date, mileage and the garage (left out if blank)
+          el('div', { class: 'entry-tags head-tags' }, [typeChip(e.type), e.guestName ? GuestUI.chip(e) : null]),
+          e.ref ? el('div', { class: 'ref-line' }, [el('span', { class: 'ref-badge', text: e.ref }), UI.copyValueButton(e.ref, 'Copy reference ' + e.ref)]) : null,
+          topThumb,
+        ]),
         msg, statusArea,
         d.reminder ? el('p', { class: 'muted small-text' }, [el('span', { text: 'Reminder: ' }), el('a', { href: '#/car/' + carId + '/reminder/' + d.reminder.id, text: d.reminder.name })]) : null,
         el('a', { class: 'btn block big edit-top', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit ' + BY_TYPE[e.type].label.toLowerCase() }),
-        deleteBtn ? el('div', { class: 'btn-row' }, [deleteBtn]) : null,
       ])];
 
       // type-specific details
@@ -558,7 +566,7 @@
           msg.replaceChildren(UI.notice('ok', 'Added.'));
         }).catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
       }
-      cards.push(el('section', { class: 'card' }, [
+      cards.push(el('section', { class: 'card', id: 'entry-files' }, [
         el('h2', { text: 'Photos and documents' }),
         el('div', { class: 'attach-existing' }, [attHeading, attBox]),
         addPanel(addFile, 'Receipts, invoices, quotes, photos or any other file. Photos are shrunk automatically; other files can be up to 5 MB.'),
@@ -593,6 +601,7 @@
       ]));
 
       cards.push(el('a', { class: 'btn block big edit-bottom', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit ' + BY_TYPE[e.type].label.toLowerCase() }));
+      if (deleteBtn) cards.push(el('div', { class: 'entry-delete' }, [deleteBtn])); // quiet, at the very bottom
       root.replaceChildren.apply(root, cards);
     }
   };
@@ -1135,7 +1144,7 @@
       var d = draft.data || {};
       var v = { date: draft.date || '', vendor: draft.vendor || '', notes: d.orderNumber ? 'Order number ' + d.orderNumber + '.' : '' };
       if (type === 'Maintenance') {
-        v.title = d.work ? d.work.slice(0, 120) : (draft.vendor ? 'Work by ' + draft.vendor : '');
+        v.title = d.title || (d.work ? d.work.slice(0, 120) : ''); // the entry's own title; the garage goes in its own box
         v.mileage = d.mileage ? String(d.mileage) : '';
         v.costMode = 'lump';
         v.lumpSumCost = draft.total === null ? '' : String(draft.total);

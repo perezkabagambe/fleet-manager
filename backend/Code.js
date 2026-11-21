@@ -80,6 +80,8 @@ function actions_() {
     setAttachmentThumb: { auth: 'user', lock: true, fn: setAttachmentThumb_ },
     deleteAttachment: { auth: 'admin', lock: true, fn: deleteAttachment_ },
     aiStatus: { auth: 'user', fn: aiStatus_ },
+    aiFindCar: { auth: 'user', fn: aiFindCar_ }, // no script lock: it waits for an outside service and must not block everyone else
+    aiRefreshSpecs: { auth: 'user', fn: aiRefreshSpecs_ },
     aiFillCar: { auth: 'user', fn: aiFillCar_ }, // no script lock: it waits for an outside service and must not block everyone else
     getReceiptStatus: { auth: 'user', fn: getReceiptStatus_ },
     getReceiptAddress: { auth: 'user', lock: true, fn: getReceiptAddress_ }, // makes the car's address on first use
