@@ -304,7 +304,6 @@
       var bulbRows = fluids.filter(isBulbRow).map(function (f) { return specRow(f, f.fluid, 'bulb'); });
 
       root.replaceChildren(
-        el('div', { class: 'copy-row' }, [UI.copyLinkButton(carUrl(car.id), { label: 'Copy link to this car' })]),
         el('section', { class: 'card' }, [
           backLink('#/', 'Fleet'),
           el('div', { class: 'page-head' }, [
@@ -312,7 +311,8 @@
               el('h1', { text: car.registration }),
               el('div', { class: 'muted', text: carTitle(car) }),
             ]),
-            chip(car.status),
+            // the share symbol sits under the status badge
+            el('div', { class: 'head-status' }, [chip(car.status), UI.shareButton(carUrl(car.id), { title: car.registration + ' · ' + carTitle(car), aria: 'Share ' + car.registration })]),
           ]),
           msg,
           el('div', { class: 'section-head' }, [

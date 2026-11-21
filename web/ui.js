@@ -214,46 +214,44 @@
     return btn;
   }
 
-  var LINK_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg>';
-  var TICK_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>';
+  var SHARE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/></svg>';
+  var TICK_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>';
 
   /**
-   * A button that copies `url`. With a label it is a normal button ("Copy link to this car");
-   * without one it is a small icon-only button. Shows "Copied" for a moment afterwards.
+   * A small share symbol. Tapping it opens the phone's own share sheet (messages, WhatsApp, email, copy...) so the
+   * person chooses how to share `url`. Where the browser has no share sheet (some desktops) it copies the link instead
+   * and shows a tick for a moment.
+   * opts.title: the name of what is being shared (used by the share sheet); opts.aria: the button's spoken label.
    */
-  function copyLinkButton(url, opts) {
+  function shareButton(url, opts) {
     opts = opts || {};
-    var iconOnly = !opts.label;
-    var btn = el('button', {
-      type: 'button',
-      class: iconOnly ? 'copy-icon' : 'btn small secondary copy-link',
-      'aria-label': opts.aria || opts.label || 'Copy link',
-      title: opts.aria || opts.label || 'Copy link',
-    });
+    var label = opts.aria || 'Share';
+    var btn = el('button', { type: 'button', class: 'copy-icon share-btn', 'aria-label': label, title: label });
     var icon = el('span', { class: 'copy-glyph' });
-    icon.innerHTML = LINK_ICON;
-    var text = iconOnly ? null : el('span', { text: opts.label });
-    btn.append.apply(btn, [icon, text].filter(Boolean));
+    icon.innerHTML = SHARE_ICON;
+    btn.append(icon);
     var timer = null;
+    function flash() {
+      clearTimeout(timer);
+      icon.innerHTML = TICK_ICON;
+      btn.classList.add('copied');
+      timer = setTimeout(function () { icon.innerHTML = SHARE_ICON; btn.classList.remove('copied'); }, 2000);
+    }
     btn.addEventListener('click', function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
-      copyText(url).then(function (ok) {
-        clearTimeout(timer);
-        icon.innerHTML = ok ? TICK_ICON : LINK_ICON;
-        btn.classList.toggle('copied', ok);
-        if (text) text.textContent = ok ? 'Link copied' : 'Could not copy';
-        if (!ok) window.prompt('Copy this link:', url);
-        timer = setTimeout(function () {
-          icon.innerHTML = LINK_ICON;
-          btn.classList.remove('copied');
-          if (text) text.textContent = opts.label;
-        }, 2000);
-      });
+      if (navigator.share) {
+        navigator.share({ title: opts.title || 'Fleet Manager', url: url }).catch(function (e) {
+          if (e && e.name === 'AbortError') return; // they closed the share sheet: nothing to do
+          copyText(url).then(function (ok) { if (ok) flash(); else window.prompt('Copy this link:', url); });
+        });
+        return;
+      }
+      copyText(url).then(function (ok) { if (ok) flash(); else window.prompt('Copy this link:', url); });
     });
     return btn;
   }
 
-  window.UI = { el: el, field: field, notice: notice, errorText: errorText, busy: busy, copyValueButton: copyValueButton, confirm: confirmDialog, editToggle: editToggle, copyText: copyText, copyLinkButton: copyLinkButton };
+  window.UI = { el: el, field: field, notice: notice, errorText: errorText, busy: busy, copyValueButton: copyValueButton, confirm: confirmDialog, editToggle: editToggle, copyText: copyText, shareButton: shareButton };
 })();

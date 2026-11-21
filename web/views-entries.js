@@ -159,7 +159,7 @@
       return el('div', { class: 'entry-line' }, [
         link,
         editing ? el('a', { class: 'btn small secondary row-edit', href: '#/car/' + car.id + '/entry/' + e.id + '/edit', text: 'Edit', 'aria-label': 'Edit ' + e.title }) : null,
-        UI.copyLinkButton(fmt.entryUrl(car.id, e.id), { aria: 'Copy link to ' + e.title }),
+        UI.shareButton(fmt.entryUrl(car.id, e.id), { title: e.title + ' · ' + car.registration, aria: 'Share ' + e.title }),
       ]);
     }
 
@@ -330,7 +330,7 @@
       }
       refreshTopThumb();
 
-      var cards = [el('div', { class: 'copy-row' }, [UI.copyLinkButton(fmt.entryUrl(carId, e.id), { label: 'Copy link to this entry' })]),
+      var cards = [el('div', { class: 'copy-row' }, [UI.shareButton(fmt.entryUrl(carId, e.id), { title: e.title + ' · ' + d.car.registration, aria: 'Share this entry' })]),
         el('section', { class: 'card' }, [
         fmt.backLink('#/car/' + carId, car.registration),
         el('div', { class: 'page-head' }, [el('div', { class: 'head-with-thumb' }, [topThumb, el('div', {}, [el('h1', { text: e.title }), el('div', { class: 'muted', text: meta.join(' · ') }), e.ref ? el('div', { class: 'ref-line' }, [el('span', { class: 'ref-badge', text: e.ref }), UI.copyValueButton(e.ref, 'Copy reference ' + e.ref)]) : null])]), el('div', { class: 'entry-tags' }, [typeChip(e.type), e.guestName ? GuestUI.chip(e) : null])]),
