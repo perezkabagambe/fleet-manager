@@ -276,7 +276,7 @@ test('getCarPage returns exactly what the separate requests return', () => {
     assert.deepEqual(page.data.tasks, env.call('listTasks', { token, carId: car.id }).data.tasks);
     assert.deepEqual(page.data.costs, env.call('getCarCosts', { token, carId: car.id }).data);
     assert.equal(page.data.entries.length, 4, 'issue, maintenance, two purchases');
-    assert.ok(page.data.tasks.length >= 10);
+    assert.ok(page.data.tasks.length >= 9);
   });
 });
 

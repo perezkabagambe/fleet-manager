@@ -16,7 +16,6 @@ const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep
 // Sensible starting points (all editable). Distances are in miles.
 const STANDARD_TASKS = [
   { name: 'Engine oil and filter', months: 6, mi: 6000 },
-  { name: 'General service', months: 12, mi: 12000 },
   { name: 'Tyre inspection', months: 3 },
   { name: 'Coolant change', months: 24, mi: 25000 },
   { name: 'Brake fluid change', months: 24 },

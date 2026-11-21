@@ -185,7 +185,8 @@ test('the list shows the most urgent first', () => {
 test('standard reminders are added once, count from today, and are in miles', () => {
   const { env, sam, car, tasks } = setup({ odometer: '50000' });
   const first = env.call('addStandardTasks', { token: sam, carId: car.id });
-  assert.equal(first.data.added, 10);
+  assert.equal(first.data.added, 9);
+  assert.ok(!tasks().some((t) => /general service/i.test(t.name)), 'there is no General service in the standard set');
   assert.equal(env.call('addStandardTasks', { token: sam, carId: car.id }).data.added, 0, 'nothing twice');
   const oil = tasks().find((t) => t.name === 'Engine oil and filter');
   assert.equal(oil.intervalMonths, 6);

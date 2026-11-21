@@ -577,3 +577,10 @@ details.form-section.kind-bulb > summary h2 { color: var(--kind-bulb-text); }
 .purchase-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .purchase-item:last-child { border-bottom: 0; }
 .purchase-item .item-name { font-weight: 600; overflow-wrap: anywhere; }
+
+/* Reminders in edit mode: Edit with Delete beneath it */
+.entry-line .row-actions { flex: none; margin-left: 8px; align-self: center; display: flex; flex-direction: column; gap: 6px; }
+.entry-line .row-actions .btn { width: 100%; justify-content: center; text-align: center; }
+
+/* The VIN is always on one line: the text shrinks to fit (see fitOneLine in views-cars.js) */
+dl.details dd.vin-line { white-space: nowrap; overflow: hidden; overflow-wrap: normal; min-width: 0; font-variant-numeric: tabular-nums; }

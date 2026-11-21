@@ -258,8 +258,8 @@
 
       if (flash) msg.append(UI.notice(flash.kind, flash.text));
 
-      function detail(label, value) {
-        return value ? [el('dt', { text: label }), el('dd', { text: value })] : [];
+      function detail(label, value, cls) {
+        return value ? [el('dt', { text: label }), el('dd', { text: value, class: cls })] : [];
       }
       // Always listed, so it is clear where to find it (and that it can be added): "Not recorded" until it is filled in.
       function detailAlways(label, value) {
@@ -268,7 +268,7 @@
       var details = [].concat(
         detail('Make and model', carTitle(car)),
         detail('Colour', car.colour),
-        detail('VIN / chassis', car.vin),
+        detail('VIN / chassis', car.vin, 'vin-line'),
         detail('Engine code', car.engineCode),
         detail('Gearbox code', car.gearboxCode),
         detail('Location', car.country === 'UG' ? 'Uganda' : 'United Kingdom'),
@@ -367,8 +367,32 @@
         ]),
         el('p', { class: 'muted small-text center', text: 'Car details last changed ' + fmtDate(car.updatedAt) }),
       );
+      fitOneLine(root, '.vin-line'); // the VIN is long: its text is made just small enough to stay on one line
     }
   };
+
+  /** Shrink the text of each matching element until it fits on one line (never below 9px). Runs again if the window is resized. */
+  function fitOneLine(scope, selector) {
+    function fit() {
+      Array.prototype.forEach.call(scope.querySelectorAll(selector), function (node) {
+        node.style.fontSize = '';
+        var size = parseFloat(window.getComputedStyle(node).fontSize) || 16;
+        while (node.scrollWidth > node.clientWidth + 0.5 && size > 9) {
+          size -= 0.5;
+          node.style.fontSize = size + 'px';
+        }
+      });
+    }
+    window.requestAnimationFrame(fit);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+    var timer = null;
+    var onResize = function () {
+      if (!scope.querySelector(selector)) { window.removeEventListener('resize', onResize); return; } // the page was replaced
+      clearTimeout(timer);
+      timer = setTimeout(fit, 120);
+    };
+    window.addEventListener('resize', onResize);
+  }
 
   // ---------- fluids editor (one part of the car form) ----------
   function fluidsEditor(initial) {

@@ -36,10 +36,28 @@
         ]),
         el('div', { class: 'entry-tags' }, [statusChip(t.status), t.kind === 'compliance' ? el('span', { class: 'chip t-compliance', text: 'Renewal' }) : null]),
       ]);
-      return el('div', { class: 'entry-line' }, [
-        link,
-        editing ? el('a', { class: 'btn small secondary row-edit', href: '#/car/' + car.id + '/reminder/' + t.id, text: 'Edit', 'aria-label': 'Edit ' + t.name }) : null,
-      ]);
+      // In edit mode each reminder gets an Edit button with a Delete button beneath it (deleting is for admins).
+      var actions = null;
+      if (editing) {
+        var buttons = [el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/reminder/' + t.id, text: 'Edit', 'aria-label': 'Edit ' + t.name })];
+        if (FleetAuth.isAdmin()) {
+          var del = el('button', { type: 'button', class: 'btn small danger', text: 'Delete', 'aria-label': 'Delete ' + t.name });
+          del.addEventListener('click', function () {
+            UI.confirm('Delete the reminder "' + t.name + '"? It stops reminding anyone. Entries already logged against it are kept.', { okLabel: 'Delete', danger: true }).then(function (yes) {
+              if (!yes) return;
+              msg.replaceChildren();
+              UI.busy(del, 'Deleting…', FleetApi.call('deleteTask', { id: t.id })).then(function () {
+                Views.invalidateCars();
+                msg.replaceChildren(UI.notice('ok', 'Reminder deleted.'));
+                return load();
+              }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+            });
+          });
+          buttons.push(del);
+        }
+        actions = el('div', { class: 'row-actions' }, buttons);
+      }
+      return el('div', { class: 'entry-line' }, [link, actions]);
     }
 
     function draw(tasks) {
