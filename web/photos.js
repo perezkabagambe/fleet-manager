@@ -133,6 +133,18 @@
     if (kind === 'full') {
       if (car.photoThumbId) get(car, 'thumb').then(show).catch(function () {});
       if (car.photoId) get(car, 'full').then(show).catch(function () {});
+      // the photo on the car's page opens full screen when tapped (on the fleet list a tap opens the car instead)
+      box.classList.add('zoomable');
+      box.setAttribute('role', 'button');
+      box.tabIndex = 0;
+      var openCar = function (ev) {
+        if (box.classList.contains('placeholder')) return;
+        ev.preventDefault();
+        var shown = box.querySelector('img');
+        openFull({ preview: shown ? shown.src : '', load: function () { return get(car, car.photoId ? 'full' : 'thumb'); } });
+      };
+      box.addEventListener('click', openCar);
+      box.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') openCar(ev); });
     } else {
       get(car, 'thumb').then(show).catch(function () {});
     }
@@ -287,11 +299,83 @@
 
   /** A small box for an attachment's thumbnail: a placeholder of the right size first, then the picture. */
   function thumbBox(id, cls) {
-    var box = el('div', { class: 'thumb-box ' + (cls || ''), 'aria-hidden': 'true' });
+    var box = el('div', { class: 'thumb-box zoomable ' + (cls || ''), role: 'button', tabindex: '0', 'aria-label': 'View the photo full screen' });
     attachmentThumb(id).then(function (src) {
       box.replaceChildren(el('img', { class: 'thumb-img', src: src, alt: '' }));
     }).catch(function () { /* no thumbnail: the placeholder stays */ });
+    function open(ev) {
+      ev.preventDefault(); // a thumbnail inside a link (a row in the log) shows the photo instead of following the link
+      ev.stopPropagation();
+      var img = box.querySelector('img');
+      openFull({
+        preview: img ? img.src : '',
+        load: function () { return fetchAttachment(id).then(function (att) { return 'data:' + att.mime + ';base64,' + att.data; }); },
+      });
+    }
+    box.addEventListener('click', open);
+    box.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') open(ev); });
     return box;
+  }
+
+  // ---------- a photo shown full screen ----------
+  /**
+   * Opens a photo over the whole screen at its full resolution. `preview` (the small picture) is shown at once and
+   * replaced by what `load()` resolves to (a data or object URL) when it arrives. Tap the picture to see it at its real
+   * size and drag to look around; tap again to fit it to the screen. Close with the X, a tap outside the picture, Escape
+   * or the phone's Back button.
+   */
+  var lightboxOpen = null;
+  function openFull(opts) {
+    if (lightboxOpen) return;
+    var previous = document.activeElement;
+    var img = el('img', { class: 'lightbox-img', alt: 'Photo' });
+    if (opts.preview) img.src = opts.preview;
+    var note = el('div', { class: 'lightbox-note', text: 'Loading the full photo…' });
+    var close = el('button', { type: 'button', class: 'lightbox-close', 'aria-label': 'Close the photo', text: '✕' });
+    var stage = el('div', { class: 'lightbox-stage' }, [img]);
+    var box = el('div', { class: 'lightbox', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Photo' }, [stage, close, note]);
+    var zoomed = false;
+    var closed = false;
+
+    function shut() {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('popstate', onPop);
+      box.remove();
+      document.body.classList.remove('lightbox-on');
+      lightboxOpen = null;
+      if (previous && previous.focus) previous.focus();
+    }
+    function onPop() { shut(); }
+    function onKey(ev) { if (ev.key === 'Escape') requestClose(); }
+    function requestClose() {
+      if (history.state && history.state.lightbox) history.back(); // the Back button's own way out (it ends in onPop)
+      else shut();
+    }
+    img.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      zoomed = !zoomed;
+      box.classList.toggle('zoomed', zoomed);
+    });
+    stage.addEventListener('click', function (ev) { if (ev.target === stage && !zoomed) requestClose(); });
+    close.addEventListener('click', requestClose);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('popstate', onPop);
+    try { history.pushState({ lightbox: true }, ''); } catch (e) { /* no history: the X still closes it */ }
+    document.body.append(box);
+    document.body.classList.add('lightbox-on');
+    lightboxOpen = box;
+    close.focus();
+
+    Promise.resolve().then(opts.load).then(function (src) {
+      if (closed) return;
+      img.src = src;
+      note.remove();
+    }).catch(function () {
+      if (closed) return;
+      note.textContent = 'Could not load the full photo just now.' + (opts.preview ? ' This is the small version.' : '');
+    });
   }
 
   /** For a photo attached before thumbnails existed: make the thumbnail on the phone from the full image (base64 JPEG). */
@@ -316,8 +400,17 @@
     } catch (e) { /* ignore */ }
   }
 
+  // a photo shown inline (the View button on an attached file) opens full screen when tapped
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (t && t.classList && t.classList.contains('attach-img') && t.src) {
+      ev.preventDefault();
+      openFull({ preview: t.src, load: function () { return Promise.resolve(t.src); } });
+    }
+  });
+
   window.Photos = {
-    prepare: prepare, upload: upload, get: get, element: element, picker: picker,
+    prepare: prepare, upload: upload, get: get, element: element, picker: picker, openFull: openFull,
     attachmentThumb: attachmentThumb, thumbBox: thumbBox, thumbFromBase64: thumbFromBase64, rememberAttachmentThumb: rememberAthumb, hasAttachmentThumb: function (id) { return !!savedAthumb(id); }, fetchThumbBatch: fetchThumbBatch, THUMB_BATCH: ATHUMB_BATCH, forgetThumbs: forgetThumbs,
     fileButton: fileButton, prepareAttachment: prepareAttachment, fetchAttachment: fetchAttachment, toBlobUrl: toBlobUrl,
   };

@@ -121,23 +121,24 @@
   function copyPicker(currentCarId, onCount) {
     var box = el('div', { class: 'copy-picker stack' }, [el('p', { class: 'muted', text: 'Loading vehicles…' })]);
     var names = {};
-    var checked = {};
+    var chosen = ''; // one vehicle at a time, chosen from a drop-down
     function draw(cars) {
       var others = cars.filter(function (c) { return c.id !== currentCarId; });
       others.forEach(function (c) { names[c.id] = c.registration; });
       if (onCount) onCount(others.length);
-      box.replaceChildren.apply(box, others.length ? others.map(function (c) {
-        var cb = el('input', { type: 'checkbox', value: c.id, checked: !!checked[c.id] });
-        cb.addEventListener('change', function () { checked[c.id] = cb.checked; });
-        return el('label', { class: 'check' }, [cb, el('span', { text: c.registration + ' · ' + c.make + ' ' + c.model + (c.year ? ' (' + c.year + ')' : '') })]);
-      }) : [el('p', { class: 'muted', text: 'There are no other vehicles to copy to.' })]);
+      if (!others.length) { box.replaceChildren(el('p', { class: 'muted', text: 'There are no other vehicles to copy to.' })); return; }
+      var select = el('select', { 'aria-label': 'Vehicle to copy to' }, [el('option', { value: '', text: 'Choose a vehicle…' })].concat(others.map(function (c) {
+        return el('option', { value: c.id, text: c.registration + ' · ' + c.make + ' ' + c.model + (c.year ? ' (' + c.year + ')' : ''), selected: c.id === chosen });
+      })));
+      select.addEventListener('change', function () { chosen = select.value; });
+      box.replaceChildren(select);
     }
     FleetApi.cached('listCars', {}, function (data) { draw(data.cars); }).catch(function () {
       box.replaceChildren(el('p', { class: 'muted', text: 'Could not load the vehicles just now.' }));
     });
     return {
       el: box,
-      selected: function () { return Object.keys(checked).filter(function (id) { return checked[id]; }); },
+      selected: function () { return chosen ? [chosen] : []; },
       nameOf: function (id) { return names[id] || 'the other vehicle'; },
     };
   }
@@ -444,9 +445,6 @@
         topThumb.replaceChildren();
         topThumb.hidden = !first;
         if (!first) return;
-        topThumb.onclick = function () { var f = document.getElementById('entry-files'); if (f) f.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
-        topThumb.setAttribute('role', 'button');
-        topThumb.setAttribute('aria-label', 'Go to the photos and documents');
         if (first.thumb) { topThumb.append(Photos.thumbBox(first.id, 'entry-thumb')); return; }
         Photos.fetchAttachment(first.id).then(function (att) { return Photos.thumbFromBase64(att.data); }).then(function (b64) {
           if (d.attachments.filter(function (a) { return a.mime === 'image/jpeg'; })[0] !== first) return; // it was removed meanwhile
@@ -574,12 +572,12 @@
 
       // Copy this entry to other vehicles (as it is saved now).
       var picker = copyPicker(carId);
-      var copyBtn = el('button', { type: 'button', class: 'btn', text: 'Copy to the chosen vehicles' });
+      var copyBtn = el('button', { type: 'button', class: 'btn', text: 'Copy to this vehicle' });
       var copyMsg = el('div', { class: 'stack' });
       copyBtn.addEventListener('click', function () {
         var ids = picker.selected();
         copyMsg.replaceChildren();
-        if (!ids.length) { copyMsg.append(UI.notice('error', 'Choose at least one vehicle to copy to.')); return; }
+        if (!ids.length) { copyMsg.append(UI.notice('error', 'Choose a vehicle to copy to.')); return; }
         UI.busy(copyBtn, 'Copying…', copyEntryTo(e.id, ids, function (n, total) {
           copyMsg.replaceChildren(UI.notice('ok', 'Copying to vehicle ' + n + ' of ' + total + '… a big entry with photos can take a minute.'));
         })).then(function (results) {
@@ -1026,7 +1024,7 @@
       // ----- copy to other vehicles (after saving) -----
       var copySection = el('details', { class: 'copy-section', hidden: true });
       var picker = copyPicker(car.id, function (n) { copySection.hidden = n === 0; });
-      copySection.append(el('summary', { text: 'Also copy to other vehicles' }), el('p', { class: 'muted small-text', text: 'Tick the vehicles. When you save, the entry is saved here first and then copied. ' + COPY_HINT }), picker.el);
+      copySection.append(el('summary', { text: 'Also copy to another vehicle' }), el('p', { class: 'muted small-text', text: 'Choose a vehicle. When you save, the entry is saved here first and then copied. ' + COPY_HINT }), picker.el);
 
       // ----- save -----
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: existing ? 'Save changes' : 'Add ' + meta.label.toLowerCase() });
