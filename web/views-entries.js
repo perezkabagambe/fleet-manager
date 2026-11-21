@@ -99,10 +99,19 @@
       });
       actions.push(rm);
     }
-    row.append(el('div', { class: 'attach-name', text: fileIcon(a.mime) + a.filename + ' · ' + kb(a.size) }),
-      el('div', { class: 'attach-actions' }, actions), holder);
+    row.append(el('div', { class: 'attach-name' }, [
+      a.ref ? fileRefLine(a.ref) : null,
+      el('div', { text: fileIcon(a.mime) + a.filename + ' · ' + kb(a.size) }),
+    ]), el('div', { class: 'attach-actions' }, actions), holder);
     return row;
   }
+
+  /** A file's unique ID (such as A-0042) with a button to copy it, like an entry's reference. */
+  function fileRefLine(ref) {
+    return el('div', { class: 'ref-line file-ref' }, [el('span', { class: 'ref-badge', text: ref }), UI.copyValueButton(ref, 'Copy file ID ' + ref)]);
+  }
+  window.EntryUI = window.EntryUI || {};
+  window.EntryUI.fileRefLine = fileRefLine;
 
   /** The "add something" block: kept apart from the files that are already attached. */
   function addPanel(onFile, hint) {
@@ -227,7 +236,7 @@
     return el('section', { class: 'card' }, [el('h2', { text: 'Costs' }), body]);
   }
 
-  window.EntryUI = { historyCard: historyCard, costsCard: costsCard };
+  window.EntryUI = Object.assign(window.EntryUI || {}, { historyCard: historyCard, costsCard: costsCard });
 
   // ---------- "What do you want to add?" ----------
   Views.chooseEntry = function (ctx, root) {

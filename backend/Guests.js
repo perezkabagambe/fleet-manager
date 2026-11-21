@@ -223,7 +223,7 @@ function guestListAttachments_(p, ctx) {
   return {
     attachments: Db.all('Attachments')
       .filter(function (a) { return a.entry_id === e.id && !isTrue_(a.deleted); })
-      .map(function (a) { return { id: a.id, filename: a.filename, mime: a.mime, size: Number(a.size || 0) }; }),
+      .map(function (a) { return { id: a.id, ref: a.ref || '', filename: a.filename, mime: a.mime, size: Number(a.size || 0) }; }),
   };
 }
 

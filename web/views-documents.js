@@ -65,6 +65,7 @@
       }
       return el('div', { class: 'attach-row doc-row' }, [
         el('div', { class: 'attach-name' }, [
+          d.ref && window.EntryUI && EntryUI.fileRefLine ? EntryUI.fileRefLine(d.ref) : null,
           el('div', { class: 'doc-type', text: (isPdf ? '📄 ' : '📷 ') + d.type }),
           el('div', { class: 'muted small-text', text: d.filename + ' · ' + kb(d.size) + (d.createdAt ? ' · added ' + fmt.date(d.createdAt) : '') }),
           d.note ? el('div', { class: 'muted small-text', text: d.note }) : null,

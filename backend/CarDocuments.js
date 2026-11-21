@@ -9,7 +9,7 @@
 const DOCUMENT_TYPES = ['Logbook', 'Import papers', 'Other'];
 
 function documentShape_(d) {
-  return { id: d.id, type: d.doc_type || 'Other', note: d.note || '', filename: d.filename, mime: d.mime, size: Number(d.size) || 0, createdAt: d.created_at };
+  return { id: d.id, ref: d.ref || '', type: d.doc_type || 'Other', note: d.note || '', filename: d.filename, mime: d.mime, size: Number(d.size) || 0, createdAt: d.created_at };
 }
 
 /** The live documents of one car, newest first (a stable order: date added, then position in the sheet). */
@@ -41,7 +41,7 @@ function uploadCarDocument_(p, ctx) {
   const bytes = decodeAttachment_(p.data, mime);
   const file = carFolder_(car.id).createFile(Utilities.newBlob(bytes, mime, 'doc-' + Date.now() + '-' + filename));
   const row = Object.assign(baseColumns_(ctx), {
-    car_id: car.id, doc_type: type, note: note, drive_file_id: file.getId(), filename: filename, mime: mime, size: bytes.length,
+    car_id: car.id, doc_type: type, note: note, drive_file_id: file.getId(), filename: filename, mime: mime, size: bytes.length, ref: nextFileRef_(),
   });
   Db.insert('CarDocuments', row);
   audit_(ctx.user, 'document_added', 'Car', car.id, type + ' document "' + filename + '" added to ' + car.registration);

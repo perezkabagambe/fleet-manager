@@ -53,6 +53,28 @@ function isBlockedFilename_(filename) {
   return !!m && BLOCKED_EXTENSIONS.indexOf(m[1].toLowerCase()) !== -1;
 }
 
+// Every file in the app (an entry's photos and files, and a car's documents) has an ID such as A-0042. It is numbered
+// in one series, never changes and is never reused, even after the file is removed. Same idea as entry references.
+const FILE_REF_LETTER = 'A';
+
+/**
+ * The next file ID. The last number used is kept in the script properties, and every existing attachment and car
+ * document (removed ones too) is checked as well, so even if the counter were lost no ID would be handed out twice.
+ * Always called inside the script lock (every action that adds a file holds it).
+ */
+function nextFileRef_() {
+  let top = Number(props_().getProperty('REF_A') || 0);
+  Db.all('Attachments').forEach(function (a) { top = Math.max(top, refNumber_(a.ref, FILE_REF_LETTER)); });
+  Db.all('CarDocuments').forEach(function (d) { top = Math.max(top, refNumber_(d.ref, FILE_REF_LETTER)); });
+  const next = top + 1;
+  props_().setProperty('REF_A', String(next));
+  return formatRef_(FILE_REF_LETTER, next);
+}
+
+function attachmentShape_(a) {
+  return { id: a.id, ref: a.ref || '', filename: a.filename, mime: a.mime, size: Number(a.size || 0), thumb: !!a.thumb_file_id };
+}
+
 function uploadAttachment_(p, ctx) {
   const entry = findEntry_(cleanStr_(p.entryId, 64));
   if (!entry) fail_('not_found');
@@ -75,11 +97,11 @@ function uploadAttachment_(p, ctx) {
   const thumbFile = thumbBytes ? folder.createFile(Utilities.newBlob(thumbBytes, 'image/jpeg', 'attthumb-' + Date.now() + '.jpg')) : null;
   const row = Object.assign(baseColumns_(ctx), {
     car_id: car.id, entry_id: entry.id, drive_file_id: file.getId(), filename: filename, mime: mime, size: bytes.length,
-    thumb_file_id: thumbFile ? thumbFile.getId() : '',
+    thumb_file_id: thumbFile ? thumbFile.getId() : '', ref: nextFileRef_(),
   });
   Db.insert('Attachments', row);
   audit_(ctx.user, 'attachment_added', 'Entry', entry.id, filename + ' attached to ' + entry.type.toLowerCase() + ' "' + entry.title + '" (' + car.registration + ')');
-  return { attachment: { id: row.id, filename: filename, mime: mime, size: bytes.length, thumb: !!thumbFile } };
+  return { attachment: attachmentShape_(row) };
 }
 
 const MAX_THUMBS_PER_REQUEST = 8;

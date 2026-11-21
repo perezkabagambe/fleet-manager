@@ -548,3 +548,7 @@ details.form-section.kind-bulb > summary h2 { color: var(--kind-bulb-text); }
 .car-card-wrap .car-card { height: 100%; }
 .car-card-wrap .share-btn { position: absolute; top: 6px; right: 6px; margin: 0; width: 40px; height: 40px; border-radius: 50%; color: var(--text); background: color-mix(in srgb, var(--surface) 88%, transparent); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); }
 .car-card-wrap .share-btn:hover, .car-card-wrap .share-btn:focus-visible { color: var(--accent); background: var(--surface); }
+
+/* A file's unique ID above its name */
+.file-ref { margin: 0 0 2px; }
+.attach-existing .file-ref .copy-value { padding: 0 6px; min-height: 32px; }

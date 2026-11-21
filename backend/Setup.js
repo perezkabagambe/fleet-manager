@@ -36,9 +36,9 @@ const SCHEMA = {
   // People who scanned a car's QR code: one row per guest name, kept for ever so a name is never reused.
   Guests: { base: true, cols: ['car_id', 'name', 'name_key', 'token_hash', 'expires_at', 'blocked', 'last_seen'] },
   // Documents kept against a whole car (logbook, insurance, import papers...); the files live in its Drive folder.
-  CarDocuments: { base: true, cols: ['car_id', 'doc_type', 'note', 'drive_file_id', 'filename', 'mime', 'size'] },
+  CarDocuments: { base: true, cols: ['car_id', 'doc_type', 'note', 'drive_file_id', 'filename', 'mime', 'size', 'ref'] },
   PartUsage: { base: true, cols: ['purchase_id', 'event_id', 'quantity_used'] },
-  Attachments: { base: true, cols: ['car_id', 'entry_id', 'drive_file_id', 'filename', 'mime', 'size', 'thumb_file_id'] },
+  Attachments: { base: true, cols: ['car_id', 'entry_id', 'drive_file_id', 'filename', 'mime', 'size', 'thumb_file_id', 'ref'] },
   Tasks: {
     base: true,
     cols: ['car_id', 'kind', 'name', 'interval_months', 'interval_distance', 'lead_days', 'lead_distance', 'due_date',
@@ -51,7 +51,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 18; // 18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 19; // 19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
@@ -73,6 +73,7 @@ function migrateIfNeeded_() {
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 15) convertEverythingToMiles_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 17) numberExistingEntries_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 18) markBulbRows_();
+    if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 19) numberExistingFiles_();
     Db.invalidateAll(); // the sheets were changed directly: nothing remembered about them can be trusted
     props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   } finally {
@@ -227,6 +228,27 @@ function numberExistingEntries_() {
   const rows = Db.all('Entries').filter(function (e) { return !e.ref && REF_LETTERS[e.type]; })
     .sort(function (a, b) { return String(a.created_at).localeCompare(String(b.created_at)) || (a._row - b._row); });
   rows.forEach(function (e) { Db.update('Entries', e._row, { ref: nextEntryRef_(e.type) }); });
+}
+
+/**
+ * One-off (version 19): give every existing attachment and car document (removed ones too, so a number is never
+ * reused) an ID such as A-0042, oldest first, in one series.
+ */
+function numberExistingFiles_() {
+  const todo = [];
+  Db.all('Attachments').forEach(function (a) { if (!a.ref) todo.push({ tab: 'Attachments', row: a }); });
+  Db.all('CarDocuments').forEach(function (d) { if (!d.ref) todo.push({ tab: 'CarDocuments', row: d }); });
+  if (!todo.length) return;
+  let top = Number(props_().getProperty('REF_A') || 0);
+  Db.all('Attachments').concat(Db.all('CarDocuments')).forEach(function (r) { top = Math.max(top, refNumber_(r.ref, FILE_REF_LETTER)); });
+  todo.sort(function (x, y) {
+    return String(x.row.created_at).localeCompare(String(y.row.created_at)) || (x.tab === y.tab ? x.row._row - y.row._row : (x.tab < y.tab ? -1 : 1));
+  });
+  todo.forEach(function (t) {
+    top += 1;
+    Db.update(t.tab, t.row._row, { ref: formatRef_(FILE_REF_LETTER, top) });
+  });
+  props_().setProperty('REF_A', String(top));
 }
 
 /** Every car has a secret for its QR code. */

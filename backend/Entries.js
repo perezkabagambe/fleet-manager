@@ -22,7 +22,7 @@ const ENTRY_TYPES = ['Issue', 'Maintenance', 'Compliance', 'Purchase'];
 const REF_LETTERS = { Maintenance: 'M', Issue: 'I', Purchase: 'P', Compliance: 'C' };
 
 function refNumber_(ref, letter) {
-  const m = /^([MIPC])-(\d+)$/.exec(String(ref || ''));
+  const m = /^([MIPCA])-(\d+)$/.exec(String(ref || ''));
   return m && m[1] === letter ? Number(m[2]) : 0;
 }
 
@@ -239,8 +239,7 @@ function getEntry_(p, ctx) {
 function buildEntryDetail_(e, car, c, guestNames, attachments) {
   const out = { entry: summarizeEntry_(e, guestNames), car: { id: car.id, registration: car.registration, distanceUnit: 'mi', currency: car.currency || 'GBP' } };
 
-  out.attachments = attachments
-    .map(function (a) { return { id: a.id, filename: a.filename, mime: a.mime, size: Number(a.size || 0), thumb: !!a.thumb_file_id }; });
+  out.attachments = attachments.map(attachmentShape_);
 
   if (e.task_id) {
     const t = findTask_(e.task_id);
