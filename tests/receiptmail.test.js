@@ -197,3 +197,31 @@ test('two cars with the same registration make the registration address ambiguou
   run();
   assert.equal(inbox()[0].carId, '');
 });
+
+test('the approved user who emailed a receipt is told it arrived and is waiting for approval; strangers are not', () => {
+  const { env, address, run } = setup();
+  const to = address();
+  env.state.gmail = [
+    thread([mail({ to, from: 'Sam <sam@example.com>', attachments: [{ type: 'application/pdf', name: 'r.pdf', bytes: pdfBytes() }] })]),
+    thread([mail({ to, from: 'Shop <orders@shop.example>' })]),
+  ];
+  env.outbox.length = 0;
+  run();
+  const acks = env.outbox.filter((m) => /waiting for approval/.test(m.subject));
+  assert.equal(acks.length, 1);
+  assert.equal(acks[0].to, 'sam@example.com');
+  assert.match(acks[0].body, /Euro Car Parts/);
+  assert.match(acks[0].body, /#\/inbox/);
+  // the admin is told about both receipts; the stranger got nothing back
+  assert.equal(env.outbox.filter((m) => /waiting for review/.test(m.subject) && m.to === 'admin@example.com').length, 2);
+  assert.equal(env.outbox.some((m) => /shop\.example/.test(m.to)), false);
+});
+
+test('an admin who emails a receipt gets the confirmation, not the admin notice as well', () => {
+  const { env, run } = setup();
+  env.state.gmail = [thread([mail({ to: 'potentiafleetmanager@gmail.com', from: 'admin@example.com' })])];
+  env.outbox.length = 0;
+  run();
+  assert.equal(env.outbox.filter((m) => m.to === 'admin@example.com' && /waiting for approval/.test(m.subject)).length, 1);
+  assert.equal(env.outbox.filter((m) => m.to === 'admin@example.com' && /waiting for review/.test(m.subject)).length, 0);
+});

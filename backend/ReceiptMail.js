@@ -169,8 +169,25 @@ function handleReceiptMessage_(message, carsBySecret, carsByReg, usersByEmail) {
     }, file.bytes, file.mime, file.filename, null);
   });
   audit_(null, 'receipt_emailed', 'Inbox', row.id, 'Receipt "' + file.filename + '" arrived by email' + (car ? ' for ' + car.registration : ''));
-  readStoredReceipt_(row, '', receiptEmailText_(message), '');
+  const done = readStoredReceipt_(row, '', receiptEmailText_(message), user ? user.id : ''); // an admin who sent it gets the confirmation below instead of the admin notice
+  if (user) notifyReceiptSender_(done, user);
   return 'read';
+}
+
+/** Tell an approved user who emailed a receipt that it arrived and is waiting for review. (Strangers who use the private address get no reply.) */
+function notifyReceiptSender_(row, user) {
+  if (!dailyCap_('rc_ack', RECEIPT_MAIL_DAILY)) return;
+  const read = row.status === 'Pending';
+  const what = read
+    ? 'We received your receipt' + (row.vendor ? ' from ' + row.vendor : '') + (row.total !== '' ? ' (' + (row.currency ? row.currency + ' ' : '') + row.total + ')' : '') + ' and it has been read.'
+    : 'We received your receipt, but it could not be read automatically, so it needs to be filled in by hand.';
+  const url = SITE_URL + '#/inbox';
+  const html = layout_('Your receipt is waiting for approval',
+    '<p>Hi ' + esc_(user.name) + ',</p>' +
+    '<p>' + esc_(what) + ' It is now in the Inbox in Fleet Manager, waiting for someone to check it and add it to the vehicle\'s log. Nothing has been added yet.</p>' +
+    button_(url, 'Open the Inbox'));
+  const text = 'Hi ' + user.name + ',\n\n' + what + ' It is now in the Inbox in Fleet Manager, waiting for someone to check it and add it to the vehicle\'s log. Nothing has been added yet.\n' + url;
+  sendMail_(user.email, 'Your receipt is waiting for approval', html, text);
 }
 
 /** The timer: read new mail sent to a car's receipt address. Runs every 5 minutes (see setupReceiptEmail). */
