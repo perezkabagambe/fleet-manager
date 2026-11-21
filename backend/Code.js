@@ -80,6 +80,8 @@ function actions_() {
     aiStatus: { auth: 'user', fn: aiStatus_ },
     aiFillCar: { auth: 'user', fn: aiFillCar_ }, // no script lock: it waits for an outside service and must not block everyone else
     getReceiptStatus: { auth: 'user', fn: getReceiptStatus_ },
+    getReceiptAddress: { auth: 'user', lock: true, fn: getReceiptAddress_ }, // makes the car's address on first use
+    replaceReceiptSecret: { auth: 'admin', lock: true, fn: replaceReceiptSecret_ },
     uploadReceipt: { auth: 'user', lock: true, fn: uploadReceipt_ },
     readReceipt: { auth: 'user', fn: readReceipt_ }, // no script lock: it waits for an outside service and must not block everyone else
     listInbox: { auth: 'user', fn: listInbox_ },

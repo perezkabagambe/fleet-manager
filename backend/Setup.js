@@ -21,7 +21,7 @@ const SCHEMA = {
   Cars: {
     base: true,
     cols: ['registration', 'nickname', 'make', 'model', 'year', 'colour', 'vin', 'engine_code', 'gearbox_code', 'country', 'market', 'drive_side', 'import_date', 'fuel_capacity', 'currency', 'distance_unit',
-      'photo_file_id', 'photo_thumb_file_id', 'guest_enabled', 'guest_secret', 'acquisition_cost', 'acquisition_currency', 'acquisition_date', 'owner_other', 'keeper_other', 'partsouq_url', 'status', 'current_odometer', 'odometer_updated_at', 'reminder_recipients', 'notes'],
+      'photo_file_id', 'photo_thumb_file_id', 'guest_enabled', 'guest_secret', 'acquisition_cost', 'acquisition_currency', 'acquisition_date', 'owner_other', 'keeper_other', 'partsouq_url', 'status', 'current_odometer', 'odometer_updated_at', 'reminder_recipients', 'notes', 'receipt_secret'],
   },
   // Which users own / are the registered keeper of which cars (one row per car, user and role).
   CarPeople: { base: true, cols: ['car_id', 'user_id', 'role'] },
@@ -50,7 +50,7 @@ const SCHEMA = {
   Inbox: {
     base: true,
     cols: ['source', 'status', 'car_id', 'kind', 'received_at', 'sender', 'subject', 'filename', 'mime', 'size', 'drive_file_id', 'data',
-      'vendor', 'date', 'total', 'currency', 'order_ref', 'note', 'duplicate_of', 'entry_id', 'handled_by', 'handled_at', 'notified'],
+      'vendor', 'date', 'total', 'currency', 'order_ref', 'note', 'duplicate_of', 'entry_id', 'handled_by', 'handled_at', 'notified', 'email_id'],
   },
   Locks: { base: false, cols: ['record_type', 'record_id', 'user_id', 'acquired_at', 'heartbeat_at'] },
   Audit: { base: false, cols: ['timestamp', 'user_id', 'user_email', 'action', 'record_type', 'record_id', 'summary', 'before', 'after'] },
@@ -59,7 +59,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 21; // 21: receipts waiting for review (Inbox tab) (20: a purchase can hold several items (PurchaseItems tab) (19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 22; // 22: receipts can arrive by email (Cars.receipt_secret, Inbox.email_id) (21: receipts waiting for review (Inbox tab) (20: a purchase can hold several items (PurchaseItems tab) (19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {

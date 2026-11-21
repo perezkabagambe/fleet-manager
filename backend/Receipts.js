@@ -74,7 +74,7 @@ function storeReceipt_(fields, bytes, mime, filename, ctx) {
     updated_by: ctx && ctx.user ? ctx.user.id : 'email', version: 1, deleted: false,
     source: 'upload', status: 'New', car_id: '', kind: '', received_at: now, sender: '', subject: '',
     filename: filename, mime: mime, size: bytes.length, drive_file_id: file.getId(), data: '', vendor: '', date: '', total: '', currency: '',
-    order_ref: '', note: '', duplicate_of: '', entry_id: '', handled_by: '', handled_at: '', notified: '',
+    order_ref: '', note: '', duplicate_of: '', entry_id: '', handled_by: '', handled_at: '', notified: '', email_id: '',
   }, fields);
   Db.insert('Inbox', row);
   return row;
@@ -258,7 +258,7 @@ function readStoredReceipt_(row, userId, extraText, notifyExcept) {
   } else {
     try {
       const parts = [{ text: 'Read this document.' + (extraText ? '\n\nThe text of the email it came with:\n' + extraText : '') }];
-      if (row.drive_file_id) {
+      if (row.drive_file_id && (row.mime === 'image/jpeg' || row.mime === 'application/pdf')) {
         const bytes = DriveApp.getFileById(row.drive_file_id).getBlob().getBytes();
         parts.push({ inline_data: { mime_type: row.mime, data: Utilities.base64Encode(bytes) } });
       }

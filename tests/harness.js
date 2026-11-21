@@ -8,7 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const BACKEND = path.join(__dirname, '..', 'backend');
-const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'People.js', 'Photos.js', 'Entries.js', 'Attachments.js', 'CarDocuments.js', 'AiFill.js', 'Receipts.js', 'Guests.js', 'Feedback.js', 'Tasks.js', 'Reminders.js', 'Sync.js', 'Code.js', 'Version.js', 'Setup.js'];
+const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'People.js', 'Photos.js', 'Entries.js', 'Attachments.js', 'CarDocuments.js', 'AiFill.js', 'Receipts.js', 'ReceiptMail.js', 'Guests.js', 'Feedback.js', 'Tasks.js', 'Reminders.js', 'Sync.js', 'Code.js', 'Version.js', 'Setup.js'];
 
 function makeSheet(header) {
   const rows = [header.slice()];
@@ -65,7 +65,7 @@ function createEnv() {
   const outbox = [];
   const sleeps = [];
   const files = {};
-  const state = { tokeninfo: null, mailQuota: 100, cacheCalls: 0, anthropic: null, aiRequests: [], gemini: null, geminiRequests: [] }; // cacheCalls: round trips to the script cache
+  const state = { tokeninfo: null, mailQuota: 100, cacheCalls: 0, anthropic: null, aiRequests: [], gemini: null, geminiRequests: [], gmail: [], gmailLabels: {}, gmailQueries: [] }; // cacheCalls: round trips to the script cache
   const folders = {};
   const triggers = [];
   let folderCount = 0;
@@ -212,6 +212,12 @@ function createEnv() {
         return fileObj(id);
       },
     },
+    GmailApp: { // tests put threads in state.gmail (see tests/receiptmail.test.js)
+      search: (q, start, max) => { state.gmailQueries.push(q); return state.gmail.filter((t) => !t.labels.includes('Fleet-handled')).slice(start || 0, (start || 0) + (max || 25)); },
+      getUserLabelByName: (n) => state.gmailLabels[n] || null,
+      createLabel: (n) => { state.gmailLabels[n] = { getName: () => n, name: n }; return state.gmailLabels[n]; },
+    },
+    Logger: { log() {} },
     SpreadsheetApp: null,
   };
 
