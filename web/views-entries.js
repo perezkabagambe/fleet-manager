@@ -108,7 +108,7 @@
 
   /** A file's unique ID (such as A-0042) with a button to copy it, like an entry's reference. */
   function fileRefLine(ref) {
-    return el('div', { class: 'ref-line file-ref' }, [el('span', { class: 'ref-badge', text: ref }), UI.copyValueButton(ref, 'Copy file ID ' + ref)]);
+    return el('div', { class: 'ref-line file-ref' }, [el('span', { class: 'ref-badge', text: ref })]); // plain text: it can be selected and copied
   }
   window.EntryUI = window.EntryUI || {};
   window.EntryUI.fileRefLine = fileRefLine;
@@ -219,7 +219,6 @@
     function row(e) {
       var meta = [e.ref, dateText(e.date)].filter(Boolean); // the reference first, e.g. M-0042
       if (e.mileage !== null) meta.push(mileageText(e, car));
-      if (e.vendor) meta.push(e.vendor);
       var tags = [];
       if (e.type === 'Issue') tags.push(el('span', { class: 'chip st-' + e.status.toLowerCase().replace(/[^a-z]/g, ''), text: e.status }));
       if (e.type === 'Purchase') tags.push(el('span', { class: 'chip ' + (e.stockStatus === 'In stock' ? 'active' : e.stockStatus === 'Fitted' ? 'sold' : 'pending'), text: e.stockStatus }));
@@ -229,15 +228,17 @@
       var cost = costText(e);
       var link = el('a', { class: 'entry-row', href: '#/car/' + car.id + '/entry/' + e.id }, [
         e.thumbAttachmentId ? Photos.thumbBox(e.thumbAttachmentId, 'row-thumb') : null,
+        // the title has the whole width; under it the reference, date and mileage, then the garage in grey,
+        // then a footer with the tags (type, status, attachments) on the left and the cost on the right
         el('div', { class: 'entry-main' }, [
           el('div', { class: 'entry-title', text: e.title }),
-          el('div', { class: 'entry-meta' }, [
-            el('span', { class: 'muted small-text', text: meta.join(' · ') }),
+          el('div', { class: 'muted small-text entry-ref-line', text: meta.join(' · ') }),
+          e.vendor ? el('div', { class: 'muted small-text entry-vendor', text: e.vendor }) : null,
+          el('div', { class: 'entry-foot' }, [
+            el('div', { class: 'entry-foot-tags' }, [typeChip(e.type)].concat(tags)),
             cost ? el('strong', { class: 'entry-cost', text: cost }) : null,
           ]),
         ]),
-        // the type, status (Fitted, Resolved...) and attachment count all sit to the right of the name
-        el('div', { class: 'entry-tags' }, [typeChip(e.type)].concat(tags)),
       ]);
       // a small link icon beside each row copies a link straight to that entry
       return el('div', { class: 'entry-line' + (editing ? ' is-editing' : '') }, [
@@ -464,7 +465,7 @@
         el('div', { class: 'entry-head' }, [
           el('h1', { text: e.title }),
           el('div', { class: 'muted entry-sub', text: meta.join(' · ') }), // the date, mileage and the garage (left out if blank)
-          e.ref ? el('div', { class: 'ref-line' }, [el('span', { class: 'ref-badge', text: e.ref }), UI.copyValueButton(e.ref, 'Copy reference ' + e.ref)]) : null,
+          e.ref ? el('div', { class: 'ref-line' }, [el('span', { class: 'ref-badge', text: e.ref })]) : null, // plain text: it can be selected and copied
           topThumb,
         ]),
         msg, statusArea,

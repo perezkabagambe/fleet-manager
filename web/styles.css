@@ -648,3 +648,18 @@ dl.details dd.vin-line { white-space: nowrap; overflow: hidden; overflow-wrap: n
 .lightbox-close { position: fixed; top: max(10px, env(safe-area-inset-top)); right: 10px; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.18); color: #fff; font-size: 1.3rem; line-height: 1; cursor: pointer; }
 .lightbox-note { position: fixed; left: 0; right: 0; bottom: max(14px, env(safe-area-inset-bottom)); text-align: center; color: #fff; font-size: 0.9rem; pointer-events: none; }
 body.lightbox-on { overflow: hidden; }
+
+/* a log row: title on top, details under it, tags and cost in a footer */
+.entry-row { align-items: flex-start; }
+.entry-main { flex: 1 1 auto; min-width: 0; }
+.entry-main .entry-title { margin: 0 0 2px; overflow-wrap: break-word; line-height: 1.25; }
+.entry-ref-line, .entry-vendor { overflow-wrap: break-word; line-height: 1.35; user-select: text; -webkit-user-select: text; }
+.entry-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; margin-top: 8px; }
+.entry-foot-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.entry-foot .entry-cost { margin-left: auto; white-space: nowrap; }
+.ref-badge { user-select: text; -webkit-user-select: text; }
+.entry-line .entry-row .row-thumb { width: 56px; height: 56px; flex: none; }
+.entry-line .share-btn { align-self: flex-start; }
+.entry-line.is-editing .entry-row { flex-wrap: nowrap; }
+.entry-line.is-editing .entry-main { flex: 1 1 0; }
+.entry-line.is-editing .entry-row .row-thumb { width: 44px; height: 44px; }
