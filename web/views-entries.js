@@ -239,7 +239,7 @@
         el('div', { class: 'entry-tags' }, [typeChip(e.type)].concat(tags)),
       ]);
       // a small link icon beside each row copies a link straight to that entry
-      return el('div', { class: 'entry-line' }, [
+      return el('div', { class: 'entry-line' + (editing ? ' is-editing' : '') }, [
         link,
         editing ? el('div', { class: 'row-actions' }, [
           el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/entry/' + e.id + '/edit', text: 'Edit', 'aria-label': 'Edit ' + e.title }),

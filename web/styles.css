@@ -607,3 +607,11 @@ dl.details dd.vin-line { white-space: nowrap; overflow: hidden; overflow-wrap: n
 .bin-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); padding: 8px 0; }
 .bin-row:last-child { border-bottom: 0; }
 .recycle-bin { margin-top: 14px; }
+
+/* A log row never squeezes its title into a column one letter wide. With Edit and Delete showing, the tags drop under the title. */
+.entry-main { min-width: 6rem; }
+.entry-title { overflow-wrap: break-word; }
+.entry-line.is-editing .entry-row { flex-wrap: wrap; }
+.entry-line.is-editing .entry-main { flex: 1 1 6rem; }
+.entry-line.is-editing .entry-tags { order: 3; flex: 1 1 100%; max-width: 100%; justify-content: flex-start; margin-top: 4px; }
+.entry-line.is-editing .row-thumb { width: 40px; height: 40px; }
