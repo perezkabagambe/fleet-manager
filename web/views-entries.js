@@ -539,20 +539,23 @@
     if (!eid && !TYPES[typeKey]) { fmt.notFound(root); return; }
 
     var calls = [FleetApi.call('getCar', { id: carId }), FleetApi.call('listPurchases', { carId: carId, eventId: eid }), FleetApi.call('listTasks', { carId: carId })];
+    var draftId = eid ? '' : (ctx.query.inbox || ''); // a receipt from the Inbox being turned into this entry
     if (eid) calls.push(FleetApi.call('getEntry', { id: eid }));
+    else if (draftId) calls.push(FleetApi.call('getInboxItem', { id: draftId }));
     Promise.all(calls).then(function (res) {
-      build(res[0].data.car, res[1].data, res[3] ? res[3].data : null, res[2].data.tasks);
+      build(res[0].data.car, res[1].data, eid && res[3] ? res[3].data : null, res[2].data.tasks, draftId && res[3] ? res[3].data.receipt : null);
     }).catch(function (e) {
       if (e.code === 'not_found') fmt.notFound(root);
       else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e))]));
     });
 
-    function build(car, lists, existingData, tasks) {
+    function build(car, lists, existingData, tasks, draft) {
       var existing = existingData ? existingData.entry : null;
       var type = existing ? existing.type : TYPES[typeKey].type;
       var meta = BY_TYPE[type];
       var isJob = type === 'Maintenance';
-      var v = existing || {};
+      if (draft && (draft.status === 'Approved' || draft.status === 'Dismissed' || (type !== 'Purchase' && type !== 'Maintenance'))) draft = null; // a receipt that is already dealt with starts nothing
+      var v = existing || (draft ? draftValues(draft, type) : {});
       var f = {};
       var msg = el('div');
 
@@ -570,7 +573,7 @@
         return f[name];
       }
       // Every cost has a currency dropdown beside it. They start from the currency used last on this car.
-      var defaultCurrency = existing ? existing.currency : (lastCurrency[car.id] || car.currency || 'GBP');
+      var defaultCurrency = existing ? existing.currency : ((draft && draft.currency) || lastCurrency[car.id] || car.currency || 'GBP');
       function currencyPick(name, value) {
         var sel = select(name, fmt.currencyOptions, value || defaultCurrency);
         sel.setAttribute('aria-label', 'Currency');
@@ -671,8 +674,11 @@
           return first + (rows.length > 1 ? ' + ' + (rows.length - 1) + ' more' : '');
         };
         var existingItems = existingData && existingData.items ? existingData.items : null;
+        var fromReceipt = draft && draft.data ? (draft.data.items || []).map(function (i) { return { name: i.name, partNumber: i.partNumber || '', quantity: String(i.quantity), unitCost: i.unitCost === null || i.unitCost === undefined ? '' : String(i.unitCost) }; }) : [];
+        if (draft && !fromReceipt.length) fromReceipt = [{ name: '', partNumber: '', quantity: '1', unitCost: draft.total === null ? '' : String(draft.total) }];
         purchaseItems = existingItems
           ? existingItems.map(function (i) { return { id: i.id, name: i.name, partNumber: i.partNumber || '', quantity: String(i.quantity), unitCost: i.unitCost === null || i.unitCost === undefined ? '' : String(i.unitCost), used: i.used || 0 }; })
+          : fromReceipt.length ? fromReceipt.map(function (i) { return { id: '', name: i.name, partNumber: i.partNumber, quantity: i.quantity, unitCost: i.unitCost, used: 0 }; })
           : [{ id: '', name: '', partNumber: '', quantity: '1', unitCost: '', used: 0 }];
         var ownName = existing && existing.title !== derivedName(purchaseItems) ? existing.title : '';
         var itemsBox = el('div', { class: 'stack items-edit' });
@@ -995,6 +1001,18 @@
         });
       }
 
+      // A receipt from the Inbox is attached to the saved entry, and leaves the Inbox. (Saving again after a failure only repeats this step.)
+      function attachReceipt(entryId) {
+        if (!draft || state.receiptDone) return Promise.resolve();
+        return FleetApi.call('resolveReceipt', { id: draft.id, entryId: entryId }).then(function () {
+          state.receiptDone = true;
+          if (window.InboxUI) InboxUI.refreshCount();
+        }, function (e) {
+          e.prefix = 'The entry was saved, but the receipt could not be attached to it. ';
+          throw e;
+        });
+      }
+
       function run() {
         var payload = { fields: collect() };
         if (state.entryId) { payload.id = state.entryId; payload.version = state.version; } else { payload.carId = car.id; payload.type = type; }
@@ -1018,7 +1036,7 @@
           state.version = entry.version;
           Views.invalidateCars();
           lastCurrency[car.id] = entry.currency;
-          return uploadStaged(entry.id).then(function () { return copyAfterSave(entry.id); }).then(function (copyNote) {
+          return attachReceipt(entry.id).then(function () { return uploadStaged(entry.id); }).then(function () { return copyAfterSave(entry.id); }).then(function (copyNote) {
             var note = [reminderNote, copyNote.text].filter(Boolean).join(' ');
             if (note && !uploadFailed) FleetApp.setFlash(copyNote.failed ? 'error' : 'ok', note);
             FleetApp.go('/car/' + car.id + '/entry/' + entry.id);
@@ -1030,17 +1048,31 @@
         ev.preventDefault();
         msg.replaceChildren();
         UI.busy(btn, 'Saving…', run()).catch(function (e) {
-          msg.replaceChildren(UI.notice('error', UI.errorText(e)));
+          msg.replaceChildren(UI.notice('error', (e.prefix || '') + UI.errorText(e) + (e.prefix ? ' Tap the button again to retry.' : '')));
           window.scrollTo(0, 0);
         });
       });
 
       root.replaceChildren(el('section', { class: 'card' }, [
-        fmt.backLink(existing ? '#/car/' + car.id + '/entry/' + existing.id : '#/car/' + car.id + '/add', existing ? existing.title : 'Add an entry'),
+        draft ? fmt.backLink('#/inbox/' + draft.id, 'The receipt') : fmt.backLink(existing ? '#/car/' + car.id + '/entry/' + existing.id : '#/car/' + car.id + '/add', existing ? existing.title : 'Add an entry'),
         el('h1', { text: existing ? 'Edit ' + meta.label.toLowerCase() : 'Add ' + (type === 'Purchase' ? 'a purchased item' : type === 'Maintenance' ? 'maintenance' : 'a ' + meta.label.toLowerCase()) }),
         el('p', { class: 'muted', text: car.registration + ' · ' + car.make + ' ' + car.model + '. ' + meta.blurb }),
+        draft ? InboxUI.panel(draft) : null,
         msg, form,
       ]));
+    }
+
+    /** The boxes of the form that a receipt from the Inbox can fill in. */
+    function draftValues(draft, type) {
+      var d = draft.data || {};
+      var v = { date: draft.date || '', vendor: draft.vendor || '', notes: d.orderNumber ? 'Order number ' + d.orderNumber + '.' : '' };
+      if (type === 'Maintenance') {
+        v.title = d.work ? d.work.slice(0, 120) : (draft.vendor ? 'Work by ' + draft.vendor : '');
+        v.mileage = d.mileage ? String(d.mileage) : '';
+        v.costMode = 'lump';
+        v.lumpSumCost = draft.total === null ? '' : String(draft.total);
+      }
+      return v;
     }
   };
 })();

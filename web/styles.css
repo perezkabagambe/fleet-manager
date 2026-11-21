@@ -584,3 +584,14 @@ details.form-section.kind-bulb > summary h2 { color: var(--kind-bulb-text); }
 
 /* The VIN is always on one line: the text shrinks to fit (see fitOneLine in views-cars.js) */
 dl.details dd.vin-line { white-space: nowrap; overflow: hidden; overflow-wrap: normal; min-width: 0; font-variant-numeric: tabular-nums; }
+
+/* receipt Inbox */
+.notice.warn { border-color: var(--warn-text); color: var(--warn-text); background: var(--warn-bg); }
+.notice.info { color: var(--muted); }
+.inbox-row { display: block; text-decoration: none; color: inherit; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.inbox-title { font-weight: 600; overflow-wrap: anywhere; }
+.inbox-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.receipt-view { margin: 8px 0 12px; }
+.receipt-banner { border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin: 12px 0; }
+.receipt-items { margin: 4px 0 12px; padding-left: 20px; }
+.file-input { width: 100%; }

@@ -34,6 +34,16 @@ env.state.anthropic = () => ({
   },
 });
 
+// A pretend Gemini, so the receipt Inbox can be tried locally. A file whose name contains "invoice" reads as a garage invoice.
+env.props.GEMINI_API_KEY = 'local-test';
+env.state.gemini = (req) => {
+  const part = req.body.contents[0].parts.filter((x) => x.inline_data)[0];
+  const garage = !!part && /invoice/i.test(Buffer.from(part.inline_data.data, 'base64').toString('latin1'));
+  return { code: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify(garage
+    ? { documentType: 'garage_invoice', vendor: 'Kampala Motors', date: '2026-09-15', currency: 'UGX', total: 450000, workDescription: 'Full service and brake check', mileage: 51234, confidence: 'medium' }
+    : { documentType: 'parts_receipt', vendor: 'Euro Car Parts', date: '2026-10-02', currency: 'GBP', orderNumber: 'ECP-5521', total: 71.97, items: [{ name: 'Front brake pads', partNumber: 'BP123', quantity: 1, unitPrice: 41.99 }, { name: 'Oil filter', quantity: 2, lineTotal: 19.98 }, { name: 'Delivery', quantity: 1, unitPrice: 0 }], vehicleRegistration: 'AB12CDE', confidence: 'high', summary: 'Brake pads and oil filters (local test answer).' }) }] } }] } };
+};
+
 // A little starting data
 const mk = (fields) => env.call('saveCar', { token: tokens.admin, fields }).data.car;
 const car1 = mk({ registration: 'AB12 CDE', make: 'Toyota', model: 'Land Cruiser', year: '2015', vin: 'JTMHV05J604123456', colour: 'White', odometer: '51200', country: 'UK' });

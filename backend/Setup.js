@@ -46,6 +46,12 @@ const SCHEMA = {
     cols: ['car_id', 'kind', 'name', 'interval_months', 'interval_distance', 'lead_days', 'lead_distance', 'due_date',
       'due_distance', 'assignees', 'last_done_date', 'last_done_distance', 'last_reminded_at', 'active', 'paused_reason'],
   },
+  // Receipts waiting for review (photos, PDFs and, later, emails): see Receipts.js.
+  Inbox: {
+    base: true,
+    cols: ['source', 'status', 'car_id', 'kind', 'received_at', 'sender', 'subject', 'filename', 'mime', 'size', 'drive_file_id', 'data',
+      'vendor', 'date', 'total', 'currency', 'order_ref', 'note', 'duplicate_of', 'entry_id', 'handled_by', 'handled_at', 'notified'],
+  },
   Locks: { base: false, cols: ['record_type', 'record_id', 'user_id', 'acquired_at', 'heartbeat_at'] },
   Audit: { base: false, cols: ['timestamp', 'user_id', 'user_email', 'action', 'record_type', 'record_id', 'summary', 'before', 'after'] },
   Settings: { base: false, cols: ['key', 'value'] },
@@ -53,7 +59,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 20; // 20: a purchase can hold several items (PurchaseItems tab) (19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 21; // 21: receipts waiting for review (Inbox tab) (20: a purchase can hold several items (PurchaseItems tab) (19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {

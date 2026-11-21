@@ -79,6 +79,15 @@ function actions_() {
     deleteAttachment: { auth: 'admin', lock: true, fn: deleteAttachment_ },
     aiStatus: { auth: 'user', fn: aiStatus_ },
     aiFillCar: { auth: 'user', fn: aiFillCar_ }, // no script lock: it waits for an outside service and must not block everyone else
+    getReceiptStatus: { auth: 'user', fn: getReceiptStatus_ },
+    uploadReceipt: { auth: 'user', lock: true, fn: uploadReceipt_ },
+    readReceipt: { auth: 'user', fn: readReceipt_ }, // no script lock: it waits for an outside service and must not block everyone else
+    listInbox: { auth: 'user', fn: listInbox_ },
+    getInboxCount: { auth: 'user', fn: getInboxCount_ },
+    getInboxItem: { auth: 'user', fn: getInboxItem_ },
+    getReceiptFile: { auth: 'user', fn: getReceiptFile_ },
+    resolveReceipt: { auth: 'user', lock: true, fn: resolveReceipt_ },
+    dismissReceipt: { auth: 'admin', lock: true, fn: dismissReceipt_ },
     listCarDocuments: { auth: 'user', fn: listCarDocuments_ },
     uploadCarDocument: { auth: 'user', lock: true, fn: uploadCarDocument_ },
     getCarDocument: { auth: 'user', fn: getCarDocument_ },

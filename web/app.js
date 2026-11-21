@@ -39,6 +39,7 @@
     return !!(PUBLIC[r.path] || GUEST_PATH.test(r.path) || (r.query.g && SCAN_PATH.test(r.path) && !FleetAuth.hasSession()));
   }
 
+  var inboxAsked = false; // the Inbox count is fetched once per page load (and whenever the Inbox changes)
   var started = false; // nothing is drawn until the phone's saved copy has been read (a moment at most)
 
   function route(opts) {
@@ -63,6 +64,7 @@
         return;
       }
     }
+    if (FleetAuth.hasSession() && FleetAuth.getUser() && window.InboxUI && !inboxAsked) { inboxAsked = true; InboxUI.refreshCount(); }
     if (FleetAuth.hasSession() && FleetAuth.getUser() && window.FleetSync) FleetSync.start(); // saves the fleet's data on this phone (once), then keeps it fresh
     var view;
     var m;
@@ -80,6 +82,8 @@
     else if (r.path === '/login/verify') view = Views.verify;
     else if (r.path === '/request') view = Views.request;
     else if (r.path === '/feedback') view = Views.feedback;
+    else if (r.path === '/inbox') view = Views.inbox;
+    else if ((m = /^\/inbox\/([0-9a-f-]{8,40})$/.exec(r.path))) { r.params.id = m[1]; view = Views.receipt; }
     else if (r.path === '/profile') view = Views.profile;
     else if (r.path === '/profile/cars') view = Views.userCars;
     else if (r.path === '/admin/users') view = FleetAuth.isAdmin() ? Views.adminUsers : viewForbidden;
@@ -112,6 +116,10 @@
     var user = FleetAuth.getUser();
     var links = [];
     if (FleetAuth.hasSession()) links.push(el('a', { href: '#/', text: 'Fleet' }));
+    if (FleetAuth.hasSession() && window.InboxUI) {
+      var n = InboxUI.getCount();
+      links.push(el('a', { href: '#/inbox', text: n > 0 ? 'Inbox (' + n + ')' : 'Inbox' }));
+    }
     if (FleetAuth.isAdmin()) links.push(el('a', { href: '#/admin/users', text: 'Users' }));
     if (user) links.push(el('a', { href: '#/profile', text: user.name.split(' ')[0] }));
     if (FleetAuth.hasSession()) {
@@ -126,12 +134,16 @@
 
   function signOut() {
     var done = function () {
+      inboxAsked = false;
       FleetAuth.clear();
       refreshNav();
       go('/login');
     };
     FleetApi.call('logout').then(done, done);
   }
+
+  // the number of receipts waiting is shown on the menu: it is asked for on opening the app, and when it changes
+  window.addEventListener('fleet:inbox-count', function () { refreshNav(); });
 
   window.addEventListener('fleet:unauthorized', function () {
     refreshNav();

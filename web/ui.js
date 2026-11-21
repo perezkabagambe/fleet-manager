@@ -103,6 +103,8 @@
     invalid_year: 'The year must be a four-digit year, such as 2015.',
     ai_not_set_up: 'AI is not set up yet. An administrator needs to add the Anthropic key to the app.',
     ai_search_disabled: 'AI is set up but web search is switched off for the Anthropic account. An administrator can switch it on in the Anthropic Console.',
+    receipt_closed: 'That receipt has already been dealt with.',
+    inbox_full: 'The Inbox is full. Check or dismiss some receipts first.',
     ai_busy: 'The AI service is busy right now. Please try again in a minute.',
     ai_unavailable: 'The AI did not answer in time, or could not be reached. Nothing was used up. Please try again.',
     ai_limit_user: 'You have used all of your AI lookups for today. They come back tomorrow.',

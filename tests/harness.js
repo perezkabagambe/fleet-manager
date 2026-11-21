@@ -8,7 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const BACKEND = path.join(__dirname, '..', 'backend');
-const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'People.js', 'Photos.js', 'Entries.js', 'Attachments.js', 'CarDocuments.js', 'AiFill.js', 'Guests.js', 'Feedback.js', 'Tasks.js', 'Reminders.js', 'Sync.js', 'Code.js', 'Version.js', 'Setup.js'];
+const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'People.js', 'Photos.js', 'Entries.js', 'Attachments.js', 'CarDocuments.js', 'AiFill.js', 'Receipts.js', 'Guests.js', 'Feedback.js', 'Tasks.js', 'Reminders.js', 'Sync.js', 'Code.js', 'Version.js', 'Setup.js'];
 
 function makeSheet(header) {
   const rows = [header.slice()];
@@ -65,7 +65,7 @@ function createEnv() {
   const outbox = [];
   const sleeps = [];
   const files = {};
-  const state = { tokeninfo: null, mailQuota: 100, cacheCalls: 0, anthropic: null, aiRequests: [] }; // cacheCalls: round trips to the script cache
+  const state = { tokeninfo: null, mailQuota: 100, cacheCalls: 0, anthropic: null, aiRequests: [], gemini: null, geminiRequests: [] }; // cacheCalls: round trips to the script cache
   const folders = {};
   const triggers = [];
   let folderCount = 0;
@@ -86,6 +86,7 @@ function createEnv() {
         return fileObj(fid);
       },
       setTrashed: (t) => { files[id].trashed = !!t; },
+      moveTo: (folder) => { files[id].folder = folder.getId(); },
     };
   }
   function folderObj(id) {
@@ -190,6 +191,14 @@ function createEnv() {
           const r = state.anthropic(sent);
           if (r instanceof Error) throw r;
           return { getResponseCode: () => r.code, getContentText: () => typeof r.body === 'string' ? r.body : JSON.stringify(r.body) };
+        }
+        if (/generativelanguage\.googleapis\.com/.test(url)) { // Gemini: tests set state.gemini = (request) => ({ code, body })
+          const sent = { url, headers: opts.headers, body: JSON.parse(opts.payload) };
+          state.geminiRequests.push(sent);
+          if (!state.gemini) throw new Error('no Gemini mock');
+          const g = state.gemini(sent);
+          if (g instanceof Error) throw g;
+          return { getResponseCode: () => g.code, getContentText: () => typeof g.body === 'string' ? g.body : JSON.stringify(g.body) };
         }
         const r = state.tokeninfo;
         if (!r) throw new Error('no tokeninfo mock');

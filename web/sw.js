@@ -28,6 +28,7 @@ const SHELL = [
   'views-entries.js',
   'views-reminders.js',
   'views-documents.js',
+  'views-inbox.js',
   'views-guest.js',
   'views-feedback.js',
   'app.js',
