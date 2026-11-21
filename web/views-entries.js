@@ -604,9 +604,10 @@
         f.taskId = taskSelect;
       }
       // A purchase is a list of items, then date, currency, supplier and link for the whole purchase (see below).
+      var dateField = type === 'Purchase' ? null : UI.field(type === 'Compliance' ? 'Date done or paid *' : 'Date *', text('date', v.date || isoToday(), { type: 'date', max: isoToday(), required: true }));
       var top = type === 'Purchase' ? [] : [
         UI.field('Title *', text('title', v.title || (preTask ? preTask.name : ''), { maxlength: '120', placeholder: meta.placeholder, required: true })),
-        UI.field(type === 'Compliance' ? 'Date done or paid *' : 'Date *', text('date', v.date || isoToday(), { type: 'date', max: isoToday(), required: true })),
+        dateField,
       ];
       var purchaseItems = []; // the items being edited (purchases only)
 
@@ -615,7 +616,7 @@
       odoCheck.checked = true;
       var odoText = el('span', { text: 'Update the car\'s Odometer Log to this reading' });
       var odoRow = el('label', { class: 'check', hidden: true }, [odoCheck, odoText]);
-      function mileageField() {
+      function mileageField(withoutOffer) {
         var m = text('mileage', v.mileage === null || v.mileage === undefined ? '' : v.mileage, { inputmode: 'numeric', id: 'f-mileage' });
         // The car's odometer is offered a rise whenever the reading is higher than what it shows now.
         function check() {
@@ -628,8 +629,14 @@
         return el('div', { class: 'field' }, [
           el('label', { for: 'f-mileage', text: 'Mileage (miles)' }),
           m,
-          odoRow,
+          withoutOffer ? null : odoRow,
         ]);
+      }
+
+      // Issues and renewals: the date and the mileage share a line; the offer to update the odometer sits just below them.
+      if (type === 'Issue' || type === 'Compliance') {
+        var at = top.indexOf(dateField);
+        top.splice(at, 1, el('div', { class: 'field-pair' }, [dateField, mileageField(true)]), odoRow);
       }
 
       if (taskSelect) {
@@ -647,14 +654,12 @@
 
       if (type === 'Issue') {
         body = [
-          mileageField(),
           UI.field('Status', select('status', ISSUE_STATUSES.map(function (s) { return [s, s]; }), v.status || 'Not resolved')),
           amountRow('Inspection or diagnosis fee', text('cost', v.cost === null || v.cost === undefined ? '' : v.cost, { inputmode: 'decimal' }), 'Optional.', 'f-cost'),
         ];
       } else if (type === 'Compliance') {
         body = [
           UI.field('Provider', text('vendor', v.vendor, { maxlength: '80' }), 'Optional, e.g. the testing station or insurer.'),
-          mileageField(),
           amountRow('Cost', text('cost', v.cost === null || v.cost === undefined ? '' : v.cost, { inputmode: 'decimal' }), 'Optional.', 'f-cost'),
           UI.field('New expiry date', text('expiryDate', v.expiryDate, { type: 'date' }), 'Optional. When this runs out next. You\'ll receive email reminders for this.'),
         ];
@@ -766,7 +771,7 @@
         var otherCur = currencyPick('otherCurrency', existing ? existing.otherCurrency : '');
         var lumpCur = currencyPick('lumpCurrency', existing ? existing.lumpCurrency : '');
         var modeLump = el('input', { type: 'radio', name: 'costMode', value: 'lump' });
-        (v.costMode === 'lump' ? modeLump : modeItemised).checked = true;
+        (existing && v.costMode !== 'lump' ? modeItemised : modeLump).checked = true; // a new entry starts as "Invoice total only"; an existing one keeps how it was recorded
         var itemisedBox = el('div', { class: 'stack' });
         var lumpBox = el('div');
         var totalBox = el('div', { class: 'job-total' });
@@ -889,8 +894,8 @@
         out.push(
           el('div', { class: 'field' }, [
             el('div', { class: 'field-label', text: 'How do you want to record the cost?' }),
-            el('label', { class: 'check' }, [modeItemised, el('span', { text: 'Itemised: parts, labour and other costs' })]),
             el('label', { class: 'check' }, [modeLump, el('span', { text: 'Invoice total only' })]),
+            el('label', { class: 'check' }, [modeItemised, el('span', { text: 'Itemised: parts, labour and other costs' })]),
           ]),
           itemisedBox, lumpBox, totalBox
         );
