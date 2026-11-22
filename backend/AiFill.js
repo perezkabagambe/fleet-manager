@@ -97,7 +97,8 @@ function aiKnown_(src) {
     country: src.country === 'UG' ? 'UG' : 'UK',
     make: cleanStr_(src.make, 40), model: cleanStr_(src.model, 40), year: cleanStr_(src.year, 4),
     colour: cleanStr_(src.colour, 30), engineCode: cleanStr_(src.engineCode, 30), gearboxCode: cleanStr_(src.gearboxCode, 30),
-    transmission: TRANSMISSIONS.indexOf(cleanStr_(src.transmission, 12)) !== -1 ? cleanStr_(src.transmission, 12) : '', extra: cleanStr_(src.extra, 300),
+    transmission: TRANSMISSIONS.indexOf(cleanStr_(src.transmission, 12)) !== -1 ? cleanStr_(src.transmission, 12) : '',
+    fuelType: FUEL_TYPES.indexOf(cleanStr_(src.fuelType, 20)) !== -1 ? cleanStr_(src.fuelType, 20) : '', extra: cleanStr_(src.extra, 300),
     market: cleanStr_(src.market, 30), driveSide: cleanStr_(src.driveSide, 4).toUpperCase(), fuelCapacity: cleanStr_(src.fuelCapacity, 8),
   };
   if (known.vin && !/^[A-Z0-9-]{5,25}$/.test(known.vin)) fail_('invalid_vin');
@@ -115,7 +116,7 @@ function aiKnownLines_(known) {
   if (known.registration) lines.push('Registration number: ' + known.registration);
   lines.push('The car is kept in: ' + (known.country === 'UG' ? 'Uganda' : 'the United Kingdom'));
   const typed = [['make', known.make], ['model', known.model], ['year', known.year], ['colour', known.colour], ['engine code', known.engineCode],
-    ['transmission', known.transmission], ['gearbox code', known.gearboxCode], ['market', known.market], ['drive side', known.driveSide], ['fuel tank (litres)', known.fuelCapacity]]
+    ['transmission', known.transmission], ['fuel type', known.fuelType], ['gearbox code', known.gearboxCode], ['market', known.market], ['drive side', known.driveSide], ['fuel tank (litres)', known.fuelCapacity]]
     .filter(function (x) { return x[1]; });
   if (typed.length) lines.push('The person has already typed: ' + typed.map(function (x) { return x[0] + ' ' + x[1]; }).join(', ') + (known.vin ? ' (if any of this disagrees with what the VIN decodes to, trust the VIN and say so in the summary)' : ' (trust these)') + '.');
   if (known.extra) lines.push('The vehicle log book also says: ' + known.extra + '.');
@@ -141,10 +142,11 @@ function aiDetailsJson_() {
   '    "make": "", "model": "", "year": "",  // year as 4 digits',
   '    "colour": "",',
   '    "engineCode": "",  // the manufacturer engine code, e.g. D4HB',
-  '    "transmission": "", // exactly one of: ' + TRANSMISSIONS.join(' | ') + ' (leave empty if the person already said)',
+  '    "transmission": "", // exactly one of: ' + TRANSMISSIONS.join(' | ') + ' (CVT for a continuously variable gearbox; leave empty if the person already said)',
   '    "gearboxCode": "", // the gearbox / transmission code (e.g. A750F, GS6-53BZ), found for this exact car and its transmission type; if the person gave the transmission type, the code must match it',
   '    "market": "",      // exactly one of: ' + MARKETS.join(' | ') + ' (where it was built and sold for)',
   '    "driveSide": "",   // LHD or RHD',
+  '    "fuelType": "",    // exactly one of: ' + FUEL_TYPES.join(' | '),
   '    "fuelCapacity": "" // fuel tank size in litres, a number',
 ].join('\n');
 }
@@ -295,6 +297,8 @@ function aiClean_(raw) {
   if (DRIVE_SIDES.indexOf(side) !== -1) details.driveSide = side;
   const trans = cleanStr_(d.transmission, 12);
   if (TRANSMISSIONS.indexOf(trans) !== -1) details.transmission = trans;
+  const fuel = mapFuelType_(d.fuelType);
+  if (fuel) details.fuelType = fuel;
   const tank = String(d.fuelCapacity === undefined || d.fuelCapacity === null ? '' : d.fuelCapacity).replace(/[^0-9.]/g, '');
   if (/^\d{1,3}(\.\d)?$/.test(tank) && Number(tank) > 0) details.fuelCapacity = String(Number(tank));
 
@@ -391,7 +395,7 @@ function aiRefreshSpecs_(p, ctx) {
   if (!car) fail_('not_found');
   const known = aiKnown_({
     registration: car.registration, vin: car.vin, country: car.country, make: car.make, model: car.model, year: car.year, colour: car.colour,
-    engineCode: car.engine_code, gearboxCode: car.gearbox_code, transmission: car.transmission, market: car.market, driveSide: car.drive_side, fuelCapacity: car.fuel_capacity,
+    engineCode: car.engine_code, gearboxCode: car.gearbox_code, transmission: car.transmission, fuelType: car.fuel_type, market: car.market, driveSide: car.drive_side, fuelCapacity: car.fuel_capacity,
   });
   const out = aiRun_(ctx, known, aiFillPrompt_(known), aiClean_, function (r) {
     return 'AI specs refresh for ' + car.registration + ' (' + (known.vin ? 'by VIN' : 'by make and model') + ', ' + r.confidence + ' confidence, ' + r.fluids.length + ' fluids, ' + r.bulbs.length + ' bulbs)';
@@ -400,6 +404,19 @@ function aiRefreshSpecs_(p, ctx) {
   return out;
 }
 
+
+/** A fuel type the app uses, from what the AI (or a log book) said: '' if it fits none. */
+function mapFuelType_(raw) {
+  const t = cleanStr_(raw, 40).toLowerCase();
+  if (!t) return '';
+  const exact = FUEL_TYPES.filter(function (x) { return x.toLowerCase() === t; })[0];
+  if (exact) return exact;
+  if (/electric/.test(t) && !/hybrid/.test(t)) return 'Fully electric';
+  if (/hybrid/.test(t)) return /diesel/.test(t) ? 'Diesel hybrid' : 'Petrol hybrid';
+  if (/diesel/.test(t)) return 'Diesel';
+  if (/petrol|gasoline/.test(t)) return 'Petrol';
+  return '';
+}
 
 // ---------- reading a UK vehicle log book (V5C) ----------
 
@@ -415,7 +432,10 @@ function aiLogbookPrompt_() {
     '  "colour": "",                 // field R',
     '  "dateFirstRegistered": "",    // field B, as YYYY-MM-DD',
     '  "engineCapacityCc": "",       // field P.1, a number',
-    '  "fuelType": "",               // field P.3, e.g. PETROL, DIESEL',
+    '  "fuelType": "",               // exactly one of: ' + FUEL_TYPES.join(' | ') + ' (from field P.3 and the model name: HYBRID ELECTRIC on a petrol car is Petrol hybrid; ELECTRICITY is Fully electric)',
+    '  "fuelTypeAsPrinted": "",      // field P.3 exactly as printed',
+    '  "transmission": "",           // exactly one of: ' + TRANSMISSIONS.join(' | ') + ' - only if the document says so anywhere, including in the model name (e.g. "CVT" gives CVT; AUTO, AUTOMATIC, DCT or DSG give Automatic); otherwise ""',
+    '  "acquisitionDate": "",        // the date the current keeper acquired the vehicle (e.g. "Acquired vehicle on 25 05 2025"), as YYYY-MM-DD',
     '  "bodyType": "",               // field J.1 / body type, e.g. SALOON',
     '  "confidence": ""              // "high", "medium" or "low": how readable the document was',
     '}',
@@ -429,13 +449,17 @@ function aiCleanLogbook_(raw) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(first)) first = '';
   const cc = String(raw.engineCapacityCc === undefined || raw.engineCapacityCc === null ? '' : raw.engineCapacityCc).replace(/[^0-9]/g, '');
   const year = first ? first.slice(0, 4) : '';
+  let acquired = cleanStr_(raw.acquisitionDate, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(acquired) || acquired > todayIso_() || acquired < '1950-01-01') acquired = '';
+  const trans = cleanStr_(raw.transmission, 12);
   return {
     isLogbook: raw.isLogbook !== false,
     registration: cleanStr_(raw.registration, 20).toUpperCase(),
     vin: cleanStr_(raw.vin, 30).toUpperCase().replace(/\s+/g, ''),
     make: cleanStr_(raw.make, 40), model: cleanStr_(raw.model, 40), colour: cleanStr_(raw.colour, 30),
     year: /^\d{4}$/.test(year) && Number(year) >= 1900 && Number(year) <= new Date().getFullYear() + 1 ? year : '',
-    firstRegistered: first, engineCapacity: /^\d{3,5}$/.test(cc) ? cc : '', fuelType: cleanStr_(raw.fuelType, 20), bodyType: cleanStr_(raw.bodyType, 30),
+    firstRegistered: first, engineCapacity: /^\d{3,5}$/.test(cc) ? cc : '', fuelType: mapFuelType_(raw.fuelType) || mapFuelType_(raw.fuelTypeAsPrinted), fuelPrinted: cleanStr_(raw.fuelTypeAsPrinted || raw.fuelType, 30),
+    bodyType: cleanStr_(raw.bodyType, 30), acquisitionDate: acquired, transmission: TRANSMISSIONS.indexOf(trans) !== -1 ? trans : '',
     confidence: /^(high|medium|low)$/.test(String(raw.confidence)) ? String(raw.confidence) : 'low',
   };
 }
@@ -469,8 +493,8 @@ function aiReadLogbook_(p, ctx) {
     throw e;
   }
   // the technical details, from what the log book says
-  const extra = [book.firstRegistered ? 'first registered ' + book.firstRegistered : '', book.engineCapacity ? book.engineCapacity + ' cc' : '', book.fuelType, book.bodyType].filter(Boolean).join(', ');
-  const known = aiKnown_({ registration: book.registration, vin: book.vin, country: 'UK', make: book.make, model: book.model, year: book.year, colour: book.colour, extra: extra });
+  const extra = [book.firstRegistered ? 'first registered ' + book.firstRegistered : '', book.engineCapacity ? book.engineCapacity + ' cc' : '', book.fuelPrinted, book.bodyType].filter(Boolean).join(', ');
+  const known = aiKnown_({ registration: book.registration, vin: book.vin, country: 'UK', make: book.make, model: book.model, year: book.year, colour: book.colour, transmission: book.transmission, fuelType: book.fuelType, extra: extra });
   let asked = null;
   if (known.vin || (known.make && known.model)) {
     try {
@@ -485,10 +509,10 @@ function aiReadLogbook_(p, ctx) {
   }
   const t = tech || { details: {}, fluids: [], bulbs: [], summary: '', confidence: 'low' };
   const details = Object.assign({}, t.details);
-  ['registration', 'vin', 'make', 'model', 'colour', 'year'].forEach(function (k) { if (book[k]) details[k] = book[k]; }); // what the document says wins
+  ['registration', 'vin', 'make', 'model', 'colour', 'year', 'transmission', 'fuelType', 'acquisitionDate'].forEach(function (k) { if (book[k]) details[k] = book[k]; }); // what the document says wins
   const out = {
     details: details, fluids: t.fluids, bulbs: t.bulbs, summary: t.summary, confidence: t.confidence,
-    logbook: { registration: book.registration, vin: book.vin, firstRegistered: book.firstRegistered, engineCapacity: book.engineCapacity, fuelType: book.fuelType, confidence: book.confidence },
+    logbook: { registration: book.registration, vin: book.vin, firstRegistered: book.firstRegistered, acquired: book.acquisitionDate, engineCapacity: book.engineCapacity, fuelType: book.fuelPrinted, confidence: book.confidence },
     technical: !!tech, technicalError: technicalError, sources: asked ? asked.sources : [], method: asked ? asked.method : null,
     usedVin: !!known.vin,
   };

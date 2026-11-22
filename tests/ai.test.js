@@ -366,7 +366,7 @@ test('the model check lists what the key can use and tries the likely ones with 
 
 // ---------- reading a log book ----------
 const PDF = Buffer.from('%PDF-1.4 log book').toString('base64');
-const BOOK = { isLogbook: true, registration: 'lb06 xyz', vin: 'WBAVB11060PK12345', make: 'BMW', model: '325i SE', colour: 'SILVER', dateFirstRegistered: '2006-03-01', engineCapacityCc: '2497 cc', fuelType: 'PETROL', bodyType: 'SALOON', confidence: 'high', keeperName: 'A. Person' };
+const BOOK = { isLogbook: true, registration: 'lb06 xyz', vin: 'WBAVB11060PK12345', make: 'BMW', model: '325i SE', colour: 'SILVER', dateFirstRegistered: '2006-03-01', engineCapacityCc: '2497 cc', fuelType: 'Petrol', fuelTypeAsPrinted: 'PETROL', transmission: 'CVT', acquisitionDate: '2025-05-25', bodyType: 'SALOON', confidence: 'high', keeperName: 'A. Person' };
 const isBook = (q) => q.body.contents[0].parts.some((x) => x.inline_data);
 
 test('a log book is read, then the technical details are looked up from it, for one lookup', () => {
@@ -390,7 +390,10 @@ test('a log book is read, then the technical details are looked up from it, for 
   assert.equal(d.details.model, '325i SE');
   assert.equal(d.details.year, '2006');
   assert.equal(d.details.engineCode, 'D4HB', 'the technical details come from the lookup');
-  assert.deepEqual(d.logbook, { registration: 'LB06 XYZ', vin: 'WBAVB11060PK12345', firstRegistered: '2006-03-01', engineCapacity: '2497', fuelType: 'PETROL', confidence: 'high' });
+  assert.deepEqual(d.logbook, { registration: 'LB06 XYZ', vin: 'WBAVB11060PK12345', firstRegistered: '2006-03-01', acquired: '2025-05-25', engineCapacity: '2497', fuelType: 'PETROL', confidence: 'high' });
+  assert.deepEqual([d.details.acquisitionDate, d.details.transmission, d.details.fuelType], ['2025-05-25', 'CVT', 'Petrol'], 'acquired date, transmission and fuel type come from the log book');
+  assert.match(prompt, /transmission CVT, fuel type Petrol/);
+  assert.match(sent[0].body.contents[0].parts[1].text, /Acquired vehicle on 25 05 2025/);
   assert.ok(d.fluids.length > 0);
   assert.equal(JSON.stringify(d).includes('A. Person'), false, 'no personal details come back');
   assert.equal(d.remaining, 9, 'both steps cost one lookup');
@@ -445,4 +448,19 @@ test('the transmission type is sent to the AI, which is asked for the gearbox co
   assert.equal(r.data.details.gearboxCode, 'A750F');
   env.state.gemini = () => reply(Object.assign({}, GOOD, { details: Object.assign({}, GOOD.details, { transmission: 'Hovercraft' }) }));
   assert.equal(fill().data.details.transmission, undefined);
+});
+
+test('log book: odd values are cleaned (fuel words mapped, future or malformed acquisition dates dropped)', () => {
+  const { env, sam } = setup();
+  const read = (extra) => {
+    env.state.gemini = (q) => (isBook(q) ? { code: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify(Object.assign({}, BOOK, extra)) }] } }] } } : reply(GOOD));
+    return env.call('aiReadLogbook', { token: sam, mime: 'application/pdf', data: PDF }).data;
+  };
+  assert.equal(read({ fuelType: '', fuelTypeAsPrinted: 'HYBRID ELECTRIC' }).details.fuelType, 'Petrol hybrid');
+  assert.equal(read({ fuelType: 'DIESEL / ELECTRIC HYBRID' }).details.fuelType, 'Diesel hybrid');
+  assert.equal(read({ fuelType: 'ELECTRICITY' }).details.fuelType, 'Fully electric');
+  assert.equal(read({ fuelType: 'steam', fuelTypeAsPrinted: '' }).details.fuelType, undefined, 'a fuel the app does not know is left empty');
+  const odd = read({ acquisitionDate: '2999-01-01', transmission: 'Hovercraft' });
+  assert.equal(odd.details.acquisitionDate, undefined);
+  assert.equal(odd.details.transmission, undefined);
 });

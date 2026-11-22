@@ -31,7 +31,7 @@ const MATCHES = { candidates: [
   { label: '2013 Kia Sorento 2.2 CRDi (D4HB), European', why: 'The common diesel', confidence: 'medium', details: FILL.details },
   { label: '2013 Kia Sorento 2.4 petrol (G4KE), European', why: 'The petrol version', confidence: 'low', details: { make: 'Kia', model: 'Sorento', year: '2013', engineCode: 'G4KE', market: 'European', driveSide: 'RHD' } },
 ] };
-const LOGBOOK = { isLogbook: true, registration: 'LB06 XYZ', vin: 'WBAVB11060PK12345', make: 'BMW', model: '325i SE', colour: 'SILVER', dateFirstRegistered: '2006-03-01', engineCapacityCc: '2497', fuelType: 'PETROL', bodyType: 'SALOON', confidence: 'high' };
+const LOGBOOK = { isLogbook: true, registration: 'LB06 XYZ', vin: 'WBAVB11060PK12345', make: 'BMW', model: '325i SE', colour: 'SILVER', dateFirstRegistered: '2006-03-01', engineCapacityCc: '2497', fuelType: 'Petrol hybrid', fuelTypeAsPrinted: 'HYBRID ELECTRIC', transmission: 'CVT', acquisitionDate: '2025-05-25', bodyType: 'SALOON', confidence: 'high' };
 env.state.gemini = (req) => {
   if (req.body.contents[0].parts.some((x) => /V5C/.test(x.text || ''))) return { code: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify(LOGBOOK) }] } }] } }; // reading a log book
   const prompt = (req.body.contents[0].parts[0] || {}).text || '';

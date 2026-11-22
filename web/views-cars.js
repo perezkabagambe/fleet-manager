@@ -301,6 +301,7 @@
         detail('VIN / chassis', car.vin, 'vin-line'),
         detail('Engine code', car.engineCode),
         detail('Transmission', car.transmission),
+        detail('Fuel type', car.fuelType),
         detail('Gearbox code', car.gearboxCode),
         detail('Location', car.country === 'UG' ? 'Uganda' : 'United Kingdom'),
         detail('Market', car.market),
@@ -732,7 +733,7 @@
           UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
           odometerField()
         ),
-        UI.field('Transmission', select('transmission', [['', 'Not recorded'], ['Manual', 'Manual'], ['Automatic', 'Automatic']], v.transmission), 'Manual or automatic. AI uses this to find the right gearbox code.'),
+        UI.field('Transmission', select('transmission', [['', 'Not recorded'], ['Manual', 'Manual'], ['Automatic', 'Automatic'], ['CVT', 'CVT']], v.transmission), 'Manual, automatic or CVT. AI uses this to find the right gearbox code.'),
         pair(
           UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.'),
           acquisitionCostField(),
@@ -756,7 +757,11 @@
           UI.field('Market', select('market', [['', 'Not recorded']].concat(MARKETS.map(function (m) { return [m, m]; })), v.market), 'Where it was built and sold for.'),
           UI.field('Drive side', select('driveSide', [['', 'Not recorded'], ['LHD', 'Left-hand (LHD)'], ['RHD', 'Right-hand (RHD)']], v.driveSide))
         ),
-        UI.field('Fuel capacity (litres)', text('fuelCapacity', v.fuelCapacity === null || v.fuelCapacity === undefined ? '' : v.fuelCapacity, { inputmode: 'decimal', maxlength: '6', placeholder: 'e.g. 87' }), 'Optional. The size of the fuel tank.'),
+        pair(
+          UI.field('Fuel capacity (litres)', text('fuelCapacity', v.fuelCapacity === null || v.fuelCapacity === undefined ? '' : v.fuelCapacity, { inputmode: 'decimal', maxlength: '6', placeholder: 'e.g. 87' }), 'Optional. The size of the fuel tank.'),
+          UI.field('Fuel type', select('fuelType', [['', 'Not recorded'], ['Petrol', 'Petrol'], ['Diesel', 'Diesel'], ['Petrol hybrid', 'Petrol hybrid'], ['Diesel hybrid', 'Diesel hybrid'], ['Fully electric', 'Fully electric']], v.fuelType)),
+          'aligned tall-labels' // equal columns and two-line labels, so the two boxes line up
+        ),
       ];
       // The parts catalogue link lives at the top of the fluids and specifications part of the form.
       var catalogueField = UI.field('Parts catalogue link', text('partsouqUrl', v.partsouqUrl, { inputmode: 'url', placeholder: 'https://…' }), 'Optional. Any secure (https) link, e.g. partsouq.com');
@@ -806,6 +811,7 @@
           setIfEmpty(f.colour, det.colour, 'colour', filled);
           setIfEmpty(f.engineCode, det.engineCode, 'engine code', filled);
           setIfEmpty(f.transmission, det.transmission, 'transmission', filled);
+          setIfEmpty(f.fuelType, det.fuelType, 'fuel type', filled);
           setIfEmpty(f.gearboxCode, det.gearboxCode, 'gearbox code', filled);
           setIfEmpty(f.market, det.market, 'market', filled);
           setIfEmpty(f.driveSide, det.driveSide, 'drive side', filled);
@@ -835,7 +841,7 @@
         function typed() {
           return {
             registration: f.registration.value, vin: f.vin.value, country: f.country.value, make: f.make.value, model: f.model.value, year: f.year.value,
-            colour: f.colour.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, transmission: f.transmission.value, market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value,
+            colour: f.colour.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, transmission: f.transmission.value, fuelType: f.fuelType.value, market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value,
           };
         }
 
@@ -865,7 +871,7 @@
               pick.addEventListener('click', function () {
                 var d = c.details || {};
                 var chosen = Object.assign(typed(), { vin: '' });
-                ['make', 'model', 'year', 'engineCode', 'gearboxCode', 'market', 'driveSide', 'fuelCapacity', 'colour'].forEach(function (k) { if (d[k]) chosen[k] = d[k]; });
+                ['make', 'model', 'year', 'engineCode', 'gearboxCode', 'transmission', 'fuelType', 'market', 'driveSide', 'fuelCapacity', 'colour'].forEach(function (k) { if (d[k]) chosen[k] = d[k]; });
                 fillFrom(chosen);
               });
               return el('div', { class: 'ai-match' }, [
@@ -1133,7 +1139,7 @@
       function collect() {
         return {
           registration: f.registration.value, make: f.make.value, model: f.model.value, year: f.year.value, colour: f.colour.value,
-          vin: f.vin.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, transmission: f.transmission.value, country: f.country.value,
+          vin: f.vin.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, transmission: f.transmission.value, fuelType: f.fuelType.value, country: f.country.value,
           market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value, importDate: f.importDate.value,
           status: f.status.value, odometer: f.odometer.value,
           acquisitionCost: f.acquisitionCost.value, acquisitionCurrency: f.acquisitionCurrency.value, acquisitionDate: f.acquisitionDate.value,

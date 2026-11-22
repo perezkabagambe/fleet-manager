@@ -8,7 +8,8 @@
 const COUNTRIES = ['UK', 'UG'];
 const MARKETS = ['European', 'UK', 'Japanese (JDM)', 'North American', 'Middle East (GCC)', 'Australian', 'African', 'Asian', 'Other'];
 const DRIVE_SIDES = ['LHD', 'RHD'];
-const TRANSMISSIONS = ['Manual', 'Automatic'];
+const TRANSMISSIONS = ['Manual', 'Automatic', 'CVT'];
+const FUEL_TYPES = ['Petrol', 'Diesel', 'Petrol hybrid', 'Diesel hybrid', 'Fully electric'];
 const CURRENCIES = ['GBP', 'UGX', 'USD', 'KES', 'EUR'];
 const CAR_STATUSES = ['Active', 'Sold', 'Scrapped', 'Off-road'];
 const MAX_ODOMETER = 9999999;
@@ -33,6 +34,7 @@ function summarizeCar_(c) {
     engineCode: c.engine_code || '',
     gearboxCode: c.gearbox_code || '',
     transmission: c.transmission || '',
+    fuelType: c.fuel_type || '',
     country: c.country || 'UK',
     market: c.market || '',
     driveSide: c.drive_side || '',
@@ -104,6 +106,7 @@ function parseCarInput_(f, existing) {
   out.engine_code = cleanStr_(f.engineCode, 30);
   out.gearbox_code = cleanStr_(f.gearboxCode, 30);
   out.transmission = oneOf_(f.transmission, TRANSMISSIONS, '', 'invalid_transmission');
+  out.fuel_type = oneOf_(f.fuelType, FUEL_TYPES, '', 'invalid_fuel_type');
 
   out.market = oneOf_(f.market, MARKETS, '', 'invalid_market');
   out.drive_side = oneOf_(f.driveSide, DRIVE_SIDES, '', 'invalid_drive_side');
