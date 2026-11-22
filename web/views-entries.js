@@ -411,7 +411,9 @@
         // Tiles in the same soft colours as the pictures shown for entries without a photo; the chosen one is solid.
         var types = ['All'].concat(Object.keys(PLURAL).filter(function (t) { return counts[t]; }));
         var tiles = el('div', { class: 'filter-tiles' + (counts.Compliance ? ' has-compliance' : '') });
-        tiles.style.gridTemplateColumns = 'repeat(' + types.length + ', minmax(0, 1fr))'; // set here, not as an attribute (the page's security policy blocks inline style attributes)
+        // each tile is as wide as its name needs (short ones narrower), so all five fit on a phone when there is a Compliance entry too;
+        // set here, not as an attribute (the page's security policy blocks inline style attributes)
+        tiles.style.gridTemplateColumns = types.map(function (t) { return 'minmax(0, ' + ((t === 'All' ? 3 : PLURAL[t].length) + 3) + 'fr)'; }).join(' ');
         types.forEach(function (t) {
           var b = el('button', { type: 'button', class: 'filter-tile ft-' + t.toLowerCase() + (t === filter ? ' on' : ''), 'aria-pressed': t === filter ? 'true' : 'false' }, [
             el('span', { class: 'ft-name', text: t === 'All' ? 'All' : PLURAL[t] }),

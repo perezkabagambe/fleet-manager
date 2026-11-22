@@ -239,6 +239,7 @@
       ]),
       el('div', { class: 'menu-list' }, [
         refreshRow,
+        menuRow('User guide', { href: '#/guide' }),
         nameRow,
         linkRow,
         menuRow('Diagnostics', { href: '#/diag' }),

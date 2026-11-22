@@ -264,10 +264,14 @@
   // which sections of a car's page are open (kept so that coming back to the page finds it as it was left)
   Views.getOpenCards = function () { return { carId: openCards.carId, keys: Object.assign({}, openCards.keys) }; };
   Views.setOpenCards = function (o) { openCards = o; };
+  /** Open the named sections the next time this car's page is drawn (and only then). */
+  Views.openCarSections = function (carId, keys) { openCards = { carId: carId, keys: keys, once: true }; };
 
   Views.car = function (ctx, root) {
     var id = ctx.params.id;
-    if (!(ctx.keepOpen || ctx.restoreOpen) || openCards.carId !== id) openCards = { carId: id, keys: {} };
+    var openOnce = !!(openCards.once && openCards.carId === id); // sections asked to be open by a link (the user guide's demo links)
+    if (!(ctx.keepOpen || ctx.restoreOpen || openOnce) || openCards.carId !== id) openCards = { carId: id, keys: {} };
+    openCards.once = false;
     var flash = FleetApp.takeFlash(); // taken once: the page may be drawn twice (saved copy, then fresh)
     root.replaceChildren(el('section', { class: 'card' }, [loading()]));
 

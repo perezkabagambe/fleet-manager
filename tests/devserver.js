@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { createEnv } = require('./harness');
 
-const PORT = 8124;
+const PORT = Number(process.env.PORT) || 8124;
 const WEB = path.join(__dirname, '..', 'web');
 const env = createEnv();
 let kept = null;
@@ -47,8 +47,16 @@ env.state.gemini = (req) => {
   const garage = !!part && /invoice/i.test(Buffer.from(part.inline_data.data, 'base64').toString('latin1'));
   return { code: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify(garage
     ? { documentType: 'garage_invoice', title: 'Full service and brake check', vendor: 'Kampala Motors', date: '2026-09-15', currency: 'UGX', total: 450000, workDescription: 'Full service and brake check', mileage: 51234, confidence: 'medium' }
-    : { documentType: 'parts_receipt', vendor: 'Euro Car Parts', date: '2026-10-02', currency: 'GBP', orderNumber: 'ECP-5521', total: 71.97, items: [{ name: 'Front brake pads', partNumber: 'BP123', quantity: 1, unitPrice: 41.99 }, { name: 'Oil filter', quantity: 2, lineTotal: 19.98 }, { name: 'Delivery', quantity: 1, unitPrice: 0 }], vehicleRegistration: 'AB12CDE', confidence: 'high', summary: 'Brake pads and oil filters (local test answer).' }) }] } }] } };
+    : { documentType: 'parts_receipt', vendor: 'Euro Car Parts', date: '2026-10-02', currency: 'GBP', orderNumber: 'ECP-5521', total: 71.97, items: [{ name: 'Front brake pads', partNumber: 'BP123', quantity: 1, unitPrice: 41.99 }, { name: 'Oil filter', quantity: 2, lineTotal: 19.98 }, { name: 'Delivery', quantity: 1, unitPrice: 10 }], vehicleRegistration: 'DEMO 001', confidence: 'high', summary: 'Brake pads and oil filters, delivered.' }) }] } }] } };
 };
+
+// The demo car (the user guide's example), always here so the guide's links can be tried locally
+const demoId = env.call('createDemoCar', { token: tokens.admin }).data.id;
+if (process.env.DEMO_SHOTS) { // a receipt waiting in the AI Inbox, for the guide's screenshots
+  const photo = require('vm').runInContext('DEMO_PHOTO_B64', env.ctx);
+  const up = env.call('uploadReceipt', { token: tokens.admin, carId: demoId, mime: 'image/jpeg', data: photo, filename: 'Euro Car Parts receipt.jpg' });
+  env.call('readReceipt', { token: tokens.admin, id: up.data.receipt.id });
+}
 
 // A little starting data
 const mk = (fields) => env.call('saveCar', { token: tokens.admin, fields }).data.car;
@@ -78,6 +86,11 @@ http.createServer((req, res) => {
     persona = who === 'sam' ? 'sam' : who === 'guest' ? 'guest' : 'admin'; // guest = signed out
     res.writeHead(302, { Location: '/' });
     res.end();
+    return;
+  }
+  if (url === '/__shot') { // the helper page for the user guide's screenshots (scripts/guide-screenshots.js)
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(fs.readFileSync(path.join(__dirname, 'shot.html')));
     return;
   }
   if (url === '/__guestlink') { // the address the first car's QR code holds

@@ -34,6 +34,7 @@ const SHELL = [
   'views-inbox.js',
   'views-guest.js',
   'views-feedback.js',
+  'views-guide.js',
   'app.js',
   'manifest.webmanifest',
   'icons/logo.jpg',

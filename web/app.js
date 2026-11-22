@@ -127,6 +127,8 @@
     else if (r.path === '/feedback') view = Views.feedback;
     else if (r.path === '/inbox') view = Views.inbox;
     else if ((m = /^\/inbox\/([0-9a-f-]{8,40})$/.exec(r.path))) { r.params.id = m[1]; view = Views.receipt; }
+    else if (r.path === '/guide') view = Views.guide;
+    else if ((m = /^\/demo(?:\/(\w+))?$/.exec(r.path))) { r.params.where = m[1] || 'car'; view = Views.demoLink; }
     else if (r.path === '/profile') view = Views.profile;
     else if (r.path === '/profile/cars') view = Views.userCars;
     else if (r.path === '/admin/users') view = FleetAuth.isAdmin() ? Views.adminUsers : viewForbidden;
@@ -185,6 +187,8 @@
     if (path === '/admin/users') return { title: 'Users', icon: 'users' };
     if ((m = /^\/admin\/users\/([0-9a-f-]+)\/cars$/.exec(path))) return { title: 'Their cars', back: '#/admin/users' };
     if (path === '/profile') return { title: 'Me', icon: 'user' };
+    if (path === '/guide') return { title: 'User guide', back: '#/profile' };
+    if (/^\/demo/.test(path)) return { title: 'Demo car', back: '#/guide' };
     if (path === '/profile/cars') return { title: 'Choose my cars', back: '#/profile' };
     if (path === '/diag') return { title: 'Diagnostics', back: FleetAuth.hasSession() ? '#/profile' : '#/login' };
     if (path === '/feedback') return { title: 'Report a bug or request a feature', back: FleetAuth.hasSession() ? '#/profile' : '#/login' };
@@ -259,7 +263,7 @@
     if (path === '/' || /^\/car\//.test(path)) return 'fleet';
     if (/^\/inbox/.test(path)) return 'inbox';
     if (/^\/admin\//.test(path)) return 'users';
-    if (/^\/(profile|diag|feedback)/.test(path)) return 'me';
+    if (/^\/(profile|diag|feedback|guide|demo)/.test(path)) return 'me';
     return '';
   }
 

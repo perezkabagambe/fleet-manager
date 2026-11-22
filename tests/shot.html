@@ -1,0 +1,65 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>shot</title>
+<style>
+html,body{margin:0;background:#fff;overflow:hidden}
+iframe{position:absolute;left:0;top:0;border:0;background:#f4f6f8}
+.hl{position:absolute;border:3px solid #f59e0b;border-radius:10px;box-shadow:0 0 0 3px rgba(245,158,11,.30);pointer-events:none;z-index:9}
+.hlabel{position:absolute;background:#f59e0b;color:#241700;font:700 12px/1 system-ui,sans-serif;padding:5px 9px;border-radius:999px;z-index:10;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+</style>
+<iframe id="f" src="/"></iframe>
+<script>
+// A helper page for taking the user guide's screenshots (see scripts/guide-screenshots.js). It drives the app in the frame through a
+// plan given in the address, draws highlights over it, and sets the title to "done" when the picture is ready.
+var q = new URLSearchParams(location.search);
+var plan = JSON.parse(q.get('plan') || '[]');
+var f = document.getElementById('f');
+f.style.width = (Number(q.get('w')) || 360) + 'px';
+f.style.height = (Number(q.get('h')) || 780) + 'px';
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function doc() { return f.contentDocument; }
+function find(spec) {
+  var d = doc();
+  if (!spec.text) return d.querySelector(spec.sel);
+  var list = [].slice.call(d.querySelectorAll(spec.sel || 'a,button,summary,h1,h2,h3,label,p,div,span,li,strong,input'));
+  var hit = list.filter(function (n) { return (n.textContent || '').indexOf(spec.text) !== -1 || (n.placeholder || '').indexOf(spec.text) !== -1; });
+  hit.sort(function (a, b) { return (a.textContent || '').length - (b.textContent || '').length; });
+  return hit[0] || null;
+}
+async function waitFor(spec, tries) {
+  for (var i = 0; i < (tries || 40); i++) { var n = find(spec); if (n) return n; await sleep(150); }
+  throw new Error('not found: ' + JSON.stringify(spec));
+}
+async function run() {
+  try {
+    await sleep(2500);
+    for (var i = 0; i < plan.length; i++) {
+      var s = plan[i];
+      if (s.hash) { f.contentWindow.location.hash = s.hash; await sleep(s.wait || 2500); }
+      else if (s.wait) await sleep(s.wait);
+      else if (s.click) { var c = await waitFor(s.click); c.click(); await sleep(s.after || 900); }
+      else if (s.open) { var o = await waitFor({ sel: 'summary', text: s.open }); if (!o.parentNode.open) o.click(); await sleep(500); }
+      else if (s.type) { var t = await waitFor(s.type); t.value = s.type.value; t.dispatchEvent(new Event('input', { bubbles: true })); await sleep(300); }
+      else if (s.scroll) { var n = await waitFor(s.scroll); var r = n.getBoundingClientRect(); f.contentWindow.scrollTo(0, Math.max(0, r.top + f.contentWindow.scrollY + (s.scroll.offset || -90))); await sleep(500); }
+      else if (s.hl) {
+        var e = await waitFor(s.hl); var b = e.getBoundingClientRect(); var pad = s.hl.pad === undefined ? 4 : s.hl.pad;
+        var box = document.createElement('div'); box.className = 'hl';
+        box.style.left = (b.left - pad) + 'px'; box.style.top = (b.top - pad) + 'px'; box.style.width = (b.width + 2 * pad) + 'px'; box.style.height = (b.height + 2 * pad) + 'px';
+        document.body.appendChild(box);
+        if (s.hl.label) {
+          var l = document.createElement('div'); l.className = 'hlabel'; l.textContent = s.hl.label;
+          document.body.appendChild(l);
+          var top = b.top - pad - l.offsetHeight - 6; if (top < 4) top = b.bottom + pad + 6;
+          var left = Math.max(6, Math.min(b.left, f.offsetWidth - l.offsetWidth - 6));
+          if (s.hl.pos === 'below') top = b.bottom + pad + 6;
+          if (s.hl.pos === 'tr') { top = b.top - pad - l.offsetHeight / 2; left = Math.max(6, b.right + pad - l.offsetWidth - 12); } // on the top-right of the outline
+          l.style.top = top + 'px'; l.style.left = left + 'px';
+        }
+      }
+    }
+  } catch (e) { document.title = 'error: ' + e.message; return; }
+  await sleep(400);
+  document.title = 'done';
+}
+run();
+</script>
