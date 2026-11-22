@@ -873,11 +873,14 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .reminder-tools { display: flex; gap: 8px; margin: 8px 0 12px; }
 .reminder-tools .btn { flex: 1 1 0; text-align: center; justify-content: center; }
 
+/* Notes have their own colour (violet), so they never look like a fluid (blue), a bulb (amber), maintenance (green) or an issue (red) */
+:root { --note: #6a4fc2; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --note: #a58cf0; } }
 /* The one look for a note at the top of a section (an explanation, a reminder to check something): a soft blue panel with an "i" */
-.section-note { position: relative; margin: 8px 0 14px; padding: 10px 12px 10px 38px; border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 7%, var(--surface)); color: var(--text); font-size: 0.86rem; line-height: 1.45; font-weight: 400; overflow-wrap: anywhere; }
-.section-note::before { content: 'i'; position: absolute; left: 11px; top: 11px; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #fff; font: italic 700 0.75rem/18px Georgia, 'Times New Roman', serif; text-align: center; }
+.section-note { position: relative; margin: 8px 0 14px; padding: 10px 12px 10px 38px; border: 1px solid color-mix(in srgb, var(--note) 30%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--note) 9%, var(--surface)); color: var(--text); font-size: 0.86rem; line-height: 1.45; font-weight: 400; overflow-wrap: anywhere; }
+.section-note::before { content: 'i'; position: absolute; left: 11px; top: 11px; width: 18px; height: 18px; border-radius: 50%; background: var(--note); color: #fff; font: italic 700 0.75rem/18px Georgia, 'Times New Roman', serif; text-align: center; }
 .section-note[hidden] { display: none; }
-.section-note a { color: var(--accent); font-weight: 600; }
+.section-note a { color: var(--note); font-weight: 600; }
 
 /* the two ways of adding a car */
 .choice { margin: 14px 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
