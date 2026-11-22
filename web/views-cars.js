@@ -1131,14 +1131,17 @@
       var bulbsSection = section('💡 Bulbs', [fluidsEd.bulbsNode], false, 'kind-bulb');
       var photoSection = section('Photos', photoFields);
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: car ? 'Save changes' : 'Add car' });
-      var form = el('form', { novalidate: true }, [
+      // A new car ends with its Add button. A saved car ends with one section holding both Save and Delete (below), so Save is never
+      // mistaken for part of the Photos section; its button belongs to this form through the form attribute.
+      var form = el('form', { novalidate: true, id: 'car-form' }, [
         prefillNote,
         detailsSection,
         ownersSection,
         fluidsSection,
         bulbsSection,
         photoSection,
-      ].concat([btn]));
+      ].concat(car ? [] : [btn]));
+      if (car) btn.setAttribute('form', 'car-form');
 
       function collect() {
         return {
@@ -1258,30 +1261,33 @@
         });
       });
 
-      // Delete (admins only, and only for a car that already exists): kept here so it is never one tap away from the car page.
-      var deleteBox = null;
-      if (car && FleetAuth.isAdmin()) {
-        var deleteBtn = el('button', { type: 'button', class: 'btn small danger', text: 'Delete car' });
-        deleteBtn.addEventListener('click', function () {
-          UI.confirm('Delete ' + car.registration + '? You can restore it later from the fleet page.', { okLabel: 'Delete car', danger: true }).then(function (yes) {
-            if (!yes) return;
-            UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteCar', { id: car.id }))
-              .then(function () { carsCache = null; FleetApp.go('/'); })
-              .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); window.scrollTo(0, 0); });
+      // The last section of a saved car's form: Save, and (admins only) Delete, kept here so Delete is never one tap away from the car page.
+      var finishBox = null;
+      if (car) {
+        var finishKids = [el('h2', { text: FleetAuth.isAdmin() ? 'Save or delete' : 'Save' }), btn];
+        if (FleetAuth.isAdmin()) {
+          var deleteBtn = el('button', { type: 'button', class: 'btn block danger-outline', text: 'Delete car' });
+          deleteBtn.addEventListener('click', function () {
+            UI.confirm('Delete ' + car.registration + '? You can restore it later from the fleet page.', { okLabel: 'Delete car', danger: true }).then(function (yes) {
+              if (!yes) return;
+              UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteCar', { id: car.id }))
+                .then(function () { carsCache = null; FleetApp.go('/'); })
+                .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); window.scrollTo(0, 0); });
+            });
           });
-        });
-        deleteBox = el('div', { class: 'form-section delete-zone' }, [
-          el('h2', { text: 'Delete this car' }),
-          el('p', { class: 'section-note', text: 'Removes it from the fleet. Only admins can do this, and you can restore it later from the fleet page.' }),
-          deleteBtn,
-        ]);
+          finishKids.push(el('div', { class: 'finish-delete' }, [
+            el('p', { class: 'section-note', text: 'Deleting removes the car from the fleet. You can restore it from the Fleet page.' }),
+            deleteBtn,
+          ]));
+        }
+        finishBox = el('div', { class: 'form-section finish-zone' }, finishKids);
       }
 
       root.replaceChildren(el('section', { class: 'card' }, [
         backLink(car ? '#/car/' + car.id : '#/', car ? car.registration : 'Fleet'),
         el('h1', { text: car ? 'Edit car' : 'Add a car' }),
         msg, form,
-        deleteBox,
+        finishBox,
       ]));
       // "Edit" on the Fluids, Bulbs & Specifications section of the car page lands straight on that part of the form
       if (/\/fluids$/.test(ctx.path || '')) { fluidsSection.open = true; setTimeout(function () { fluidsSection.scrollIntoView(); }, 0); }

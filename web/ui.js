@@ -2,6 +2,20 @@
 (function () {
   'use strict';
 
+  // The browser turns a null, undefined or false argument of append / prepend / replaceChildren into the text "null" (or "false").
+  // Skip them instead, so a conditional child that is not needed can simply be null.
+  ['append', 'prepend', 'replaceChildren'].forEach(function (method) {
+    [Element.prototype, DocumentFragment.prototype].forEach(function (proto) {
+      var original = proto[method];
+      if (!original) return;
+      proto[method] = function () {
+        var args = [];
+        for (var i = 0; i < arguments.length; i++) { if (arguments[i] !== null && arguments[i] !== undefined && arguments[i] !== false) args.push(arguments[i]); }
+        return original.apply(this, args);
+      };
+    });
+  });
+
   function el(tag, attrs, children) {
     var node = document.createElement(tag);
     Object.keys(attrs || {}).forEach(function (k) {

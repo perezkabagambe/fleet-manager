@@ -930,3 +930,10 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .name-box { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; }
 .name-box[hidden] { display: none; }
 .menu-row.open .menu-chev { transform: rotate(90deg); }
+
+/* the last section of the edit-car form: Save, then (admins) Delete */
+.finish-zone { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); }
+.finish-zone h2 { margin: 0 0 10px; }
+.finish-zone .save-gap { margin-top: 0; }
+.finish-delete { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--border); }
+.finish-delete .section-note { margin-top: 0; }
