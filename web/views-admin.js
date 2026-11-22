@@ -109,6 +109,10 @@
       return FleetApi.call('listUsers').then(function (r) {
         var u = r.data.users;
         function by(s) { return u.filter(function (x) { return x.status === s; }); }
+        // the banner says how many people use the app, and how many are waiting to be let in
+        var active = by('Approved').length;
+        var waiting = by('Pending').length;
+        FleetApp.setBanner({ subtitle: active + (active === 1 ? ' user' : ' users') + (waiting ? ' · ' + waiting + ' waiting for approval' : '') });
         listBox.replaceChildren.apply(listBox, [
           section('Waiting for approval', by('Pending')),
           section('Active users', by('Approved')),
