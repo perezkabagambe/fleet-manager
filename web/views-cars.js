@@ -9,6 +9,10 @@
     var what = m.step === 1 ? 'the latest model, with Google Search' : m.step === 2 ? 'an older model, with Google Search' : 'the latest model, without web search (search was not available)';
     return 'Method ' + m.step + ' of 3 was used: ' + what + ' (' + m.model + ').';
   }
+  // A permanent reminder wherever AI-filled specifications are shown (it stays after the car is saved).
+  var AI_CHECK_NOTE = 'Some entries below may have been AI generated. Please check before use, e.g if it says ACEA C3 5W-30 engine oil below, but Euro Car Parts suggests ACEA A3/B3 5W-20, do some further research and update these entries accordingly.';
+  function isAiRow(f) { return /^AI suggestion/.test((f && f.source) || ''); }
+  function aiCheckNote() { return el('p', { class: 'ai-check-note', text: AI_CHECK_NOTE }); }
   var MARKETS = ['European', 'UK', 'Japanese (JDM)', 'North American', 'Middle East (GCC)', 'Australian', 'African', 'Asian', 'Other'];
   var Views = (window.Views = window.Views || {});
   var cfg = window.FLEET_CONFIG;
@@ -368,6 +372,7 @@
           el('div', { class: 'catalogue' }, car.partsouqUrl
             ? [el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) })]
             : [el('span', { class: 'muted', text: 'No parts catalogue link yet. Tap Edit car to add one.' })]),
+          fluids.some(isAiRow) ? aiCheckNote() : null,
           fluidRows.length ? el('h3', { class: 'spec-group kind-fluid', text: '💧 Fluids' }) : null,
           fluidRows.length ? el('ul', { class: 'fluids' }, fluidRows) : (bulbRows.length ? null : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' })),
           bulbRows.length ? el('h3', { class: 'spec-group kind-bulb', text: '💡 Bulbs' }) : null,
@@ -460,7 +465,9 @@
     }
 
     // The fluids and the bulbs are one list on the car, shown as two sections of the form.
+    var aiNoteBox = el('div', {});
     function draw() {
+      aiNoteBox.replaceChildren.apply(aiNoteBox, rows.some(isAiRow) ? [aiCheckNote()] : []);
       var fluidRows = rows.filter(function (r) { return !isBulbRow(r); });
       var bulbRows = rows.filter(isBulbRow);
       list.replaceChildren.apply(list, fluidRows.length
@@ -528,7 +535,7 @@
     draw();
 
     return {
-      node: el('div', {}, [datalist, list, el('div', { class: 'btn-row' }, [addBtn, stdBtn])]),
+      node: el('div', {}, [datalist, aiNoteBox, list, el('div', { class: 'btn-row' }, [addBtn, stdBtn])]),
       bulbsNode: el('div', {}, [bulbDatalist, bulbList, el('div', { class: 'btn-row' }, [addBulbBtn, bulbBtn])]),
       payload: payload,
       addSuggested: addSuggested,
@@ -744,7 +751,7 @@
           kids.push(UI.notice(parts.length ? 'ok' : 'error', parts.length
             ? 'AI filled in ' + parts.join(' and ') + ' (' + d.confidence + ' confidence). ' + (d.summary || '')
             : 'AI had nothing new to add. ' + (d.summary || '')));
-          kids.push(el('p', { class: 'ai-warning', text: 'AI answers are not perfect, and it is up to you to check every entry before you save, including the fluids and bulbs it added.' }));
+          kids.push(el('p', { class: 'ai-warning', text: AI_CHECK_NOTE }));
           if (d.method) kids.push(el('div', { class: 'small-text muted ai-method', text: methodText(d.method) }));
           if (d.sources && d.sources.length) {
             kids.push(el('div', { class: 'small-text muted' }, [el('span', { text: 'Sources: ' })].concat(d.sources.map(function (s, i) {
@@ -964,7 +971,7 @@
           hint.textContent += ' ' + r.data.remaining + ' of ' + r.data.limit + ' lookups left today.';
         }).catch(function () { /* no AI box */ });
 
-        var isAi = function (row) { return /^AI suggestion/.test((row && row.source) || ''); };
+        var isAi = isAiRow;
         var shown = function (x) { return [x.specification, x.capacity].filter(Boolean).join(' · ') || 'nothing'; };
 
         function review(d) {

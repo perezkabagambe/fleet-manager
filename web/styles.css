@@ -509,6 +509,7 @@ details.form-section.kind-bulb > summary h2 { color: var(--kind-bulb-text); }
 .ai-box .hint { margin-top: 8px; }
 .ai-status { margin-top: 8px; }
 .ai-warning { font-weight: 600; margin: 8px 0; }
+.ai-check-note { margin: 8px 0 12px; padding: 8px 10px; border-left: 4px solid #b26a00; background: #fff6e5; border-radius: 6px; font-size: .9rem; }
 
 /* Users page: invite by email */
 .invite-box { border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; margin-bottom: 14px; }
