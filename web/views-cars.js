@@ -321,26 +321,47 @@
       function detailAlways(label, value) {
         return [el('dt', { text: label }), el('dd', { class: value ? '' : 'muted', text: value || 'Not recorded' })];
       }
-      var details = [].concat(
-        detail('Make and model', carTitle(car)),
-        detail('Colour', car.colour),
-        detail('VIN / chassis', car.vin, 'vin-line'),
-        detail('Engine code', car.engineCode),
-        detail('Transmission', car.transmission),
-        detail('Fuel type', car.fuelType),
-        detail('Gearbox code', car.gearboxCode),
-        detail('Location', car.country === 'UG' ? 'Uganda' : 'United Kingdom'),
-        detail('Market', car.market),
-        detail('Drive', car.driveSide === 'LHD' ? 'Left-hand drive (LHD)' : car.driveSide === 'RHD' ? 'Right-hand drive (RHD)' : ''),
-        detail('Fuel capacity', car.fuelCapacity === null || car.fuelCapacity === undefined ? '' : car.fuelCapacity + ' litres'),
-        detail('Imported', fmtAcquired(car.importDate)),
-        detail('Acquired', fmtAcquired(car.acquisitionDate)),
-        detailAlways('Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? '' : money(car.acquisitionCost, car.acquisitionCurrency || car.currency))
-      );
+      // The details in three groups, each under a small heading (a group with nothing in it is left out)
+      var fuelText = [car.fuelType, car.fuelCapacity === null || car.fuelCapacity === undefined ? '' : car.fuelCapacity + ' L'].filter(Boolean).join(' · ');
+      var marketText = [car.market, car.driveSide].filter(Boolean).join(', ');
+      var ownerNames = people.owners.map(function (x) { return x.name; }).concat(car.ownerOther ? [car.ownerOther] : []); // names from app users, plus any free-text person who is not a user
+      var groups = [
+        ['Key details', [].concat(
+          detail('Make and model', carTitle(car)),
+          detail('Colour', car.colour),
+          detail('VIN / chassis', car.vin, 'vin-line'),
+          detail('Location', car.country === 'UG' ? 'Uganda' : 'United Kingdom'),
+          detail('Imported', fmtAcquired(car.importDate))
+        )],
+        ['Technical', [].concat(
+          detail('Engine code', car.engineCode),
+          detail('Transmission', car.transmission),
+          detail('Gearbox code', car.gearboxCode),
+          detail('Fuel', fuelText),
+          detail(car.market ? 'Market' : 'Drive', marketText)
+        )],
+        ['Ownership', [].concat(
+          detail('Acquired', fmtAcquired(car.acquisitionDate)),
+          detailAlways('Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? '' : money(car.acquisitionCost, car.acquisitionCurrency || car.currency)),
+          [el('dt', { text: 'Owner/Custodian' }), el('dd', { class: ownerNames.length ? '' : 'muted', text: ownerNames.length ? ownerNames.join(', ') : 'Not recorded yet' })]
+        )],
+      ];
+      var detailGroups = el('div', { class: 'detail-groups' }, groups.filter(function (g) { return g[1].length; }).map(function (g) {
+        return el('div', { class: 'detail-group' }, [el('h3', { class: 'detail-group-title', text: g[0] }), el('dl', { class: 'details' }, g[1])]);
+      }));
 
-      // owner/custodian: names from app users, plus any free-text person who is not a user (change them with Edit car)
-      var ownerNames = people.owners.map(function (x) { return x.name; }).concat(car.ownerOther ? [car.ownerOther] : []);
-      details.push(el('dt', { text: 'Owner/Custodian' }), el('dd', { class: ownerNames.length ? '' : 'muted', text: ownerNames.length ? ownerNames.join(', ') : 'Not recorded yet' }));
+      // The notes: trimmed to three lines, with "Show more" only if there is more to show
+      var notesEl = car.notes ? el('p', { class: 'notes clamped', text: car.notes }) : null;
+      var notesMore = el('button', { type: 'button', class: 'linklike notes-more', text: 'Show more', hidden: true });
+      if (notesEl) {
+        notesMore.addEventListener('click', function () {
+          var open = notesEl.classList.toggle('clamped');
+          notesMore.textContent = open ? 'Show more' : 'Show less';
+        });
+        var fitNotes = function () { if (notesEl.clientHeight && notesEl.classList.contains('clamped')) notesMore.hidden = notesEl.scrollHeight <= notesEl.clientHeight + 1; };
+        setTimeout(fitNotes, 0);
+        setTimeout(fitNotes, 400);
+      }
 
       // "I own or look after this car": a quick toggle, so nobody has to open Edit car for it
       var me = FleetAuth.getUser();
@@ -412,8 +433,8 @@
             el('a', { class: 'btn small secondary section-edit', href: '#/car/' + car.id + '/edit', text: 'Edit', 'aria-label': 'Edit the vehicle details' }),
           ]),
           Photos.carousel(car),
-          el('dl', { class: 'details top-details' }, details),
-          car.notes ? el('div', { class: 'car-notes' }, [el('div', { class: 'car-notes-label', text: 'Notes' }), el('p', { class: 'notes', text: car.notes })]) : null,
+          detailGroups,
+          car.notes ? el('div', { class: 'car-notes' }, [el('div', { class: 'car-notes-label', text: 'Notes' }), notesEl, notesMore]) : null,
           el('div', { class: 'btn-row' }, [mineBtn]),
         ]),
         collapsible('Odometer Log', el('section', { class: 'card' }, [
