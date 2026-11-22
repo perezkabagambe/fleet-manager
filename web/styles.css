@@ -1018,3 +1018,8 @@ details.collapsible > summary .collapse-action + .collapse-hint, details.collaps
 .catalogue-edit { display: flex; gap: 8px; align-items: center; }
 .catalogue-edit input { flex: 1 1 auto; min-width: 0; }
 .catalogue-icon { width: 32px; height: 32px; flex: none; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--border); padding: 3px; }
+
+/* on a phone the registration and the VIN each get a full-width line, so a whole VIN (18+ characters) can be seen without scrolling */
+@media (max-width: 480px) { .field-pair.wide-second { grid-template-columns: 1fr; } }
+/* the VIN box is sized so even 18 of the widest capitals show without scrolling */
+input[name="vin"] { font-size: 0.92rem; letter-spacing: -0.01em; }
