@@ -273,17 +273,21 @@
   // Email scanners often open links automatically. Nothing happens until the
   // person taps the button, so a scanner cannot use up the one-time link.
   Views.verify = function (ctx, root) {
-    // The link in the sign-in email (or an invitation) signs you in as soon as it opens: there is nothing to tap. If that
-    // does not work (the link was already used, or has expired, or the phone is offline) the page says so and offers a way on.
+    // The link in the sign-in email signs you in as soon as it opens. The one exception: on an Android phone, in a browser
+    // (Gmail opens links in its own browser, not in the installed app). Then the page first tries to hand the sign-in to the
+    // Fleet Manager app (an "intent" address, which opens the app if it is installed and carries on in the browser if not),
+    // and offers both ways in case the phone asks for a tap.
     var token = ctx.query.t || '';
     var invited = ctx.query.i === '1';
+    var inBrowserFallback = ctx.query.b === '1'; // we are already where the person should be: just sign in
     var msg = el('div');
     var btn = el('button', { type: 'button', class: 'btn block', text: 'Try again', hidden: true });
     var intro = el('p', { class: 'muted', text: 'Signing you in…' });
     var heading = el('h1', { text: invited ? 'Welcome to Fleet Manager' : 'Signing in to Fleet Manager' });
+    var choice = el('div', { class: 'stack', hidden: true });
     var card = el('section', { class: 'card narrow' }, [
       heading,
-      intro, msg, btn,
+      intro, choice, msg, btn,
       el('p', { class: 'center' }, [el('a', { href: '#/login', text: 'Back to sign in' })]),
     ]);
     root.replaceChildren(card);
@@ -295,6 +299,8 @@
       started = true;
       msg.replaceChildren();
       btn.hidden = true;
+      choice.hidden = true;
+      intro.textContent = 'Signing you in…';
       intro.hidden = false;
       FleetApi.call('verifyLink', { token: token })
         .then(function (r) { signedIn(r.data, ''); })
@@ -313,6 +319,27 @@
         });
     }
     btn.addEventListener('click', go);
+
+    var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+    var android = /Android/i.test(navigator.userAgent || '');
+    if (android && !standalone && !inBrowserFallback && cfg.androidPackage) {
+      var base = location.origin + location.pathname;
+      var fallback = base + '#/login/verify?t=' + token + '&b=1' + (invited ? '&i=1' : '');
+      var intent = 'intent://' + location.host + location.pathname + '?lt=' + token +
+        '#Intent;scheme=https;package=' + cfg.androidPackage + ';S.browser_fallback_url=' + encodeURIComponent(fallback) + ';end';
+      heading.textContent = 'Sign in to Fleet Manager';
+      intro.textContent = 'Opening the Fleet Manager app…';
+      var open = el('a', { class: 'btn block', href: intent, text: 'Open in the Fleet Manager app' });
+      var here = el('button', { type: 'button', class: 'btn block secondary', text: 'Sign in here in the browser instead' });
+      here.addEventListener('click', go);
+      choice.replaceChildren(open, here);
+      choice.hidden = false;
+      // try to open the app straight away (the phone may want a tap instead: the buttons are there for that)
+      var tried = false;
+      try { tried = sessionStorage.getItem('fm-intent-' + token.slice(0, 12)) === '1'; sessionStorage.setItem('fm-intent-' + token.slice(0, 12), '1'); } catch (e) { /* ignore */ }
+      if (!tried) setTimeout(function () { if (!started) window.location.href = intent; }, 150);
+      return;
+    }
     go();
   };
 })();

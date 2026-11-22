@@ -623,6 +623,15 @@
   function boot() {
     if (started) return;
     started = true;
+    // A sign-in link opened in the browser can hand the sign-in over to the installed app. The app is opened at an address
+    // with ?lt=<token>; the token is taken out of the address at once and the usual sign-in page does the rest.
+    try {
+      var handed = new URLSearchParams(location.search).get('lt');
+      if (handed && /^[0-9a-f]{16,200}$/i.test(handed)) {
+        history.replaceState(null, '', location.pathname);
+        location.hash = '#/login/verify?t=' + handed + '&b=1';
+      }
+    } catch (e) { /* no hand-over: the app starts as usual */ }
     renderFooter();
     refreshNav();
     route();

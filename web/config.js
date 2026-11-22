@@ -7,6 +7,8 @@ window.FLEET_CONFIG = {
   siteUrl: 'https://perezkabagambe.github.io/fleet-manager/',
   // Google OAuth client ID for "Sign in with Google" (public by design). Empty = button hidden.
   googleClientId: '',
+  // The installed Android app (a sign-in link opened in a browser hands the sign-in over to it).
+  androidPackage: 'com.potentiamotus.fleetmanager',
   // Must match API_VERSION in backend/Code.js.
   apiVersion: 1,
   commit: '__COMMIT__',
