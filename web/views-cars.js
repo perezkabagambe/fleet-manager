@@ -210,9 +210,13 @@
     return d;
   }
 
+  // which sections of a car's page are open (kept so that coming back to the page finds it as it was left)
+  Views.getOpenCards = function () { return { carId: openCards.carId, keys: Object.assign({}, openCards.keys) }; };
+  Views.setOpenCards = function (o) { openCards = o; };
+
   Views.car = function (ctx, root) {
     var id = ctx.params.id;
-    if (!ctx.keepOpen || openCards.carId !== id) openCards = { carId: id, keys: {} };
+    if (!(ctx.keepOpen || ctx.restoreOpen) || openCards.carId !== id) openCards = { carId: id, keys: {} };
     var flash = FleetApp.takeFlash(); // taken once: the page may be drawn twice (saved copy, then fresh)
     root.replaceChildren(el('section', { class: 'card' }, [loading()]));
 

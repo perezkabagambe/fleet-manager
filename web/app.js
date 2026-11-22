@@ -40,6 +40,29 @@
   }
 
   var inboxAsked = false; // the Inbox count is fetched once per page load (and whenever the Inbox changes)
+  // Coming back to a car's page from one of its other pages (an entry, a reminder, the fluids...) puts you where you were:
+  // the same sections open, scrolled to the same place. Going anywhere else forgets it.
+  var shownPath = '';  // the screen on show (its path only)
+  var carBack = null;  // { carId, y, open } while you are on a page that was opened from a car's page
+  var CAR_PAGE = /^\/car\/([0-9a-f-]{8,40})$/;
+  function carIdOf(path) { var m = /^\/car\/([0-9a-f-]{8,40})(?:\/|$)/.exec(path); return m ? m[1] : ''; }
+
+  /** Scroll to `y` once the page is tall enough (it fills in as its data arrives); give up on any touch or after a few seconds. */
+  function restoreScroll(y) {
+    var tries = 0;
+    var stopped = false;
+    function stop() { stopped = true; window.removeEventListener('touchstart', stop); window.removeEventListener('wheel', stop); }
+    window.addEventListener('touchstart', stop, { passive: true });
+    window.addEventListener('wheel', stop, { passive: true });
+    (function step() {
+      if (stopped) return;
+      var room = document.documentElement.scrollHeight - window.innerHeight;
+      if (room >= y - 1 || tries > 40) { window.scrollTo(0, Math.min(y, Math.max(room, 0))); if (room >= y - 1) { setTimeout(stop, 400); return; } }
+      tries++;
+      setTimeout(step, 100);
+    })();
+  }
+
   var started = false; // nothing is drawn until the phone's saved copy has been read (a moment at most)
 
   function route(opts) {
@@ -66,6 +89,23 @@
     }
     if (FleetAuth.hasSession() && FleetAuth.getUser() && window.InboxUI && !inboxAsked) { inboxAsked = true; InboxUI.refreshCount(); }
     if (FleetAuth.hasSession() && FleetAuth.getUser() && window.FleetSync) FleetSync.start(); // saves the fleet's data on this phone (once), then keeps it fresh
+    if (!r.keepOpen) {
+      var newCar = carIdOf(r.path);
+      var wasCar = CAR_PAGE.exec(shownPath);
+      var isCarPage = CAR_PAGE.test(r.path);
+      if (wasCar && newCar === wasCar[1] && !isCarPage) {
+        carBack = { carId: wasCar[1], y: window.scrollY, open: Views.getOpenCards ? Views.getOpenCards() : null }; // leaving the car's page for one of its pages
+      } else if (!(carBack && newCar === carBack.carId)) {
+        carBack = null; // went somewhere else: forget
+      }
+      if (isCarPage && carBack && carBack.carId === newCar) {
+        r.restoreOpen = true;
+        r.restoreY = carBack.y;
+        if (carBack.open && Views.setOpenCards) Views.setOpenCards(carBack.open);
+        carBack = null;
+      }
+    }
+    shownPath = r.path;
     var view;
     var m;
     r.params = {};
@@ -107,7 +147,8 @@
     } else view = viewNotFound;
     view(r, appEl);
     appEl.focus({ preventScroll: true });
-    if (!r.query.focus && !r.keepOpen) window.scrollTo(0, 0);
+    if (r.restoreY !== undefined) restoreScroll(r.restoreY);
+    else if (!r.query.focus && !r.keepOpen) window.scrollTo(0, 0);
   }
 
   // ---------- navigation ----------
