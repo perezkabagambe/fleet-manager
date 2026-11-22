@@ -30,3 +30,9 @@ test('"Open in app" hands the current page to the app as ?go=, and the app accep
   ['#/', '#/car/abc-123', '#/inbox?shared=1', '#/car/ab12/entry/9f?x=1&y=2'].forEach((r) => assert.ok(accepts.test(r), r));
   ['javascript:alert(1)', '#/<script>', 'https://evil.example/', '//evil.example', '#/a b'].forEach((r) => assert.ok(!accepts.test(r), r));
 });
+
+test('links.js is loaded by the page and cached by the service worker, and Me has the setting', () => {
+  assert.ok(/<script src="links\.js"><\/script>/.test(read('web/index.html')));
+  assert.ok(/'links\.js'/.test(read('web/sw.js')));
+  assert.ok(/ExternalLinks\.setMode/.test(read('web/views-auth.js')));
+});

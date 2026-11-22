@@ -63,7 +63,7 @@
       ['Imported', precise(car.importDate)], ['Acquired', precise(car.acquisitionDate)],
       ['Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? 'Not recorded' : money(car.acquisitionCost, car.acquisitionCurrency || car.currency)],
       ['Owner / custodian', owners.length ? owners.join(', ') : 'Not recorded'],
-      ['Default currency', car.currency], ['Parts catalogue', car.partsouqUrl],
+      ['Default currency', car.currency], ['Parts catalogues', (car.catalogues && car.catalogues.length ? car.catalogues.map(function (c) { return c.url; }) : [car.partsouqUrl]).filter(Boolean).join(', ')],
       ['Guest access (QR code)', car.guestEnabled ? 'On' : 'Off'], ['Notes', car.notes],
     ];
     rows.forEach(function (r) { if (r[1]) doc.kv(r[0], r[1], { labelWidth: 130 }); });

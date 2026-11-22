@@ -9,6 +9,7 @@ const COUNTRIES = ['UK', 'UG'];
 const MARKETS = ['European', 'UK', 'Japanese (JDM)', 'North American', 'Middle East (GCC)', 'Australian', 'African', 'Asian', 'Other'];
 const DRIVE_SIDES = ['LHD', 'RHD'];
 const TRANSMISSIONS = ['Manual', 'Automatic', 'CVT'];
+const MAX_CATALOGUES = 4;
 const FUEL_TYPES = ['Petrol', 'Diesel', 'Petrol hybrid', 'Diesel hybrid', 'Fully electric'];
 const CURRENCIES = ['GBP', 'UGX', 'USD', 'KES', 'EUR'];
 const CAR_STATUSES = ['Active', 'Sold', 'Scrapped', 'Off-road'];
@@ -42,8 +43,9 @@ function summarizeCar_(c) {
     fuelCapacity: c.fuel_capacity === '' || c.fuel_capacity === undefined ? null : Number(c.fuel_capacity),
     currency: c.currency || 'GBP',
     distanceUnit: 'mi',
-    partsouqUrl: c.partsouq_url,
+    partsouqUrl: c.partsouq_url, // the first catalogue (older screens and the export use these two)
     catalogueIcon: c.catalogue_icon || '',
+    catalogues: cataloguesOf_(c).map(function (x) { return { url: x.u, icon: x.i }; }),
     status: c.status || 'Active',
     odometer: c.current_odometer === '' ? null : Number(c.current_odometer),
     odometerUpdatedAt: c.odometer_updated_at,
@@ -121,9 +123,25 @@ function parseCarInput_(f, existing) {
   out.distance_unit = 'mi'; // every distance in the app is in miles
   out.status = oneOf_(f.status, CAR_STATUSES, 'Active', 'invalid_status');
 
-  // Any secure link to a parts catalogue (PartSouq is the usual one). The column keeps its original name, partsouq_url.
-  const url = parseHttpsUrl_(f.partsouqUrl, 'invalid_catalogue_url');
-  out.partsouq_url = url;
+  // Up to four secure links to parts catalogues (PartSouq is the usual one). Each keeps the icon fetched for its own address; the
+  // first is also kept in the older columns (partsouq_url, catalogue_icon).
+  const wanted = Array.isArray(f.catalogues) ? f.catalogues : (f.partsouqUrl !== undefined ? [f.partsouqUrl] : (existing ? cataloguesOf_(existing).map(function (x) { return x.u; }) : []));
+  const had = {};
+  if (existing) cataloguesOf_(existing).forEach(function (x) { had[x.u] = x.i; });
+  const list = [];
+  wanted.forEach(function (raw) {
+    const u = parseHttpsUrl_(raw, 'invalid_catalogue_url');
+    if (u && !list.some(function (x) { return x.u === u; })) list.push({ u: u, i: had[u] || '' });
+  });
+  if (list.length > MAX_CATALOGUES) fail_('too_many_catalogues');
+  while (list.length && JSON.stringify(list).length > 45000) { // a sheet cell holds 50,000 characters: drop icons, last first, if it ever comes to that
+    const withIcon = list.filter(function (x) { return x.i; });
+    if (!withIcon.length) break;
+    withIcon[withIcon.length - 1].i = '';
+  }
+  out.catalogues = list.length ? JSON.stringify(list) : '';
+  out.partsouq_url = list.length ? list[0].u : '';
+  out.catalogue_icon = list.length ? list[0].i : '';
 
   out.current_odometer = parseOdometer_(f.odometer);
   out.acquisition_cost = parseMoney_(f.acquisitionCost);
@@ -318,7 +336,6 @@ function saveCar_(p, ctx) {
   if (!Object.keys(after).length) return { saved: true, car: summarizeCar_(existing), unchanged: true };
 
   const patch = Object.assign({}, input);
-  if (after.partsouq_url !== undefined) patch.catalogue_icon = ''; // a different website: the old picture no longer applies
   if (after.current_odometer !== undefined) patch.odometer_updated_at = now;
   touch_(existing, ctx, patch);
   Db.update('Cars', existing._row, patch);
@@ -431,4 +448,14 @@ function saveFluids_(p, ctx) {
       car.registration + ' fluids: ' + added + ' added, ' + changed + ' changed, ' + removed + ' removed');
   }
   return { fluids: listFluids_(car.id) };
+}
+
+/** A car's parts catalogues as [{u: address, i: icon}] (a car saved before there could be several has just its one link). */
+function cataloguesOf_(c) {
+  let list = [];
+  try { list = c.catalogues ? JSON.parse(c.catalogues) : []; } catch (e) { list = []; }
+  list = (Array.isArray(list) ? list : []).filter(function (x) { return x && typeof x.u === 'string' && x.u; })
+    .map(function (x) { return { u: x.u, i: typeof x.i === 'string' ? x.i : '' }; });
+  if (!list.length && c.partsouq_url) list = [{ u: String(c.partsouq_url), i: String(c.catalogue_icon || '') }];
+  return list;
 }

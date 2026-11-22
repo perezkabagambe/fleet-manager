@@ -1011,5 +1011,10 @@ details.collapsible:not([open]) > summary .collapse-action { display: none; }
 details.collapsible > summary .collapse-action + .collapse-hint, details.collapsible > summary .collapse-hint + .collapse-action { margin-left: 8px; }
 
 /* the parts catalogue button with its website's icon beside it */
-.catalogue { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.catalogues { display: flex; flex-direction: column; gap: 8px; }
+.catalogue-head { font-size: 0.78rem; color: var(--muted); font-weight: 700; }
+.catalogue { display: flex; align-items: center; gap: 10px; }
+.catalogue .btn { flex: 1 1 auto; min-width: 0; justify-content: center; text-align: center; overflow-wrap: anywhere; }
+.catalogue-edit { display: flex; gap: 8px; align-items: center; }
+.catalogue-edit input { flex: 1 1 auto; min-width: 0; }
 .catalogue-icon { width: 32px; height: 32px; flex: none; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--border); padding: 3px; }

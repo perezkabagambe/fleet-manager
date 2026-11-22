@@ -93,3 +93,55 @@ test('refreshing the picture does not make a new version of the car (an open edi
   assert.equal(env.call('getCar', { token: sam, id: car.id }).data.car.version, version);
   assert.equal(env.call('saveCar', { token: sam, id: car.id, version, fields: Object.assign({}, CAR, { colour: 'Red', partsouqUrl: 'https://parts.example.com/x' }) }).ok, true);
 });
+
+// ---------- several catalogues ----------
+const A = 'https://www.lllparts.co.uk/catalogs/bmw/E92';
+const B = 'https://partsouq.com/en/catalog/genuine/unit?c=Toyota';
+const PNG2 = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('second-icon')]);
+
+function setupMany(urls) {
+  const env = createEnv();
+  env.seedUser({ name: 'Sam', email: 'sam@example.com', role: 'user' });
+  const sam = env.signInAs('sam@example.com');
+  const car = env.call('saveCar', { token: sam, fields: Object.assign({}, CAR, { catalogues: urls }) }).data.car;
+  const get = () => env.call('getCar', { token: sam, id: car.id }).data.car;
+  const edit = (list, extra) => env.call('saveCar', { token: sam, id: car.id, version: get().version, fields: Object.assign({}, CAR, { catalogues: list }, extra || {}) });
+  return { env, sam, car, get, edit };
+}
+
+test('a car can have up to four catalogues, kept in order, without repeats; the first is also the older single link', () => {
+  const { car, get, edit } = setupMany([A, B, A]);
+  assert.deepEqual(car.catalogues.map((c) => c.url), [A, B]);
+  assert.equal(car.partsouqUrl, A);
+  assert.deepEqual(get().catalogues.map((c) => c.url), [A, B]);
+  assert.equal(edit([A, B, 'https://c.example.com/x', 'https://d.example.com/x']).ok, true);
+  assert.equal(get().catalogues.length, 4);
+  assert.equal(edit([A, B, 'https://c.example.com/x', 'https://d.example.com/x', 'https://e.example.com/x']).error, 'too_many_catalogues');
+  assert.equal(edit([A, 'http://insecure.example.com']).error, 'invalid_catalogue_url');
+  assert.deepEqual(edit([B, A]).data.car.catalogues.map((c) => c.url), [B, A], 'the order can be changed');
+  assert.equal(get().partsouqUrl, B);
+  assert.deepEqual(edit([]).data.car.catalogues, []);
+  assert.equal(get().partsouqUrl, '');
+});
+
+test('each catalogue gets its own icon, and an edit keeps the icons of the links that did not change', () => {
+  const { env, sam, car, get, edit } = setupMany([A, B]);
+  env.state.web = (u) => (/lllparts/.test(u) ? { code: 200, body: PNG, headers: { 'Content-Type': 'image/png' } } : /partsouq/.test(u) ? { code: 200, body: PNG2 } : { code: 404, body: '' });
+  const r = env.call('refreshCatalogueIcon', { token: sam, carId: car.id }).data;
+  assert.deepEqual(r.catalogues.map((c) => c.icon), [dataUrl(PNG, 'image/png'), dataUrl(PNG2, 'image/png')]);
+  assert.equal(r.icon, dataUrl(PNG, 'image/png'));
+  assert.deepEqual(get().catalogues.map((c) => c.icon), [dataUrl(PNG, 'image/png'), dataUrl(PNG2, 'image/png')]);
+  // change only the second one: the first keeps its icon, the new one has none yet
+  edit([A, 'https://other.example.org/z']);
+  assert.deepEqual(get().catalogues.map((c) => !!c.icon), [true, false]);
+  // only the catalogues without an icon are fetched again
+  env.state.webRequests.length = 0;
+  env.call('refreshCatalogueIcon', { token: sam, carId: car.id });
+  assert.ok(env.state.webRequests.every((q) => /other\.example\.org|google\.com\/s2.*other\.example\.org/.test(q.url)), env.state.webRequests.map((q) => q.url).join(' '));
+  // a car saved with the older single link still shows as one catalogue
+  const old = createEnv();
+  old.seedUser({ name: 'Sam', email: 'sam@example.com', role: 'user' });
+  const t = old.signInAs('sam@example.com');
+  const c2 = old.call('saveCar', { token: t, fields: Object.assign({}, CAR, { partsouqUrl: B }) }).data.car;
+  assert.deepEqual(c2.catalogues.map((c) => c.url), [B]);
+});

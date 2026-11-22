@@ -218,6 +218,20 @@
       if (!nameBox.hidden) { name.focus(); }
     } });
     nameRow.setAttribute('aria-expanded', 'false');
+    // "Open links in": where links to other websites open (kept on this phone)
+    var linkNote = el('p', { class: 'small-text muted', text: 'Choose where links to other websites (a parts catalogue, for example) open. This applies in the installed app.' });
+    var linkOpts = ['app', 'browser'].map(function (m) {
+      var radio = el('input', { type: 'radio', name: 'linkmode', value: m });
+      radio.checked = ExternalLinks.mode() === m;
+      radio.addEventListener('change', function () { if (radio.checked) { ExternalLinks.setMode(m); linkRow.firstChild.textContent = 'Open links: ' + linkLabel(m); } });
+      return el('label', { class: 'check' }, [radio, el('span', { text: linkLabel(m) })]);
+    });
+    function linkLabel(m) { return m === 'browser' ? 'In my browser' : 'In the app'; }
+    var linkBox = el('div', { class: 'name-box', hidden: true }, [linkNote, el('div', { class: 'stack' }, linkOpts)]);
+    var linkRow = menuRow('Open links: ' + linkLabel(ExternalLinks.mode()), { onClick: function () {
+      linkBox.hidden = !linkBox.hidden;
+      linkRow.classList.toggle('open', !linkBox.hidden);
+    } });
     root.replaceChildren(el('section', { class: 'card narrow' }, [
       el('div', { class: 'me-head' }, [
         el('div', { class: 'me-avatar', 'aria-hidden': 'true', text: initials }),
@@ -226,11 +240,13 @@
       el('div', { class: 'menu-list' }, [
         refreshRow,
         nameRow,
+        linkRow,
         menuRow('Diagnostics', { href: '#/diag' }),
         menuRow('Report a bug or request a feature', { href: '#/feedback' }),
         menuRow('Sign out', { danger: true, onClick: function () { FleetApp.signOut(); } }),
       ]),
       nameBox,
+      linkBox,
       el('h2', { text: 'My cars' }),
       el('p', { class: 'muted', text: 'The cars you own or look after.' }),
       mine,

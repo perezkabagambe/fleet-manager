@@ -342,20 +342,31 @@
           f.notes ? el('div', { class: 'muted small-text', text: f.notes }) : null,
         ]);
       }
-      // The parts catalogue button, with the website's own icon beside it (fetched by the server when the link was saved)
-      var catalogueBox = el('div', { class: 'catalogue' });
+      // The parts catalogues: a button for each, with the website's own icon beside it (fetched by the server when the link was saved)
+      var catalogueBox = el('div', { class: 'catalogues' });
       function catalogueIconEl(src) { return el('img', { class: 'catalogue-icon', src: src, alt: '', width: '32', height: '32' }); }
-      if (car.partsouqUrl) {
-        if (car.catalogueIcon) catalogueBox.append(catalogueIconEl(car.catalogueIcon));
-        catalogueBox.append(el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) }));
-        // a link saved before icons existed (or when the site did not answer): try once a session, and show it when it arrives
+      var cats = car.catalogues && car.catalogues.length ? car.catalogues : (car.partsouqUrl ? [{ url: car.partsouqUrl, icon: car.catalogueIcon || '' }] : []);
+      if (cats.length) {
+        var catRows = cats.map(function (c) {
+          var row = el('div', { class: 'catalogue' }, [
+            c.icon ? catalogueIconEl(c.icon) : null,
+            el('a', { class: 'btn small secondary', href: c.url, target: '_blank', rel: 'noopener noreferrer', text: (cats.length === 1 ? 'Parts catalogue: ' : '') + hostOf(c.url) + (cats.length === 1 ? '' : ' ↗') }),
+          ]);
+          return row;
+        });
+        if (cats.length > 1) catalogueBox.append(el('div', { class: 'catalogue-head', text: 'Parts catalogues' }));
+        catRows.forEach(function (r) { catalogueBox.append(r); });
+        // a link saved before icons existed (or when its site did not answer): try once a session, and show each icon as it arrives
         var triedKey = 'fm-icon-tried-' + car.id;
         var tried = false;
         try { tried = sessionStorage.getItem(triedKey) === '1'; } catch (e) { tried = false; }
-        if (!car.catalogueIcon && !tried) {
+        if (!tried && cats.some(function (c) { return !c.icon; })) {
           try { sessionStorage.setItem(triedKey, '1'); } catch (e) { /* ignore */ }
           FleetApi.call('refreshCatalogueIcon', { carId: car.id }, { timeoutMs: 60000 }).then(function (r) {
-            if (r.data.icon && document.body.contains(catalogueBox) && !catalogueBox.querySelector('.catalogue-icon')) catalogueBox.prepend(catalogueIconEl(r.data.icon));
+            (r.data.catalogues || []).forEach(function (c, i) {
+              var row = catRows[i];
+              if (c.icon && row && document.body.contains(catalogueBox) && !row.querySelector('.catalogue-icon')) row.prepend(catalogueIconEl(c.icon));
+            });
           }).catch(function () { /* no icon: the button works without it */ });
         }
       } else {
@@ -785,7 +796,32 @@
         ),
       ];
       // The parts catalogue link lives at the top of the fluids and specifications part of the form.
-      var catalogueField = UI.field('Parts catalogue link', text('partsouqUrl', v.partsouqUrl, { inputmode: 'url', placeholder: 'https://…' }), 'Optional. Any secure (https) link, e.g. partsouq.com');
+      var MAX_CAT = 4;
+      var catBox = el('div', { class: 'stack' });
+      var catRowsEl = [];
+      var addCat = el('button', { type: 'button', class: 'btn small secondary', text: 'Add another catalogue' });
+      function catUrls() { return catRowsEl.map(function (r) { return r.input.value.trim(); }).filter(Boolean); }
+      function drawCats() {
+        catBox.replaceChildren.apply(catBox, catRowsEl.map(function (r) {
+          var rm = catRowsEl.length > 1 ? el('button', { type: 'button', class: 'btn small secondary', text: 'Remove', 'aria-label': 'Remove this catalogue link' }) : null;
+          if (rm) rm.addEventListener('click', function () { catRowsEl.splice(catRowsEl.indexOf(r), 1); drawCats(); });
+          return el('div', { class: 'catalogue-edit' }, [r.input, rm]);
+        }));
+        addCat.hidden = catRowsEl.length >= MAX_CAT;
+      }
+      function addCatRow(value) {
+        var input = el('input', { type: 'text', name: 'catalogue', value: value || '', inputmode: 'url', placeholder: 'https://…', autocomplete: 'off', 'aria-label': 'Parts catalogue link' });
+        catRowsEl.push({ input: input });
+      }
+      ((v.catalogues && v.catalogues.length) ? v.catalogues.map(function (c) { return c.url; }) : (v.partsouqUrl ? [v.partsouqUrl] : [''])).forEach(addCatRow);
+      addCat.addEventListener('click', function () { addCatRow(''); drawCats(); catRowsEl[catRowsEl.length - 1].input.focus(); });
+      drawCats();
+      var catalogueField = el('div', { class: 'field' }, [
+        el('div', { class: 'field-label', text: 'Parts catalogue links' }),
+        catBox,
+        el('div', { class: 'btn-row' }, [addCat]),
+        el('div', { class: 'hint', text: 'Optional. Up to 4 secure (https) links, e.g. partsouq.com' }),
+      ]);
       var notes = el('textarea', { name: 'notes', rows: '4', maxlength: '2000' });
       notes.value = v.notes || '';
       f.notes = notes;
@@ -1167,7 +1203,7 @@
           market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value, importDate: f.importDate.value,
           status: f.status.value, odometer: f.odometer.value,
           acquisitionCost: f.acquisitionCost.value, acquisitionCurrency: f.acquisitionCurrency.value, acquisitionDate: f.acquisitionDate.value,
-          partsouqUrl: f.partsouqUrl.value, notes: f.notes.value,
+          catalogues: catUrls(), notes: f.notes.value,
           ownerOther: f.ownerOther.value,
         };
       }
@@ -1207,10 +1243,12 @@
       // When a catalogue link is saved (new or changed), the server fetches the website's icon. It is best effort and never holds up
       // the save for long: after a few seconds the car page is shown and fetches it again if it is still missing.
       function catalogueIconStep() {
-        var url = f.partsouqUrl.value.trim();
-        if (!state.carId || !url || state.iconFor === url) return Promise.resolve();
-        if (car && car.partsouqUrl === url && car.catalogueIcon) return Promise.resolve();
-        state.iconFor = url;
+        var urls = catUrls();
+        var have = {};
+        ((car && car.catalogues) || []).forEach(function (c) { if (c.icon) have[c.url] = true; });
+        var key = urls.join(' ');
+        if (!state.carId || !urls.length || state.iconFor === key || urls.every(function (u) { return have[u]; })) return Promise.resolve();
+        state.iconFor = key;
         try { sessionStorage.setItem('fm-icon-tried-' + state.carId, '1'); } catch (e) { /* ignore */ }
         return Promise.race([
           FleetApi.call('refreshCatalogueIcon', { carId: state.carId }, { timeoutMs: 60000 }).then(function () {}, function () {}),

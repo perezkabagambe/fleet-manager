@@ -11,6 +11,7 @@ const SHELL = [
   'config.js',
   'ui.js',
   'install.js',
+  'links.js',
   'auth.js',
   'guest.js',
   'store.js',

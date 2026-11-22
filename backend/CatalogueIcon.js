@@ -4,7 +4,7 @@
  * picture), kept as a small data address in the car's row, and never loaded from the other site by the phone itself.
  */
 
-const CATALOGUE_ICON_MAX = 16 * 1024; // bytes: keeps a car's row (and the lists that carry it) small
+const CATALOGUE_ICON_MAX = 6 * 1024; // bytes: up to four fit in one sheet cell, and the lists that carry them stay small
 const CATALOGUE_UA = 'Mozilla/5.0 (compatible; FleetManager/1.0)';
 
 /** Only an ordinary public website name: no addresses, no "localhost", nothing without a dot. */
@@ -104,13 +104,28 @@ function fetchCatalogueIcon_(url) {
   return catalogueIconFrom_(catalogueFetch_('https://www.google.com/s2/favicons?domain=' + encodeURIComponent(host) + '&sz=64'));
 }
 
-/** Fetch (again) the picture for a car's catalogue link and keep it. Quick to ignore if it fails: the car page just has no picture. */
+/**
+ * Fetch the pictures for a car's catalogues that have none yet (or all of them with `all: true`) and keep them. Quick to ignore if it
+ * fails: the car page just has no picture. Not a new version of the car, so nobody's open form is spoilt by it.
+ */
 function refreshCatalogueIcon_(p, ctx) {
   const car = findCar_(cleanStr_(p.carId, 64), false);
   if (!car) fail_('not_found');
-  const icon = car.partsouq_url ? fetchCatalogueIcon_(car.partsouq_url) : '';
-  if (icon !== String(car.catalogue_icon || '')) {
-    withScriptLock_(function () { Db.update('Cars', car._row, { catalogue_icon: icon }); }); // not a new version of the car: nobody's open form is spoilt by it
+  const started = Date.now();
+  const list = cataloguesOf_(car);
+  let changed = false;
+  list.forEach(function (x) {
+    if ((x.i && !p.all) || Date.now() - started > 40000) return; // enough time spent: the rest are tried next time
+    const icon = fetchCatalogueIcon_(x.u);
+    if (icon !== x.i) { x.i = icon; changed = true; }
+  });
+  if (changed) {
+    withScriptLock_(function () {
+      const fresh = findCar_(car.id, false) || car;
+      const now = cataloguesOf_(fresh);
+      const merged = now.map(function (n) { const got = list.filter(function (x) { return x.u === n.u; })[0]; return { u: n.u, i: got ? got.i : n.i }; }); // keep any edit made meanwhile
+      Db.update('Cars', fresh._row, { catalogues: merged.length ? JSON.stringify(merged) : '', catalogue_icon: merged.length ? merged[0].i : '' });
+    });
   }
-  return { icon: icon };
+  return { icon: list.length ? list[0].i : '', catalogues: list.map(function (x) { return { url: x.u, icon: x.i }; }) };
 }
