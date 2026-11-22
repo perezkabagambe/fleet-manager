@@ -1021,3 +1021,8 @@ details.collapsible > summary .collapse-action + .collapse-hint, details.collaps
 
 /* the VIN box is sized so a whole VIN (18 characters) shows without scrolling, next to the registration */
 input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8px; } /* the text also shrinks as the box fills (see shrinkToFit in views-cars.js) */
+
+/* the car's notes on the car page, with their label */
+.car-notes { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.car-notes-label { font-size: 0.8rem; font-weight: 700; color: var(--muted); }
+.car-notes .notes { margin-top: 4px; }

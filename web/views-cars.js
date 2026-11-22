@@ -413,7 +413,7 @@
           ]),
           Photos.carousel(car),
           el('dl', { class: 'details top-details' }, details),
-          car.notes ? el('p', { class: 'notes' , text: car.notes }) : null,
+          car.notes ? el('div', { class: 'car-notes' }, [el('div', { class: 'car-notes-label', text: 'Notes' }), el('p', { class: 'notes', text: car.notes })]) : null,
           el('div', { class: 'btn-row' }, [mineBtn]),
         ]),
         collapsible('Odometer Log', el('section', { class: 'card' }, [
