@@ -481,11 +481,6 @@
         ]),
         msg, statusArea,
         d.reminder ? el('p', { class: 'muted small-text' }, [el('span', { text: 'Reminder: ' }), el('a', { href: '#/car/' + carId + '/reminder/' + d.reminder.id, text: d.reminder.name })]) : null,
-        // Edit and Delete (admins) next to each other at the top of the entry
-        el('div', { class: 'entry-actions' }, [
-          el('a', { class: 'btn big', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit' }),
-          deleteBtn,
-        ]),
       ])];
 
       // type-specific details
@@ -614,7 +609,11 @@
         picker.el, copyBtn, copyMsg,
       ]));
 
-      cards.push(el('a', { class: 'btn block big edit-bottom', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit ' + BY_TYPE[e.type].label.toLowerCase() }));
+      // Edit and Delete (admins) next to each other at the bottom of the entry
+      cards.push(el('div', { class: 'entry-actions' }, [
+        el('a', { class: 'btn big', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit' }),
+        deleteBtn,
+      ]));
       root.replaceChildren.apply(root, cards);
     }
   };

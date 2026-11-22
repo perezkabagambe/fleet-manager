@@ -380,7 +380,6 @@
           odoForm,
         ]), car.odometer === null ? 'Not set' : num(car.odometer) + ' mi'),
         collapsible('Maintenance & Issues Log', EntryUI.historyCard(car, page && page.entries), page && page.entries ? countText(page.entries.length, 'entry', 'entries') : ''),
-        FleetAuth.isAdmin() ? collapsible('Recycle bin', EntryUI.binCard(car)) : null,
         collapsible('Reminders', RemindersUI.card(car, page && page.tasks), page && page.tasks ? reminderHint(page.tasks) : ''),
         collapsible('Fluids, Bulbs & Specifications', el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids, Bulbs & Specifications' }),
@@ -402,6 +401,7 @@
           el('img', { class: 'qr', src: qrDataUrl(qrLink(car)), alt: 'QR code for ' + car.registration, width: '140', height: '140' }),
           el('p', {}, [el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/label', text: 'Print label' })]),
         ])),
+        FleetAuth.isAdmin() ? collapsible('Recycle bin', EntryUI.binCard(car)) : null, // the last section, for admins only
         el('div', { class: 'export-row' }, [
           receiptBox,
           exportBtn,
