@@ -163,30 +163,61 @@ test('refresh specs: a saved car is looked up by its VIN first, then its make an
   assert.equal(env.call('getCar', { token: sam, id: car.id }).data.car.engineCode, 'D4HB');
 });
 
-test('if Google Search is refused the question is asked again without it', () => {
+const SEARCH_ERR = { code: 429, body: { error: { status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded for grounding requests' } } };
+const modelOf = (q) => /models\/([^:]+):/.exec(q.url)[1];
+
+test('step 2: if the latest model cannot search, an older 2.5 model is asked, still with Google Search', () => {
   const { env, fill } = setup();
-  let n = 0;
-  env.state.gemini = (q) => (q.body.tools ? (++n, { code: 400, body: { error: { message: 'Search tool is not supported' } } }) : reply(GOOD));
+  env.state.gemini = (q) => (modelOf(q) === 'gemini-3.5-flash-lite' ? SEARCH_ERR : reply(GOOD));
+  const r = fill();
+  assert.equal(r.ok, true, r.error);
+  const sent = env.state.geminiRequests;
+  assert.deepEqual(sent.map(modelOf), ['gemini-3.5-flash-lite', 'gemini-2.5-flash']);
+  assert.deepEqual(sent.map((q) => !!q.body.tools), [true, true]);
+  assert.match(r.data.fluids[0].source, /with Google Search/);
+  assert.match(env.props.GEMINI_LAST_ERROR, /HTTP 429 RESOURCE_EXHAUSTED · gemini-3\.5-flash-lite with Google Search: Quota exceeded for grounding requests/);
+  assert.equal(env.props.GEMINI_LAST_ERROR.includes(KEY), false);
+});
+
+test('the older search model can be chosen with GEMINI_SEARCH_FALLBACK_MODEL', () => {
+  const { env, fill } = setup();
+  env.props.GEMINI_SEARCH_FALLBACK_MODEL = 'gemini-2.5-flash-lite';
+  env.state.gemini = (q) => (modelOf(q) === 'gemini-3.5-flash-lite' ? SEARCH_ERR : reply(GOOD));
   assert.equal(fill().ok, true);
-  assert.equal(env.state.geminiRequests.length, 2);
-  assert.equal(env.state.geminiRequests[1].body.tools, undefined);
+  assert.deepEqual(env.state.geminiRequests.map(modelOf), ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite']);
+});
+
+test('step 3: if searching fails completely, the latest model answers without searching, and the answer says so', () => {
+  const { env, fill } = setup();
+  env.state.gemini = (q) => (q.body.tools ? { code: 400, body: { error: { message: 'Search tool is not supported' } } } : reply(GOOD));
+  const r = fill();
+  assert.equal(r.ok, true, r.error);
+  const sent = env.state.geminiRequests;
+  assert.deepEqual(sent.map(modelOf), ['gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-flash-lite']);
+  assert.deepEqual(sent.map((q) => !!q.body.tools), [true, true, false]);
+  [].concat(r.data.fluids, r.data.bulbs).forEach((row) => assert.match(row.source, /no web search/));
   env.state.geminiRequests.length = 0;
   env.state.gemini = () => ({ code: 400, body: { error: { message: 'bad' } } });
   assert.equal(fill().error, 'ai_unavailable');
 });
 
-test('if Google Search is over its limit ("busy") the question is asked again without it, and Google\'s reason is kept for the admins', () => {
+test('when the latest model is already the older one, search is not tried twice; and a key problem stops at once', () => {
   const { env, fill } = setup();
-  env.state.gemini = (q) => (q.body.tools ? { code: 429, body: { error: { status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded for grounding requests' } } } : reply(GOOD));
-  const r = fill();
-  assert.equal(r.ok, true, r.error);
-  assert.equal(env.state.geminiRequests.length, 2);
-  assert.equal(env.state.geminiRequests[1].body.tools, undefined);
-  assert.match(env.props.GEMINI_LAST_ERROR, /HTTP 429 RESOURCE_EXHAUSTED · gemini-3\.5-flash-lite with Google Search: Quota exceeded for grounding requests/);
-  assert.equal(env.props.GEMINI_LAST_ERROR.includes(KEY), false);
-  // busy even without searching: the person is told
+  env.props.GEMINI_CAR_MODEL = 'gemini-2.5-flash';
+  env.state.gemini = (q) => (q.body.tools ? SEARCH_ERR : reply(GOOD));
+  assert.equal(fill().ok, true);
+  assert.deepEqual(env.state.geminiRequests.map((q) => !!q.body.tools), [true, false]);
+  env.state.geminiRequests.length = 0;
+  env.state.gemini = () => ({ code: 403, body: { error: { message: 'API key not valid' } } });
+  assert.equal(fill().error, 'ai_not_set_up');
+  assert.equal(env.state.geminiRequests.length, 1);
+});
+
+test('busy at every step: the person is told', () => {
+  const { env, fill } = setup();
   env.state.gemini = () => ({ code: 429, body: { error: { status: 'RESOURCE_EXHAUSTED', message: 'Too many requests' } } });
   assert.equal(fill().error, 'ai_busy');
+  assert.equal(env.state.geminiRequests.length, 3);
 });
 
 test('only values the app can use get through', () => {

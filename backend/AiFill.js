@@ -11,13 +11,15 @@
  *
  * AI answers are not always right. Everything this returns is marked as an AI suggestion so it is never mistaken for a
  * checked fact. It uses the same key as the receipt reader (Script Property GEMINI_API_KEY). Optional Script Properties:
- * GEMINI_CAR_MODEL (a different model for car lookups), AI_USER_DAILY and AI_APP_DAILY (limits).
+ * GEMINI_CAR_MODEL (a different model for car lookups), GEMINI_SEARCH_FALLBACK_MODEL (the older model tried with search when the
+ * latest one cannot search; default gemini-2.5-flash), AI_USER_DAILY and AI_APP_DAILY (limits).
  */
 
 const AI_USER_DAILY = 10;   // lookups per person per day
 const AI_APP_DAILY = 100;   // lookups for everyone together per day (keeps the free allowance safe)
 const AI_MAX_CANDIDATES = 3;
 const AI_SOURCE = 'AI suggestion (Gemini with Google Search), not verified';
+const AI_SOURCE_NO_SEARCH = 'AI suggestion (Gemini, no web search), not verified';
 
 // The names the app uses (they must match the standard lists in web/views-cars.js).
 const AI_FLUID_NAMES = ['Engine oil', 'Gearbox oil / ATF', 'Front differential oil', 'Rear differential oil', 'Transfer case oil',
@@ -26,6 +28,7 @@ const AI_BULB_NAMES = ['Dipped beam', 'Full beam', 'Front side light', 'Front in
   'Front daytime running', 'Rear light', 'Rear brake light', 'Rear reverse light'];
 
 function aiKey_() { return geminiKey_(); }
+function aiSearchFallbackModel_() { return String(props_().getProperty('GEMINI_SEARCH_FALLBACK_MODEL') || '').trim() || 'gemini-2.5-flash'; }
 function aiModel_() { return String(props_().getProperty('GEMINI_CAR_MODEL') || '').trim() || geminiModel_(); }
 
 function aiLimit_(propName, fallback) {
@@ -194,27 +197,44 @@ function aiFindPrompt_(known) {
 
 // ---------- talking to Gemini ----------
 
-/** Ask, with Google Search; if the request is refused for using search, ask again without it. Returns { text, sources }. */
+/**
+ * Ask in up to three steps, so the answer is as well researched as the free allowance allows:
+ *  1. the latest model (GEMINI_CAR_MODEL, else GEMINI_MODEL) with Google Search;
+ *  2. if that is refused or over its limit: an older model that still has its own search allowance (GEMINI_SEARCH_FALLBACK_MODEL,
+ *     default gemini-2.5-flash), again with Google Search;
+ *  3. if search fails completely: the latest model without searching, from what it knows.
+ * Returns { text, sources, searched }. A "busy" answer to step 3 is reported to the person.
+ */
 function aiAsk_(prompt) {
-  const body = {
-    systemInstruction: { parts: [{ text: aiSystemPrompt_() }] },
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    tools: [{ google_search: {} }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+  const make = function (withSearch) {
+    const body = {
+      systemInstruction: { parts: [{ text: aiSystemPrompt_() }] },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+    };
+    if (withSearch) body.tools = [{ google_search: {} }];
+    return body;
   };
-  let json;
+  const refusedSearch = function (e) { return !!(e && (e.apiError === 'ai_bad_request' || e.apiError === 'ai_busy')); };
+  const latest = aiModel_();
+  const older = aiSearchFallbackModel_();
+  let json = null;
+  let searched = true;
   try {
-    json = geminiCall_(body, aiModel_());
+    json = geminiCall_(make(true), latest);
   } catch (e) {
-    // Searching was refused (not supported) or is over its own, tighter limit (a "busy" answer): answer without searching,
-    // from what the model knows. The answer is still marked as unverified.
-    if (!(e && (e.apiError === 'ai_bad_request' || e.apiError === 'ai_busy'))) throw e;
-    delete body.tools;
-    try { json = geminiCall_(body, aiModel_()); } catch (e2) { if (e2 && e2.apiError === 'ai_bad_request') fail_('ai_unavailable'); throw e2; }
+    if (!refusedSearch(e)) throw e;
+    if (older && older !== latest) {
+      try { json = geminiCall_(make(true), older); } catch (e2) { if (!refusedSearch(e2)) throw e2; }
+    }
+  }
+  if (!json) {
+    searched = false;
+    try { json = geminiCall_(make(false), latest); } catch (e3) { if (e3 && e3.apiError === 'ai_bad_request') fail_('ai_unavailable'); throw e3; }
   }
   const text = geminiText_(json);
   if (!text) fail_('ai_bad_answer');
-  return { text: text, sources: aiSources_(json) };
+  return { text: text, sources: aiSources_(json), searched: searched };
 }
 
 /** Web pages the answer was based on: { url, title }, https only, at most five. */
@@ -326,6 +346,7 @@ function aiRun_(ctx, known, prompt, shape, auditText) {
   }
   const out = shape(raw);
   out.sources = asked.sources;
+  if (!asked.searched) [].concat(out.fluids || [], out.bulbs || []).forEach(function (row) { row.source = AI_SOURCE_NO_SEARCH; });
   out.usedVin = !!known.vin;
   out.remaining = Math.max(0, aiLimit_('AI_USER_DAILY', AI_USER_DAILY) - aiUsed_(aiUserName_(ctx)));
   audit_(ctx.user, 'ai_lookup', 'Car', '', auditText(out));
