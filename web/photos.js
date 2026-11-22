@@ -228,13 +228,22 @@
    * Two buttons: "Take photo" (opens the camera straight away on a phone) and "Choose photo"
    * (opens the gallery or files). Calls onFile(file) with whatever was picked.
    */
+  /** Hand the chosen files to `onFile` one after another (waiting for each to finish, when it returns a promise). */
+  function eachFile(files, onFile) {
+    var chain = Promise.resolve();
+    Array.prototype.forEach.call(files, function (file) {
+      chain = chain.then(function () { return onFile(file); }).catch(function () { /* each caller reports its own problems; the rest still go on */ });
+    });
+  }
+
   function picker(onFile) {
     function button(label, camera) {
-      var input = el('input', Object.assign({ type: 'file', accept: 'image/*', class: 'file-input' }, camera ? { capture: 'environment' } : {}));
+      // "Choose photo" lets you pick several at once; the camera takes one at a time
+      var input = el('input', Object.assign({ type: 'file', accept: 'image/*', class: 'file-input' }, camera ? { capture: 'environment' } : { multiple: true }));
       input.addEventListener('change', function () {
-        var file = input.files && input.files[0];
+        var files = input.files ? Array.prototype.slice.call(input.files) : [];
         input.value = ''; // so picking the same photo again still fires
-        if (file) onFile(file);
+        eachFile(files, onFile);
       });
       return el('label', { class: 'btn small secondary file-btn' }, [el('span', { text: label }), input]);
     }
@@ -252,11 +261,12 @@
 
   /** One labelled file button. `capture` opens the camera directly on a phone. */
   function fileButton(label, accept, capture, onFile) {
-    var input = el('input', Object.assign({ type: 'file', accept: accept, class: 'file-input' }, capture ? { capture: 'environment' } : {}));
+    // choosing (not the camera) lets you pick several files at once; they are added one after another
+    var input = el('input', Object.assign({ type: 'file', accept: accept, class: 'file-input' }, capture ? { capture: 'environment' } : { multiple: true }));
     input.addEventListener('change', function () {
-      var file = input.files && input.files[0];
+      var files = input.files ? Array.prototype.slice.call(input.files) : [];
       input.value = '';
-      if (file) onFile(file);
+      eachFile(files, onFile);
     });
     return el('label', { class: 'btn small secondary file-btn' }, [el('span', { text: label }), input]);
   }

@@ -80,26 +80,55 @@
     var cars = [];
     var reading = true;
     FleetApp.setBanner({ title: 'Receipt Inbox', icon: 'inbox', action: null });
+    var flash = FleetApp.takeFlash();
+    if (flash) msg.append(UI.notice(flash.kind === 'ok' ? 'ok' : 'info', flash.text)); // e.g. "3 receipts added"
 
     function addBlock() {
       var carSelect = el('select', { name: 'carId' }, [el('option', { value: '', text: 'Not sure yet (the AI will try to tell)' })].concat(
         cars.map(function (c) { return el('option', { value: c.id, text: c.registration + ' · ' + c.make + ' ' + c.model, selected: c.id === ctx.query.car }); })));
-      var file = el('input', { type: 'file', accept: 'image/*,application/pdf', class: 'file-input', 'aria-label': 'Choose a photo or PDF of a receipt' });
+      var file = el('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true, class: 'file-input', 'aria-label': 'Choose photos or PDFs of receipts' });
       var go = el('button', { type: 'button', class: 'btn block', text: 'Add this receipt' });
       var status = el('div');
+      file.addEventListener('change', function () {
+        var n = file.files ? file.files.length : 0;
+        go.textContent = n > 1 ? 'Add these ' + n + ' receipts' : 'Add this receipt';
+      });
       go.addEventListener('click', function () {
-        var f = file.files && file.files[0];
-        if (!f) { status.replaceChildren(UI.notice('error', 'Choose a photo or a PDF first.')); return; }
+        var files = file.files ? Array.prototype.slice.call(file.files) : [];
+        if (!files.length) { status.replaceChildren(UI.notice('error', 'Choose a photo or a PDF first.')); return; }
         status.replaceChildren();
-        UI.busy(go, 'Adding…', send(f, carSelect.value, function (t) { go.textContent = t; })).then(function (r) {
-          FleetApp.setFlash(r.status === 'Pending' ? 'ok' : 'info', r.status === 'Pending' ? 'The receipt was read. Check what it says, then fill in the entry.' : (r.note || 'The receipt was saved.'));
-          FleetApp.go('/inbox/' + r.id);
-        }).catch(function (e) { status.replaceChildren(UI.notice('error', UI.errorText(e))); });
+        // each file becomes its own receipt, added one after another
+        var done = [];
+        var failed = [];
+        var chain = Promise.resolve();
+        var label = go.textContent;
+        files.forEach(function (f, i) {
+          chain = chain.then(function () {
+            return send(f, carSelect.value, function (t) { go.textContent = files.length > 1 ? 'Receipt ' + (i + 1) + ' of ' + files.length + ': ' + t : t; }).then(function (r) { done.push(r); }, function (e) { failed.push({ name: f.name || 'a file', error: e }); });
+          });
+        });
+        UI.busy(go, 'Adding…', chain.then(function () { go.textContent = label; })).then(function () {
+          if (failed.length) {
+            status.replaceChildren.apply(status, (done.length ? [UI.notice('ok', done.length + ' receipt' + (done.length === 1 ? ' was' : 's were') + ' added. They are in the list below.')] : [])
+              .concat(failed.map(function (x) { return UI.notice('error', x.name + ': ' + UI.errorText(x.error)); })));
+            refreshCount();
+            return; // stay here so the problems stay in view
+          }
+          if (!done.length) return;
+          if (done.length === 1) {
+            var r = done[0];
+            FleetApp.setFlash(r.status === 'Pending' ? 'ok' : 'info', r.status === 'Pending' ? 'The receipt was read. Check what it says, then fill in the entry.' : (r.note || 'The receipt was saved.'));
+            FleetApp.go('/inbox/' + r.id);
+          } else {
+            FleetApp.setFlash('ok', done.length + ' receipts added. Open each one to check it.');
+            FleetApp.go('/inbox');
+          }
+        });
       });
       return el('details', { class: 'copy-section', open: !!ctx.query.car || undefined }, [
-        el('summary', { text: 'Add a receipt (photo or PDF)' }),
+        el('summary', { text: 'Add receipts (photos or PDFs)' }),
         el('p', { class: 'muted small-text', text: reading
-          ? 'Take a photo, or choose a photo or PDF. It is read automatically and then waits here for you to check it.'
+          ? 'Take a photo, or choose one or more photos or PDFs. Each is read automatically and then waits here for you to check it.'
           : 'Take a photo, or choose a photo or PDF. Automatic reading is not switched on yet, so you will fill the details in yourself.' }),
         el('div', { class: 'field' }, [el('label', { text: 'Which vehicle is it for?' }), carSelect]),
         el('div', { class: 'field' }, [el('label', { text: 'Receipt' }), file]),
