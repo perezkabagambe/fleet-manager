@@ -214,6 +214,20 @@ test('when the latest model is already the older one, search is not tried twice;
   assert.equal(env.state.geminiRequests.length, 1);
 });
 
+test('a model that no longer exists (404) at step 1 or 2 just moves on to the next step', () => {
+  const { env, fill } = setup();
+  const gone = { code: 404, body: { error: { status: 'NOT_FOUND', message: 'This model models/gemini-2.5-flash is no longer available to new users.' } } };
+  env.state.gemini = (q) => (modelOf(q) === 'gemini-2.5-flash' ? gone : q.body.tools ? SEARCH_ERR : reply(GOOD));
+  const r = fill();
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual(r.data.method, { step: 3, model: 'gemini-3.5-flash-lite', searched: false });
+  assert.deepEqual(env.state.geminiRequests.map(modelOf), ['gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-flash-lite']);
+  // the latest model itself missing at step 1 also falls through to step 2
+  env.state.geminiRequests.length = 0;
+  env.state.gemini = (q) => (modelOf(q) === 'gemini-3.5-flash-lite' ? gone : reply(GOOD));
+  assert.deepEqual(fill().data.method, { step: 2, model: 'gemini-2.5-flash', searched: true });
+});
+
 test('busy at every step: the person is told', () => {
   const { env, fill } = setup();
   env.state.gemini = () => ({ code: 429, body: { error: { status: 'RESOURCE_EXHAUSTED', message: 'Too many requests' } } });

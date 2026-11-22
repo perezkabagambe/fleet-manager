@@ -214,7 +214,8 @@ function aiAsk_(prompt) {
     if (withSearch) body.tools = [{ google_search: {} }];
     return body;
   };
-  const refusedSearch = function (e) { return !!(e && (e.apiError === 'ai_bad_request' || e.apiError === 'ai_busy')); };
+  // Any trouble with a searching attempt (refused, over its limit, or a model that no longer exists) moves on to the next step; only a refused key stops.
+  const refusedSearch = function (e) { return !!(e && e.apiError && e.apiError !== 'ai_not_set_up'); };
   const latest = aiModel_();
   const older = aiSearchFallbackModel_();
   let json = null;
