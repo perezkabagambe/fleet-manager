@@ -685,10 +685,10 @@
       notes.setAttribute('aria-label', 'Notes');
       var notesField = el('div', { class: 'field' }, [notes]); // the section heading says what it is: no label above the box
 
-      // ---- "Fill in the rest with AI" (a new car only): appears under the registration and VIN ----
+      // ---- "Use AI to fill in technical details" (a new car only): the first thing under the Technical details heading ----
       function aiAssist() {
         var box = el('div', { class: 'ai-box' });
-        var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Fill in the rest with AI' });
+        var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Use AI to fill in technical details' });
         var HINT = 'Enter the VIN, or at least the make and model. AI fills the empty boxes, but it can be wrong: check what it adds.';
         var hint = el('div', { class: 'hint', text: HINT });
         var picker = el('div', { class: 'ai-matches' });
@@ -699,7 +699,7 @@
         function hasVin() { return f.vin.value.replace(/\s+/g, '').length >= 5; }
         // a VIN is enough; without one, the make and the model are the least we need
         function ready() { return hasVin() || (f.make.value.trim() !== '' && f.model.value.trim() !== ''); }
-        function refresh() { btn.disabled = !ready(); btn.textContent = hasVin() || !ready() ? '✨ Fill in the rest with AI' : '✨ Find this car with AI'; }
+        function refresh() { btn.disabled = !ready(); }
         ['registration', 'vin', 'make', 'model'].forEach(function (k) { f[k].addEventListener('input', refresh); });
         refresh();
         FleetApi.call('aiStatus', {}).then(function (r) {
@@ -810,7 +810,7 @@
         });
         return box;
       }
-      if (!car) keyFields.splice(1, 0, aiAssist()); // under the registration and VIN
+      if (!car) techFields.unshift(aiAssist()); // at the top of the technical details
 
       // Owner/custodian: people who use this app are ticked; anyone else is written in.
       var ownerFields = [
