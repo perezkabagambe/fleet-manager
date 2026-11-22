@@ -338,13 +338,13 @@
         collapsible('Fluids, Bulbs & Specifications', el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids, Bulbs & Specifications' }),
           el('div', { class: 'section-tools' }, [el('a', { class: 'btn small secondary section-edit', href: '#/car/' + car.id + '/fluids', text: 'Edit', 'aria-label': 'Edit the fluids, bulbs and specifications' })]),
+          el('div', { class: 'catalogue' }, car.partsouqUrl
+            ? [el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) })]
+            : [el('span', { class: 'muted', text: 'No parts catalogue link yet. Tap Edit car to add one.' })]),
           fluidRows.length ? el('h3', { class: 'spec-group kind-fluid', text: '💧 Fluids' }) : null,
           fluidRows.length ? el('ul', { class: 'fluids' }, fluidRows) : (bulbRows.length ? null : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' })),
           bulbRows.length ? el('h3', { class: 'spec-group kind-bulb', text: '💡 Bulbs' }) : null,
           bulbRows.length ? el('ul', { class: 'fluids' }, bulbRows) : null,
-          el('div', { class: 'catalogue' }, car.partsouqUrl
-            ? [el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) })]
-            : [el('span', { class: 'muted', text: 'No parts catalogue link yet. Tap Edit car to add one.' })]),
         ])),
         collapsible('Documents', DocumentsUI.card(car, page && page.documents), page && page.documents ? countText(page.documents.length, 'document', 'documents') : ''),
         collapsible('Costs', EntryUI.costsCard(car, page && page.costs)),
@@ -616,12 +616,28 @@
 
       // Two short fields side by side, to save scrolling.
       function pair(a, b, cls) { return el('div', { class: 'field-pair' + (cls ? ' ' + cls : '') }, [a, b]); }
-      var detailFields = [
+      // Vehicle details are three plain groups with simple headings (nothing collapses): key details, technical details, notes.
+      var keyFields = [
         pair(
           UI.field('Registration *', text('registration', v.registration, { maxlength: '20', autocapitalize: 'characters', required: true })),
           UI.field('VIN / chassis', text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 'The 17-character VIN, or chassis number.'),
           'wide-second' // a VIN is long, a registration is short
         ),
+        pair(
+          UI.field('Location', select('country', [['UK', 'UK'], ['UG', 'Uganda']], v.country), 'Where it is based. Sets the usual currency.'),
+          UI.field('Date imported', text('importDate', v.importDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.')
+        ),
+        pair(
+          UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
+          odometerField()
+        ),
+        pair(
+          UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.'),
+          acquisitionCostField(),
+          'wide-second' // the amount needs more room than the date
+        ),
+      ];
+      var techFields = [
         pair(
           UI.field('Make *', text('make', v.make, { maxlength: '40', placeholder: 'e.g. Toyota', required: true })),
           UI.field('Model *', text('model', v.model, { maxlength: '40', placeholder: 'e.g. Land Cruiser', required: true }))
@@ -639,25 +655,13 @@
           UI.field('Drive side', select('driveSide', [['', 'Not recorded'], ['LHD', 'Left-hand (LHD)'], ['RHD', 'Right-hand (RHD)']], v.driveSide))
         ),
         UI.field('Fuel capacity (litres)', text('fuelCapacity', v.fuelCapacity === null || v.fuelCapacity === undefined ? '' : v.fuelCapacity, { inputmode: 'decimal', maxlength: '6', placeholder: 'e.g. 87' }), 'Optional. The size of the fuel tank.'),
-        pair(
-          UI.field('Location', select('country', [['UK', 'UK'], ['UG', 'Uganda']], v.country), 'Where it is based. Sets the usual currency.'),
-          UI.field('Date imported', text('importDate', v.importDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.')
-        ),
-        pair(
-          UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
-          odometerField()
-        ),
-        pair(
-          UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.'),
-          acquisitionCostField(),
-          'wide-second' // the amount needs more room than the date
-        ),
-        UI.field('Parts catalogue link', text('partsouqUrl', v.partsouqUrl, { inputmode: 'url', placeholder: 'https://…' }), 'Optional. Any secure (https) link, e.g. partsouq.com'),
       ];
+      // The parts catalogue link lives at the top of the fluids and specifications part of the form.
+      var catalogueField = UI.field('Parts catalogue link', text('partsouqUrl', v.partsouqUrl, { inputmode: 'url', placeholder: 'https://…' }), 'Optional. Any secure (https) link, e.g. partsouq.com');
       var notes = el('textarea', { name: 'notes', rows: '4', maxlength: '2000' });
       notes.value = v.notes || '';
       f.notes = notes;
-      detailFields.push(UI.field('Notes', notes));
+      var notesField = UI.field('Notes', notes);
 
       // ---- "Fill in the rest with AI" (a new car only): appears under the registration and VIN ----
       function aiAssist() {
@@ -784,7 +788,7 @@
         });
         return box;
       }
-      if (!car) detailFields.splice(1, 0, aiAssist());
+      if (!car) keyFields.splice(1, 0, aiAssist()); // under the registration and VIN
 
       // Owner/custodian: people who use this app are ticked; anyone else is written in.
       var ownerFields = [
@@ -913,7 +917,12 @@
         d.open = !!open;
         return d;
       }
-      var detailsSection = section('Vehicle details', detailFields, !car);
+      function groupHeading(text) { return el('h2', { class: 'form-heading', text: text }); }
+      var detailsSection = el('div', { class: 'form-groups' }, [
+        groupHeading('Key details'), el('div', { class: 'stack' }, keyFields),
+        groupHeading('Technical details'), el('div', { class: 'stack' }, techFields),
+        groupHeading('Notes'), notesField,
+      ]);
       var ownersSection = section('Owner/Custodian', ownerFields);
       // ---- "Refresh specs with AI" (a saved car): shows what AI would change and lets the person tick what to use ----
       function refreshSpecsBox() {
@@ -992,7 +1001,7 @@
         return box;
       }
 
-      var fluidsSection = section('💧 Fluids & Specifications', car ? [refreshSpecsBox(), fluidsEd.node] : [fluidsEd.node], false, 'kind-fluid');
+      var fluidsSection = section('💧 Fluids & Specifications', car ? [catalogueField, refreshSpecsBox(), fluidsEd.node] : [catalogueField, fluidsEd.node], false, 'kind-fluid');
       var bulbsSection = section('💡 Bulbs', [fluidsEd.bulbsNode], false, 'kind-bulb');
       var photoSection = section('Photos', photoFields);
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: car ? 'Save changes' : 'Add car' });

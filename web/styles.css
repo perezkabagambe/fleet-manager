@@ -856,3 +856,8 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .has-tabs:not(.on-me-page) .footer { display: none; }
 
 .one-line { white-space: nowrap; overflow: hidden; }
+
+/* the vehicle details are plain groups under simple headings */
+.form-groups { margin-bottom: 8px; }
+.form-groups .form-heading { font-size: 1.05rem; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.form-groups .form-heading:first-child { margin-top: 4px; }
