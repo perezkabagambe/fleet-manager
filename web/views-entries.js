@@ -88,19 +88,12 @@
    * hooks.error(err) shows a problem; hooks.removed(a, row) runs after a successful remove.
    */
   function attachmentRow(a, hooks) {
-    var isImage = a.mime === 'image/jpeg';
-    var view = el('button', { type: 'button', class: 'btn small secondary', text: isImage ? 'View' : a.mime === 'application/pdf' ? 'Open' : 'Download' });
     var holder = el('div');
+    var shown = Viewer.canShow(a.mime); // photos and PDFs are shown in the app; any other kind of file is saved to the phone
+    var view = el('button', { type: 'button', class: 'btn small secondary', text: shown ? 'View' : 'Download' });
     view.addEventListener('click', function () {
-      UI.busy(view, 'Loading…', Photos.fetchAttachment(a.id)).then(function (att) {
-        var url = Photos.toBlobUrl(att);
-        if (!isImage) { // PDFs and other files are saved or opened by the phone, never shown inside the app
-          var link = el('a', { href: url, download: att.filename });
-          document.body.append(link); link.click(); link.remove();
-        } else {
-          holder.replaceChildren(el('img', { class: 'attach-img', src: url, alt: att.filename }));
-        }
-      }).catch(hooks.error);
+      var go = Viewer.show({ mime: a.mime, filename: a.filename, load: function () { return Photos.fetchAttachment(a.id); } });
+      if (!shown) UI.busy(view, 'Loading…', go).catch(hooks.error);
     });
     var actions = [view];
     var row = el('div', { class: 'attach-row' });

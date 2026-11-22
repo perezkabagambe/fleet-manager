@@ -34,18 +34,12 @@
   // ---------- looking at the stored receipt ----------
   /** A "View receipt" button: a photo is shown on the page, a PDF is saved/opened by the phone. */
   function viewer(receipt, onError) {
-    var isImage = /^image\/(jpeg|png|webp)$/.test(receipt.mime);
-    var btn = el('button', { type: 'button', class: 'btn small secondary', text: isImage ? 'View the receipt' : receipt.mime === 'application/pdf' ? 'Open the receipt (PDF)' : 'Download the receipt' });
+    var shown = Viewer.canShow(receipt.mime); // a photo or PDF is shown in the app; anything else is saved to the phone
+    var btn = el('button', { type: 'button', class: 'btn small secondary', text: shown ? 'View the receipt' : 'Download the receipt' });
     var holder = el('div');
     btn.addEventListener('click', function () {
-      UI.busy(btn, 'Loading…', FleetApi.call('getReceiptFile', { id: receipt.id }, { timeoutMs: UPLOAD_TIMEOUT_MS })).then(function (r) {
-        var url = Photos.toBlobUrl(r.data);
-        if (isImage) holder.replaceChildren(el('img', { class: 'attach-img', src: url, alt: 'The receipt' }));
-        else {
-          var link = el('a', { href: url, download: r.data.filename });
-          document.body.append(link); link.click(); link.remove();
-        }
-      }).catch(function (e) { if (onError) onError(e); });
+      var go = Viewer.show({ mime: receipt.mime, filename: receipt.filename, load: function () { return FleetApi.call('getReceiptFile', { id: receipt.id }, { timeoutMs: UPLOAD_TIMEOUT_MS }).then(function (r) { return r.data; }); } });
+      if (!shown) UI.busy(btn, 'Loading…', go).catch(function (e) { if (onError) onError(e); });
     });
     return el('div', { class: 'receipt-view' }, [el('div', { class: 'attach-actions' }, [btn]), holder]);
   }

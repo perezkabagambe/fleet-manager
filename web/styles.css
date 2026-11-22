@@ -782,3 +782,17 @@ details.collapsible:has(.bin-card) { border-style: dashed; background: var(--bg)
 .addr-row code { overflow-wrap: anywhere; font-size: 0.8rem; }
 
 input.suggested-value { color: var(--muted); }
+
+/* a PDF shown in the app */
+.pdfview { position: fixed; inset: 0; z-index: 2000; background: #3b3b3d; display: flex; flex-direction: column; }
+.pdfview-bar { display: flex; align-items: center; gap: 8px; padding: max(8px, env(safe-area-inset-top)) 10px 8px; background: #1f1f21; color: #fff; }
+.pdfview-heading { flex: 1; min-width: 0; }
+.pdfview-title { font-size: 0.9rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pdfview-count { font-size: 0.72rem; opacity: 0.75; }
+.pdfview-btn { flex: none; min-width: 40px; height: 40px; border-radius: 10px; border: 0; background: rgba(255, 255, 255, 0.16); color: #fff; font-size: 1.15rem; line-height: 1; cursor: pointer; padding: 0 10px; }
+.pdfview-save { font-size: 0.8rem; }
+.pdfview-stage { flex: 1; overflow: auto; padding: 8px; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y pinch-zoom; }
+.pdfview-page { margin: 0 auto 10px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); }
+.pdfview-canvas { display: block; }
+.pdfview-note { position: absolute; left: 0; right: 0; top: 45%; text-align: center; color: #fff; padding: 0 24px; display: grid; gap: 12px; justify-items: center; }
+.pdfview-note[hidden] { display: none; }

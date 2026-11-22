@@ -15,6 +15,7 @@ const SHELL = [
   'store.js',
   'api.js',
   'photos.js',
+  'viewer.js',
   'sync.js',
   'pdfkit.js',
   'zipkit.js',

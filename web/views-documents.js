@@ -39,17 +39,11 @@
     function row(d) {
       var isPdf = d.mime === 'application/pdf';
       var holder = el('div');
-      var view = el('button', { type: 'button', class: 'btn small secondary', text: isPdf ? 'Open' : 'View' });
+      var view = el('button', { type: 'button', class: 'btn small secondary', text: Viewer.canShow(d.mime) ? 'View' : 'Download' });
       view.addEventListener('click', function () {
-        UI.busy(view, 'Loading…', FleetApi.call('getCarDocument', { id: d.id }).then(function (r) { return r.data; })).then(function (att) {
-          var url = Photos.toBlobUrl(att);
-          if (isPdf) {
-            var link = el('a', { href: url, download: att.filename });
-            document.body.append(link); link.click(); link.remove();
-          } else {
-            holder.replaceChildren(el('img', { class: 'attach-img', src: url, alt: att.filename }));
-          }
-        }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+        // a photo opens full screen and a PDF in the viewer, both inside the app
+        var go = Viewer.show({ mime: d.mime, filename: d.filename, load: function () { return FleetApi.call('getCarDocument', { id: d.id }).then(function (r) { return r.data; }); } });
+        if (!Viewer.canShow(d.mime)) UI.busy(view, 'Loading…', go).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
       });
       var actions = [view];
       // Edit: rename it, change its type or its note (anyone signed in). Remove stays with admins.
