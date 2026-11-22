@@ -1030,11 +1030,12 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 /* the vehicle details in three groups, each row a label with its value on the right */
 .detail-groups { margin-top: 14px; }
 .detail-group { margin: 0 0 14px; }
-.detail-group-title { margin: 0 0 4px; font-size: 0.74rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.detail-group-title { margin: 0 0 4px; padding-bottom: 6px; font-size: 0.85rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); border-bottom: 2px solid var(--accent); }
 .detail-group dl.details { gap: 0; }
 .detail-group dl.details dt { padding-right: 16px; }
 .detail-group dl.details dt, .detail-group dl.details dd { padding: 7px 0; border-top: 1px solid var(--border); }
 .detail-group dl.details dt:first-of-type, .detail-group dl.details dt:first-of-type + dd { border-top: 0; }
+.detail-group { margin-top: 18px; }
 .detail-group dl.details dd { text-align: right; font-weight: 600; }
 .notes.clamped { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .notes-more { padding: 6px 0; min-height: 0; font-weight: 700; font-size: 0.85rem; }

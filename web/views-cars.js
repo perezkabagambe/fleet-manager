@@ -333,14 +333,14 @@
           detail('Location', car.country === 'UG' ? 'Uganda' : 'United Kingdom'),
           detail('Imported', fmtAcquired(car.importDate))
         )],
-        ['Technical', [].concat(
+        ['Technical details', [].concat(
           detail('Engine code', car.engineCode),
           detail('Transmission', car.transmission),
           detail('Gearbox code', car.gearboxCode),
           detail('Fuel', fuelText),
           detail(car.market ? 'Market' : 'Drive', marketText)
         )],
-        ['Ownership', [].concat(
+        ['Ownership details', [].concat(
           detail('Acquired', fmtAcquired(car.acquisitionDate)),
           detailAlways('Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? '' : money(car.acquisitionCost, car.acquisitionCurrency || car.currency)),
           [el('dt', { text: 'Owner/Custodian' }), el('dd', { class: ownerNames.length ? '' : 'muted', text: ownerNames.length ? ownerNames.join(', ') : 'Not recorded yet' })]
