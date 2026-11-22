@@ -8,7 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const BACKEND = path.join(__dirname, '..', 'backend');
-const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'People.js', 'Photos.js', 'Entries.js', 'Attachments.js', 'CarDocuments.js', 'AiFill.js', 'Receipts.js', 'ReceiptMail.js', 'Guests.js', 'Feedback.js', 'Tasks.js', 'Reminders.js', 'Sync.js', 'Code.js', 'Version.js', 'Setup.js'];
+const SOURCES = ['Util.js', 'Db.js', 'Audit.js', 'Email.js', 'Auth.js', 'Users.js', 'Cars.js', 'People.js', 'Photos.js', 'Entries.js', 'Attachments.js', 'CarDocuments.js', 'CatalogueIcon.js', 'AiFill.js', 'Receipts.js', 'ReceiptMail.js', 'Guests.js', 'Feedback.js', 'Tasks.js', 'Reminders.js', 'Sync.js', 'Code.js', 'Version.js', 'Setup.js'];
 
 function makeSheet(header) {
   const rows = [header.slice()];
@@ -65,7 +65,7 @@ function createEnv() {
   const outbox = [];
   const sleeps = [];
   const files = {};
-  const state = { tokeninfo: null, mailQuota: 100, cacheCalls: 0, gemini: null, geminiRequests: [], gmail: [], gmailLabels: {}, gmailQueries: [] }; // cacheCalls: round trips to the script cache
+  const state = { web: null, webRequests: [], tokeninfo: null, mailQuota: 100, cacheCalls: 0, gemini: null, geminiRequests: [], gmail: [], gmailLabels: {}, gmailQueries: [] }; // cacheCalls: round trips to the script cache
   const folders = {};
   const triggers = [];
   let folderCount = 0;
@@ -198,6 +198,12 @@ function createEnv() {
           const g = state.gemini(sent);
           if (g instanceof Error) throw g;
           return { getResponseCode: () => g.code, getContentText: () => typeof g.body === 'string' ? g.body : JSON.stringify(g.body) };
+        }
+        if (state.web) { // other websites: tests set state.web = (url, opts) => ({ code, body (string or Buffer), headers }) or throw
+          state.webRequests.push({ url, opts });
+          const w = state.web(url, opts);
+          const buf = Buffer.isBuffer(w.body) ? w.body : Buffer.from(String(w.body === undefined ? '' : w.body), 'latin1');
+          return { getResponseCode: () => w.code, getContentText: () => buf.toString('utf8'), getContent: () => Array.from(buf).map((x) => (x > 127 ? x - 256 : x)), getHeaders: () => w.headers || { 'Content-Type': 'text/html' } };
         }
         const r = state.tokeninfo;
         if (!r) throw new Error('no tokeninfo mock');

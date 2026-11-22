@@ -37,6 +37,7 @@ function actions_() {
     setUserRole: { auth: 'admin', lock: true, fn: setUserRole_ },
     updateMyName: { auth: 'user', lock: true, fn: updateMyName_ },
     listCars: { auth: 'user', fn: listCars_ },
+    refreshCatalogueIcon: { auth: 'user', fn: refreshCatalogueIcon_ }, // no script lock: it waits for another website
     getCar: { auth: 'user', fn: getCar_ },
     getCarPage: { auth: 'user', fn: getCarPage_ },
     getChanges: { auth: 'user', fn: getChanges_ },

@@ -43,6 +43,7 @@ function summarizeCar_(c) {
     currency: c.currency || 'GBP',
     distanceUnit: 'mi',
     partsouqUrl: c.partsouq_url,
+    catalogueIcon: c.catalogue_icon || '',
     status: c.status || 'Active',
     odometer: c.current_odometer === '' ? null : Number(c.current_odometer),
     odometerUpdatedAt: c.odometer_updated_at,
@@ -317,6 +318,7 @@ function saveCar_(p, ctx) {
   if (!Object.keys(after).length) return { saved: true, car: summarizeCar_(existing), unchanged: true };
 
   const patch = Object.assign({}, input);
+  if (after.partsouq_url !== undefined) patch.catalogue_icon = ''; // a different website: the old picture no longer applies
   if (after.current_odometer !== undefined) patch.odometer_updated_at = now;
   touch_(existing, ctx, patch);
   Db.update('Cars', existing._row, patch);

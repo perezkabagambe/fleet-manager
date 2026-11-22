@@ -342,6 +342,25 @@
           f.notes ? el('div', { class: 'muted small-text', text: f.notes }) : null,
         ]);
       }
+      // The parts catalogue button, with the website's own icon beside it (fetched by the server when the link was saved)
+      var catalogueBox = el('div', { class: 'catalogue' });
+      function catalogueIconEl(src) { return el('img', { class: 'catalogue-icon', src: src, alt: '', width: '32', height: '32' }); }
+      if (car.partsouqUrl) {
+        if (car.catalogueIcon) catalogueBox.append(catalogueIconEl(car.catalogueIcon));
+        catalogueBox.append(el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) }));
+        // a link saved before icons existed (or when the site did not answer): try once a session, and show it when it arrives
+        var triedKey = 'fm-icon-tried-' + car.id;
+        var tried = false;
+        try { tried = sessionStorage.getItem(triedKey) === '1'; } catch (e) { tried = false; }
+        if (!car.catalogueIcon && !tried) {
+          try { sessionStorage.setItem(triedKey, '1'); } catch (e) { /* ignore */ }
+          FleetApi.call('refreshCatalogueIcon', { carId: car.id }, { timeoutMs: 60000 }).then(function (r) {
+            if (r.data.icon && document.body.contains(catalogueBox) && !catalogueBox.querySelector('.catalogue-icon')) catalogueBox.prepend(catalogueIconEl(r.data.icon));
+          }).catch(function () { /* no icon: the button works without it */ });
+        }
+      } else {
+        catalogueBox.append(el('span', { class: 'muted', text: 'No parts catalogue link yet. Tap Edit car to add one.' }));
+      }
       var fluidRows = fluids.filter(function (f) { return !isBulbRow(f); }).map(function (f) { return specRow(f, f.fluid, 'fluid'); });
       var bulbRows = fluids.filter(isBulbRow).map(function (f) { return specRow(f, f.fluid, 'bulb'); });
 
@@ -375,9 +394,7 @@
         collapsible('Reminders', RemindersUI.card(car, page && page.tasks), page && page.tasks ? reminderHint(page.tasks) : ''),
         collapsible('Fluids & Specs', el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids & Specs' }),
-          el('div', { class: 'catalogue' }, car.partsouqUrl
-            ? [el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) })]
-            : [el('span', { class: 'muted', text: 'No parts catalogue link yet. Tap Edit car to add one.' })]),
+          catalogueBox,
           fluids.some(isAiRow) ? aiCheckNote() : null,
           fluidRows.length ? el('h3', { class: 'spec-group kind-fluid', text: '💧 Fluids' }) : null,
           fluidRows.length ? el('ul', { class: 'fluids' }, fluidRows) : (bulbRows.length ? null : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' })),
@@ -1187,12 +1204,29 @@
         });
       }
 
+      // When a catalogue link is saved (new or changed), the server fetches the website's icon. It is best effort and never holds up
+      // the save for long: after a few seconds the car page is shown and fetches it again if it is still missing.
+      function catalogueIconStep() {
+        var url = f.partsouqUrl.value.trim();
+        if (!state.carId || !url || state.iconFor === url) return Promise.resolve();
+        if (car && car.partsouqUrl === url && car.catalogueIcon) return Promise.resolve();
+        state.iconFor = url;
+        try { sessionStorage.setItem('fm-icon-tried-' + state.carId, '1'); } catch (e) { /* ignore */ }
+        return Promise.race([
+          FleetApi.call('refreshCatalogueIcon', { carId: state.carId }, { timeoutMs: 60000 }).then(function () {}, function () {}),
+          new Promise(function (resolve) { setTimeout(resolve, 7000); }),
+        ]);
+      }
+
       function run() {
         var done = [];
         var step = 'the car details';
         return saveCarStep({}).then(function (res) {
           if (res === 'cancelled') return 'stop';
           if (res === 'saved') done.push('car details');
+          return catalogueIconStep().then(function () { return res; });
+        }).then(function (res) {
+          if (res === 'stop' || res === 'cancelled') return 'stop';
           if (!fluidsEd.dirty()) return null;
           step = 'the fluids, bulbs and specifications';
           return FleetApi.call('saveFluids', { carId: state.carId, fluids: fluidsEd.payload() }).then(function (r) {
