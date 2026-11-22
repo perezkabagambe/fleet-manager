@@ -24,44 +24,26 @@
     var list = el('div', { class: 'history' }, [fmt.loading()]);
     var msg = el('div');
     var body = el('div');
-    var editing = false; // the section's Edit button shows an Edit button on every row
-    var shown = [];
-
     function row(t) {
+      // The same layout as a log row: a picture with its tag beneath, then the name, when it is due, how often it repeats, and the status.
+      // Every line is one line, cut off with "…" if it is too long.
+      var renewal = t.kind === 'compliance';
       var link = el('a', { class: 'entry-row', href: '#/car/' + car.id + '/reminder/' + t.id }, [
+        el('div', { class: 'entry-lead' }, [
+          EntryUI.typeThumb(renewal ? 'Compliance' : 'Maintenance'),
+          el('span', { class: 'chip ' + (renewal ? 't-compliance' : 't-maintenance'), text: renewal ? 'Renewal' : 'Maintenance' }),
+        ]),
         el('div', { class: 'entry-main' }, [
           el('div', { class: 'entry-title', text: t.name }),
-          el('div', { class: 'muted small-text', text: t.active ? t.text : (t.pausedReason || 'Paused') }),
-          t.repeatText ? el('div', { class: 'muted small-text', text: 'Repeats every ' + t.repeatText }) : null,
+          el('div', { class: 'muted small-text entry-ref-line', text: t.active ? t.text : (t.pausedReason || 'Paused') }),
+          t.repeatText ? el('div', { class: 'muted small-text entry-garage-line', text: 'Repeats every ' + t.repeatText }) : null,
+          el('div', { class: 'entry-foot' }, [el('div', { class: 'entry-foot-tags' }, [statusChip(t.status)])]),
         ]),
-        el('div', { class: 'entry-tags' }, [statusChip(t.status), t.kind === 'compliance' ? el('span', { class: 'chip t-compliance', text: 'Renewal' }) : null]),
       ]);
-      // In edit mode each reminder gets an Edit button with a Delete button beneath it (deleting is for admins).
-      var actions = null;
-      if (editing) {
-        var buttons = [el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/reminder/' + t.id, text: 'Edit', 'aria-label': 'Edit ' + t.name })];
-        if (FleetAuth.isAdmin()) {
-          var del = el('button', { type: 'button', class: 'btn small danger', text: 'Delete', 'aria-label': 'Delete ' + t.name });
-          del.addEventListener('click', function () {
-            UI.confirm('Delete the reminder "' + t.name + '"? It stops reminding anyone. Entries already logged against it are kept.', { okLabel: 'Delete', danger: true }).then(function (yes) {
-              if (!yes) return;
-              msg.replaceChildren();
-              UI.busy(del, 'Deleting…', FleetApi.call('deleteTask', { id: t.id })).then(function () {
-                Views.invalidateCars();
-                msg.replaceChildren(UI.notice('ok', 'Reminder deleted.'));
-                return load();
-              }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
-            });
-          });
-          buttons.push(del);
-        }
-        actions = el('div', { class: 'row-actions' }, buttons);
-      }
-      return el('div', { class: 'entry-line' }, [link, actions]);
+      return el('div', { class: 'entry-line' }, [link]);
     }
 
     function draw(tasks) {
-      shown = tasks;
       list.replaceChildren.apply(list, tasks.length ? tasks.map(row)
         : [el('p', { class: 'muted', text: 'No reminders yet. Add the standard set to start, or add your own.' })]);
     }
@@ -89,14 +71,13 @@
     });
 
     body.append(
-      el('div', { class: 'btn-row' }, [el('a', { class: 'btn small', href: '#/car/' + car.id + '/reminder/new', text: 'Add reminder' }), stdBtn, mailBtn]),
+      el('a', { class: 'btn block', href: '#/car/' + car.id + '/reminder/new', text: 'Add reminder' }),
+      el('div', { class: 'reminder-tools' }, [stdBtn, mailBtn]),
       msg, list
     );
     if (preloaded) draw(preloaded); else load();
-    var editBtn = UI.editToggle(function (on) { editing = on; draw(shown); });
     return el('section', { class: 'card' }, [
       el('h2', { text: 'Reminders' }),
-      el('div', { class: 'section-tools' }, [editBtn]),
       el('p', { class: 'muted small-text', text: 'Emailed to the car\'s owners/custodians every Monday while something is due.' }),
       body,
     ]);
@@ -203,7 +184,7 @@
 
       var deleteBtn = null;
       if (task && FleetAuth.isAdmin()) {
-        deleteBtn = el('button', { type: 'button', class: 'btn small danger', text: 'Delete reminder' });
+        deleteBtn = el('button', { type: 'button', class: 'btn block danger-outline', text: 'Delete reminder' });
         deleteBtn.addEventListener('click', function () {
           UI.confirm('Delete the reminder "' + task.name + '"? Past entries are not affected.', { okLabel: 'Delete', danger: true }).then(function (yes) {
             if (!yes) return;
@@ -219,7 +200,7 @@
         el('h1', { text: task ? 'Edit reminder' : 'Add a reminder' }),
         task ? el('p', { class: 'muted', text: task.text }) : el('p', { class: 'muted', text: car.registration + ' · ' + car.make + ' ' + car.model }),
         msg, form,
-        deleteBtn ? el('div', { class: 'btn-row' }, [deleteBtn]) : null,
+        deleteBtn ? el('div', { class: 'entry-actions' }, [deleteBtn]) : null,
       ]));
     }
   };

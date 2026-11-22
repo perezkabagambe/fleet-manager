@@ -869,3 +869,7 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 
 .tip-card { border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 12px; padding: 12px 14px; margin: 6px 0 4px; }
 .tip-card p { margin: 4px 0 10px; }
+
+/* reminders: the buttons, and rows that follow the log's layout */
+.reminder-tools { display: flex; gap: 8px; margin: 8px 0 12px; }
+.reminder-tools .btn { flex: 1 1 0; text-align: center; justify-content: center; }

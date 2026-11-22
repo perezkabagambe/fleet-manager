@@ -56,6 +56,7 @@
   function refTiny(ref) { return el('span', { class: 'ref-tiny', text: ref }); }
   window.EntryUI = window.EntryUI || {};
   window.EntryUI.refTiny = refTiny;
+  window.EntryUI.typeThumb = typeThumb; // reminders use the same pictures as the log
   // `short`: the plain type name (Purchase, not Purchased item), for the narrow space under a log thumbnail
   function typeChip(type, short) { return el('span', { class: 'chip t-' + type.toLowerCase(), text: short ? type : BY_TYPE[type].label }); }
   function num0(s) {
