@@ -972,3 +972,6 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .select-msg { margin: 0 0 6px; color: var(--muted); }
 .select-msg[hidden] { display: none; }
 body.selecting #app { padding-bottom: 110px; }
+
+/* log rows: the ID sits a little lower, clear of the share icon */
+.entry-line .share-stack .ref-tiny { margin-top: 3px; }
