@@ -277,22 +277,43 @@
    * An attachment for an entry. A photo is shrunk to a JPEG (with a small thumbnail). A PDF, or any other file
    * (a Word or Excel file, a text file, a zip...), is sent as it is, up to 5 MB.
    */
+  // Some phones (a file opened from Google Drive, for instance) give a PDF no type and no ".pdf" in its name,
+  // so the first bytes of the file decide: a PDF always starts with "%PDF".
+  function looksLikePdf(file) {
+    return new Promise(function (resolve) {
+      try {
+        var reader = new FileReader();
+        reader.onload = function () {
+          var a = new Uint8Array(reader.result);
+          resolve(a.length >= 4 && a[0] === 0x25 && a[1] === 0x50 && a[2] === 0x44 && a[3] === 0x46);
+        };
+        reader.onerror = function () { resolve(false); };
+        reader.readAsArrayBuffer(file.slice(0, 8));
+      } catch (e) { resolve(false); }
+    });
+  }
+
   function prepareAttachment(file) {
     var name = file.name || '';
-    var isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(name);
-    function asFile() {
-      if (!file.size) return Promise.reject(new FleetApi.ApiError('invalid_attachment', 'Empty file'));
-      if (file.size > MAX_FILE_BYTES) return Promise.reject(new FleetApi.ApiError('attachment_too_large', 'File too large'));
-      return toBase64(file).then(function (b64) {
-        return { mime: isPdf ? 'application/pdf' : 'application/octet-stream', data: b64, filename: name || (isPdf ? 'document.pdf' : 'file') };
-      });
-    }
-    if (!isPdf && /^image\//.test(file.type || '')) {
-      return prepare(file).then(function (p) {
-        return { mime: 'image/jpeg', data: p.full, thumb: p.thumb, filename: name || 'photo.jpg' };
-      }).catch(function () { return asFile(); }); // a picture this browser cannot read is kept as it is
-    }
-    return asFile();
+    var named = file.type === 'application/pdf' || /\.pdf$/i.test(name);
+    var known = named ? Promise.resolve(true) : (/^image\//.test(file.type || '') ? Promise.resolve(false) : looksLikePdf(file));
+    return known.then(function (isPdf) {
+      function asFile() {
+        if (!file.size) return Promise.reject(new FleetApi.ApiError('invalid_attachment', 'Empty file'));
+        if (file.size > MAX_FILE_BYTES) return Promise.reject(new FleetApi.ApiError('attachment_too_large', 'File too large'));
+        return toBase64(file).then(function (b64) {
+          var filename = name || (isPdf ? 'document.pdf' : 'file');
+          if (isPdf && !/\.pdf$/i.test(filename)) filename += '.pdf';
+          return { mime: isPdf ? 'application/pdf' : 'application/octet-stream', data: b64, filename: filename };
+        });
+      }
+      if (!isPdf && /^image\//.test(file.type || '')) {
+        return prepare(file).then(function (p) {
+          return { mime: 'image/jpeg', data: p.full, thumb: p.thumb, filename: name || 'photo.jpg' };
+        }).catch(function () { return asFile(); }); // a picture this browser cannot read is kept as it is
+      }
+      return asFile();
+    });
   }
 
   /** Download an attachment and show it: photos appear inline, everything else is saved/opened as a file. */
