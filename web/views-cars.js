@@ -4,6 +4,27 @@
 
   var el = UI.el;
 
+  /**
+   * A box whose text shrinks as it fills, so a long registration or VIN stays fully visible instead of scrolling sideways.
+   * It never shrinks below `minPx`. Set through the style property (the page's security policy blocks inline style attributes).
+   */
+  function shrinkToFit(input, minPx) {
+    var base = 0;
+    function fit() {
+      if (!input.isConnected || !input.clientWidth) return; // not on screen yet
+      if (!base) base = parseFloat(window.getComputedStyle(input).fontSize) || 16;
+      var size = base;
+      input.style.fontSize = size + 'px';
+      while (input.scrollWidth > input.clientWidth && size > minPx) { size -= 0.5; input.style.fontSize = size + 'px'; }
+    }
+    input.addEventListener('input', fit);
+    window.addEventListener('resize', fit);
+    setTimeout(fit, 0);
+    setTimeout(fit, 400); // once the page has settled (fonts loaded, boxes sized)
+    input._fit = fit; // for when the text is filled in by the program (for instance from the log book)
+    return input;
+  }
+
   /** Which of the three ways of asking answered: 1 the latest model with search, 2 an older model with search, 3 the latest model without search. */
   function methodText(m) {
     var what = m.step === 1 ? 'the latest model, with Google Search' : m.step === 2 ? 'an older model, with Google Search' : 'the latest model, without web search (search was not available)';
@@ -753,8 +774,8 @@
       // Vehicle details are three plain groups with simple headings (nothing collapses): key details, technical details, notes.
       var keyFields = [
         pair(
-          UI.field('Registration *', text('registration', v.registration, { maxlength: '20', autocapitalize: 'characters', required: true })),
-          UI.field('VIN / chassis', text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 'The 17-character VIN, or chassis number.'),
+          UI.field('Registration *', shrinkToFit(text('registration', v.registration, { maxlength: '20', autocapitalize: 'characters', required: true }), 10)),
+          UI.field('VIN / chassis', shrinkToFit(text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 10), 'The 17-character VIN, or chassis number.'),
           'wide-second' // a VIN is long, a registration is short
         ),
         pair(

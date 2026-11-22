@@ -1020,4 +1020,4 @@ details.collapsible > summary .collapse-action + .collapse-hint, details.collaps
 .catalogue-icon { width: 32px; height: 32px; flex: none; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--border); padding: 3px; }
 
 /* the VIN box is sized so a whole VIN (18 characters) shows without scrolling, next to the registration */
-input[name="vin"] { font-size: 0.85rem; letter-spacing: -0.01em; padding-left: 8px; padding-right: 8px; }
+input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8px; } /* the text also shrinks as the box fills (see shrinkToFit in views-cars.js) */
