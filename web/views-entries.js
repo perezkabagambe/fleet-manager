@@ -1018,7 +1018,7 @@
             .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
         });
         var rDrop = el('button', { type: 'button', class: 'btn small secondary', text: 'Don\'t add' });
-        rDrop.addEventListener('click', function () { skipReceipt = true; receiptRow.remove(); receiptRow = null; drawStaged(); });
+        rDrop.addEventListener('click', function () { skipReceipt = true; receiptRow.remove(); receiptRow = null; countAttached(-1); });
         receiptRow = el('div', { class: 'attach-row staged' }, [
           el('div', { class: 'attach-name', text: fileIcon(draft.mime) + (draft.filename || 'receipt') }),
           el('div', { class: 'attach-actions' }, [rView, rDrop]),
@@ -1030,7 +1030,7 @@
           rm.addEventListener('click', function () { staged.splice(i, 1); drawStaged(); });
           return el('div', { class: 'attach-row staged' }, [el('div', { class: 'attach-name', text: fileIcon(/^image\//.test(s.type || '') ? 'image/jpeg' : s.type === 'application/pdf' ? 'application/pdf' : '') + s.name }), rm]);
         }));
-        if (stagedBox.parentNode) stagedBox.parentNode.hidden = !staged.length && !(receiptRow && receiptRow.parentNode);
+        if (stagedBox.parentNode) stagedBox.parentNode.hidden = !staged.length;
       }
       function stage(file) { staged.push({ file: file, name: file.name || 'photo', type: file.type }); drawStaged(); }
       var attachList = el('div', { class: 'stack' });
@@ -1045,11 +1045,20 @@
           existingHead.textContent = 'Attached files' + (existingCount ? ' (' + existingCount + ')' : '');
         },
       };
+      // the receipt being turned into this entry counts as an attached file (it is attached when the entry is saved)
+      var shownCount = existingCount + (receiptRow ? 1 : 0);
+      function countAttached(change) {
+        shownCount += change;
+        existingHead.textContent = 'Attached files' + (shownCount ? ' (' + shownCount + ')' : '');
+        if (!shownCount && !attachList.querySelector('.attach-empty')) attachList.append(el('p', { class: 'muted attach-empty', text: 'Nothing attached yet.' }));
+      }
       if (existingCount) existingData.attachments.forEach(function (a) { attachList.append(attachmentRow(a, formHooks)); });
-      else attachList.append(el('p', { class: 'muted', text: 'Nothing attached yet.' }));
+      if (receiptRow) attachList.append(receiptRow);
+      if (!shownCount) attachList.append(el('p', { class: 'muted attach-empty', text: 'Nothing attached yet.' }));
+      existingHead.textContent = 'Attached files' + (shownCount ? ' (' + shownCount + ')' : '');
       var stagedHead = el('div', { class: 'attach-title', text: 'Ready to add when you save' });
       var addBlock = addPanel(stage, 'Receipts, invoices, quotes, photos of the problem or any other file. Photos are shrunk automatically; other files can be up to 5 MB.');
-      addBlock.append(el('div', { class: 'attach-staged', hidden: !receiptRow }, [stagedHead, receiptRow, stagedBox]));
+      addBlock.append(el('div', { class: 'attach-staged', hidden: true }, [stagedHead, stagedBox]));
       var attachSection = el('div', { class: 'field attach-section' }, [
         el('div', { class: 'field-label', text: 'Photos and documents' }),
         el('div', { class: 'attach-existing' }, [existingHead, attachList]),
