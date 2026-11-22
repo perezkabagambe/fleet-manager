@@ -367,6 +367,7 @@
   };
 
   /** Shrink the text of each matching element until it fits on one line (never below 9px). Runs again if the window is resized. */
+  Views.fitOneLine = fitOneLine;
   function fitOneLine(scope, selector) {
     function fit() {
       Array.prototype.forEach.call(scope.querySelectorAll(selector), function (node) {

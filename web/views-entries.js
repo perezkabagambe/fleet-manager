@@ -479,7 +479,7 @@
           el('h2', { text: 'Details' }),
           issueRows.length ? el('dl', { class: 'details' }, issueRows) : null,
           d.fixedBy && d.fixedBy.length
-            ? el('div', {}, [el('div', { class: 'field-label', text: 'Maintenance for this issue' })].concat(d.fixedBy.map(function (r) {
+            ? el('div', {}, [el('div', { class: 'field-label one-line', text: 'Maintenance tasks related to this issue' })].concat(d.fixedBy.map(function (r) {
               return el('div', {}, [el('a', { href: '#/car/' + carId + '/entry/' + r.id, text: r.title + ' · ' + dateText(r.date) })]);
             })))
             : el('p', { class: 'muted', text: 'No maintenance linked to this issue yet.' }),
@@ -553,6 +553,7 @@
         deleteBtn,
       ]));
       root.replaceChildren.apply(root, cards);
+      if (Views.fitOneLine) Views.fitOneLine(root, '.one-line'); // a label that must stay on one line is made just small enough to fit
     }
   };
 

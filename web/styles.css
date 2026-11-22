@@ -854,3 +854,5 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 
 /* signed in: the small print (version, Privacy, Terms) is at the bottom of the Me page only */
 .has-tabs:not(.on-me-page) .footer { display: none; }
+
+.one-line { white-space: nowrap; overflow: hidden; }
