@@ -634,7 +634,7 @@
         pair(
           UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.'),
           acquisitionCostField(),
-          'wide-second' // the amount needs more room than the date
+          'aligned' // equal columns, both labels two lines tall, so the two boxes line up
         ),
       ];
       var techFields = [
@@ -661,7 +661,8 @@
       var notes = el('textarea', { name: 'notes', rows: '4', maxlength: '2000' });
       notes.value = v.notes || '';
       f.notes = notes;
-      var notesField = UI.field('Notes', notes);
+      notes.setAttribute('aria-label', 'Notes');
+      var notesField = el('div', { class: 'field' }, [notes]); // the section heading says what it is: no label above the box
 
       // ---- "Fill in the rest with AI" (a new car only): appears under the registration and VIN ----
       function aiAssist() {

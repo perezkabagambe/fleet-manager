@@ -861,3 +861,7 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .form-groups { margin-bottom: 8px; }
 .form-groups .form-heading { font-size: 1.05rem; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
 .form-groups .form-heading:first-child { margin-top: 4px; }
+
+/* two fields side by side whose labels may wrap: both labels are two lines tall, so the boxes line up */
+.field-pair.aligned > .field > label { display: block; line-height: 1.3; }
+@media (max-width: 359px) { .field-pair.aligned > .field > label { min-height: 2.7em; } } /* a narrow screen may wrap the labels: keep both two lines tall */
