@@ -467,3 +467,16 @@ test('if the invitation email cannot be sent the admin is told', () => {
   env.state.mailQuota = 0;
   assert.equal(env.call('inviteUser', { token: tok, name: 'Q', email: 'q@example.com' }).error, 'invite_email_failed');
 });
+
+test('the sign-in email says the link signs you in straight away, and explains when to use the code', () => {
+  const env = createEnv();
+  env.seedUser({ name: 'Sam', email: 'sam@example.com', role: 'user' });
+  env.call('requestLogin', { email: 'sam@example.com' });
+  const l = env.lastLoginMail('sam@example.com');
+  assert.match(l.mail.body, /signed in straight away/);
+  assert.match(l.mail.body, /iPhone with Fleet Manager on your home screen\? The link opens in Safari, not in the app/);
+  assert.match(l.mail.htmlBody, /Sign in to Fleet Manager/);
+  assert.match(l.mail.htmlBody, /signed in straight away/);
+  assert.equal(/Tap the button to sign in/.test(l.mail.body + l.mail.htmlBody), false);
+  assert.match(l.mail.htmlBody, new RegExp('>' + l.code + '<'));
+});

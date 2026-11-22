@@ -38,13 +38,14 @@ function button_(url, label) {
 function sendLoginEmail_(user, link, code) {
   const html = layout_('Your sign-in link',
     '<p>Hi ' + esc_(user.name) + ',</p>' +
-    '<p>Tap the button to sign in. The link works once and expires in ' + LOGIN_MINUTES + ' minutes.</p>' +
-    button_(link, 'Sign in') +
-    '<p>Using the installed app on an iPhone? Open the app and enter this code instead:</p>' +
+    '<p>Tap the button below and you\'ll be signed in straight away. The link works once and expires in ' + LOGIN_MINUTES + ' minutes.</p>' +
+    button_(link, 'Sign in to Fleet Manager') +
+    '<p><strong>On an iPhone with Fleet Manager on your home screen?</strong> The link opens in Safari, not in the app. To sign in on the app instead, open it and enter this code:</p>' +
     '<p style="font-size:28px;letter-spacing:6px;font-weight:700;margin:8px 0">' + esc_(code) + '</p>' +
     '<p style="color:#5d6b79">If you didn\'t ask to sign in, you can ignore this email.</p>');
-  const text = 'Hi ' + user.name + ',\n\nSign in (single use, expires in ' + LOGIN_MINUTES + ' minutes):\n' + link +
-    '\n\nOr enter this code in the app: ' + code + '\n\nIf you didn\'t ask to sign in, ignore this email.';
+  const text = 'Hi ' + user.name + ',\n\nTap this link and you\'ll be signed in straight away (it works once and expires in ' + LOGIN_MINUTES + ' minutes):\n' + link +
+    '\n\nOn an iPhone with Fleet Manager on your home screen? The link opens in Safari, not in the app. To sign in on the app instead, open it and enter this code in the app: ' + code +
+    '\n\nIf you didn\'t ask to sign in, you can ignore this email.';
   return sendMail_(user.email, 'Your Fleet Manager sign-in link', html, text);
 }
 
