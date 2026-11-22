@@ -219,3 +219,16 @@ test('a PDF receipt works the same way', () => {
   assert.equal(read(up.id).data.receipt.status, 'Pending');
   assert.equal(env.state.geminiRequests[0].body.contents[0].parts[1].inline_data.mime_type, 'application/pdf');
 });
+
+test('the receipt status says how many reads the person has left today (the smaller of theirs and the app\'s)', () => {
+  const { env, sam, add, read } = setup();
+  env.state.gemini = () => answer(PARTS);
+  assert.deepEqual(env.call('getReceiptStatus', { token: sam }).data, { available: true, limit: 30, remaining: 30 });
+  read(add().data.receipt.id);
+  assert.equal(env.call('getReceiptStatus', { token: sam }).data.remaining, 29);
+  env.props.RECEIPT_USER_DAILY = '2';
+  assert.deepEqual(env.call('getReceiptStatus', { token: sam }).data, { available: true, limit: 2, remaining: 1 });
+  env.props.RECEIPT_APP_DAILY = '1'; // the app has used its one
+  assert.equal(env.call('getReceiptStatus', { token: sam }).data.remaining, 0);
+  assert.equal(env.call('getReceiptStatus', {}).error, 'unauthorized');
+});

@@ -475,6 +475,10 @@ function dismissReceipt_(p, ctx) {
   return { done: true };
 }
 
+/** Is receipt reading switched on, and how many reads has this person left today (the smaller of theirs and the app's)? */
 function getReceiptStatus_(p, ctx) {
-  return { available: !!geminiKey_() };
+  const limit = receiptLimit_('RECEIPT_USER_DAILY', RECEIPT_USER_DAILY);
+  const mine = limit - aiUsed_('rc_u_' + ctx.user.id);
+  const app = receiptLimit_('RECEIPT_APP_DAILY', RECEIPT_APP_DAILY) - aiUsed_('rc_app');
+  return { available: !!geminiKey_(), limit: limit, remaining: Math.max(0, Math.min(mine, app)) };
 }
