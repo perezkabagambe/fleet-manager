@@ -12,7 +12,7 @@
   // A permanent reminder wherever AI-filled specifications are shown (it stays after the car is saved).
   var AI_CHECK_NOTE = 'Some entries below may have been AI generated. Please check before use, e.g if it says ACEA C3 5W-30 engine oil below, but Euro Car Parts suggests ACEA A3/B3 5W-20, do some further research and update these entries accordingly.';
   function isAiRow(f) { return /^AI suggestion/.test((f && f.source) || ''); }
-  function aiCheckNote() { return el('p', { class: 'ai-check-note', text: AI_CHECK_NOTE }); }
+  function aiCheckNote() { return el('p', { class: 'section-note', text: AI_CHECK_NOTE }); }
   var MARKETS = ['European', 'UK', 'Japanese (JDM)', 'North American', 'Middle East (GCC)', 'Australian', 'African', 'Asian', 'Other'];
   var Views = (window.Views = window.Views || {});
   var cfg = window.FLEET_CONFIG;
@@ -383,14 +383,14 @@
         collapsible('Guest access', GuestUI.card(car), car.guestEnabled ? 'On' : 'Off'),
         collapsible('QR label', el('section', { class: 'card' }, [
           el('h2', { text: 'QR label' }),
-          el('p', { class: 'muted', text: 'Stick this on the windscreen or glovebox. Scanning it opens this car: signed-in people go straight to it, and anyone else can open it as a guest or sign in (unless guest access is switched off in the Guest access section).' }),
+          el('p', { class: 'section-note', text: 'Stick this on the windscreen or glovebox. Scanning it opens this car: signed-in people go straight to it, and anyone else can open it as a guest or sign in (unless guest access is switched off in the Guest access section).' }),
           el('img', { class: 'qr', src: qrDataUrl(qrLink(car)), alt: 'QR code for ' + car.registration, width: '140', height: '140' }),
           el('p', {}, [el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/label', text: 'Print label' })]),
         ])),
         FleetAuth.isAdmin() ? collapsible('Recycle bin', EntryUI.binCard(car)) : null, // the last section, for admins only
         el('div', { class: 'export-row' }, [
           exportBtn,
-          el('p', { class: 'muted small-text', text: 'Downloads one zip: a PDF of everything on this page, plus a folder for every photo, file and document, named by its unique ID.' }),
+          el('p', { class: 'section-note', text: 'Downloads one zip: a PDF of everything on this page, plus a folder for every photo, file and document, named by its unique ID.' }),
         ]),
         el('p', { class: 'muted small-text center', text: 'Car details last changed ' + fmtDate(car.updatedAt) }),
       );
@@ -751,7 +751,7 @@
           kids.push(UI.notice(parts.length ? 'ok' : 'error', parts.length
             ? 'AI filled in ' + parts.join(' and ') + ' (' + d.confidence + ' confidence). ' + (d.summary || '')
             : 'AI had nothing new to add. ' + (d.summary || '')));
-          kids.push(el('p', { class: 'ai-warning', text: AI_CHECK_NOTE }));
+          kids.push(el('p', { class: 'section-note', text: AI_CHECK_NOTE }));
           if (d.method) kids.push(el('div', { class: 'small-text muted ai-method', text: methodText(d.method) }));
           if (d.sources && d.sources.length) {
             kids.push(el('div', { class: 'small-text muted' }, [el('span', { text: 'Sources: ' })].concat(d.sources.map(function (s, i) {
@@ -1167,7 +1167,7 @@
         });
         deleteBox = el('div', { class: 'form-section delete-zone' }, [
           el('h2', { text: 'Delete this car' }),
-          el('p', { class: 'muted small-text', text: 'Removes it from the fleet. Only admins can do this, and you can restore it later from the fleet page.' }),
+          el('p', { class: 'section-note', text: 'Removes it from the fleet. Only admins can do this, and you can restore it later from the fleet page.' }),
           deleteBtn,
         ]);
       }
@@ -1194,7 +1194,7 @@
         el('section', { class: 'card no-print' }, [
           backLink('#/car/' + car.id, car.registration),
           el('h1', { text: 'QR label' }),
-          el('p', { class: 'muted', text: 'Print this and stick it on the car. Scanning it opens the car: signed-in people go straight to it, and anyone else can open it as a guest or sign in (unless guest access is switched off for this car).' }),
+          el('p', { class: 'section-note', text: 'Print this and stick it on the car. Scanning it opens the car: signed-in people go straight to it, and anyone else can open it as a guest or sign in (unless guest access is switched off for this car).' }),
           printBtn,
         ]),
         el('div', { class: 'label-wrap' }, [

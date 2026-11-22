@@ -46,7 +46,7 @@
       body.replaceChildren(
         el('a', { class: 'back', href: self ? '#/profile' : '#/admin/users', text: '← ' + (self ? 'Profile' : 'Users') }),
         el('h1', { text: self ? 'My cars' : 'Cars for ' + r.data.user.name }),
-        el('p', { class: 'muted', text: 'Tick the cars ' + (self ? 'you own or look after' : 'they own or look after') + '. Leave a car unticked if it is not ' + (self ? 'yours' : 'theirs') + '.' }),
+        el('p', { class: 'section-note', text: 'Tick the cars ' + (self ? 'you own or look after' : 'they own or look after') + '. Leave a car unticked if it is not ' + (self ? 'yours' : 'theirs') + '.' }),
         rows.length ? el('div', { class: 'stack' }, rows.map(function (x) { return x.node; })) : el('p', { class: 'muted', text: 'There are no cars in the fleet yet.' }),
         rows.length ? saveBtn : null,
         // Not in the list yet? Add it here. It will be ticked as yours automatically.

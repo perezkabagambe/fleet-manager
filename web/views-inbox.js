@@ -56,7 +56,7 @@
       ? 'The items read from the receipt add up to ' + fmt().money(Math.round(sum * 100) / 100, receipt.currency || 'GBP') + ', but its total reads ' + fmt().money(receipt.total, receipt.currency || 'GBP') + '. Something may have been missed or misread (for example VAT or a discount).' : '';
     var seen = el('div', { class: 'receipt-banner' }, [
       el('div', { class: 'attach-title', text: 'Checking a receipt' }),
-      el('p', { class: 'muted small-text', text: 'The boxes below were filled in from it by the AI. Check them against the receipt and correct anything that is wrong. When you save, the receipt is attached to the entry.' }),
+      el('p', { class: 'section-note', text: 'The boxes below were filled in from it by the AI. Check them against the receipt and correct anything that is wrong. When you save, the receipt is attached to the entry.' }),
       mismatch ? UI.notice('warn', mismatch) : null,
       receipt.duplicateOf ? UI.notice('warn', 'This looks like the same order as another receipt in the Inbox. Check it has not been added already.') : null,
       viewer(receipt, function (e) { box.replaceChildren(UI.notice('error', UI.errorText(e))); }),
@@ -73,7 +73,7 @@
     var fileBox = el('div');
     root.replaceChildren(el('section', { class: 'card' }, [
       el('div', { class: 'page-head' }, [el('h1', { text: 'Receipt Inbox' })]),
-      el('p', { class: 'muted', text: 'Receipts waiting to be checked. Nothing is added to a vehicle\'s log until someone has looked at it and saved it.' }),
+      el('p', { class: 'section-note', text: 'Receipts waiting to be checked. Nothing is added to a vehicle\'s log until someone has looked at it and saved it.' }),
       msg, fileBox, listBox, recentBox,
     ]));
 
@@ -296,7 +296,7 @@
         r.status === 'New' ? null : table,
         r.status === 'New' ? null : el('p', { class: 'muted small-text', text: itemsNote }),
         r.status === 'New' ? null : raw,
-        d.kind || r.status === 'Pending' ? el('p', { class: 'muted small-text', text: 'The AI can get things wrong. You will check every box on the next screen before anything is saved.' }) : null,
+        d.kind || r.status === 'Pending' ? el('p', { class: 'section-note', text: 'The AI can get things wrong. You will check every box on the next screen before anything is saved.' }) : null,
         done,
         open ? el('div', { class: 'stack' }, [
           el('div', { class: 'field' }, [el('label', { text: 'Which vehicle is it for?' }), carSelect]),

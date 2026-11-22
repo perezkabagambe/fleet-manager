@@ -353,7 +353,7 @@
     }
 
     function draw() {
-      var note = el('p', { class: 'muted', text: explain() });
+      var note = el('p', { class: 'section-note', text: explain() });
       var kids = [note];
       if (isAdmin) {
         var toggle = el('button', { type: 'button', class: 'btn small' + (state.enabled ? ' danger' : ''), text: state.enabled ? 'Switch off guest access' : 'Switch on guest access' });

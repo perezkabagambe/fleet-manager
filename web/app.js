@@ -576,7 +576,7 @@
     load();
     return el('section', { class: 'card' }, [
       el('h2', { text: 'Receipts' }),
-      el('p', { class: 'muted small-text', text: 'Is everything behind emailed and photographed receipts working? This refreshes every 30 seconds.' }),
+      el('p', { class: 'section-note', text: 'Is everything behind emailed and photographed receipts working? This refreshes every 30 seconds.' }),
       msg, list,
       el('div', { class: 'btn-row' }, [now, inspect, models, reset, refresh]),
       report,

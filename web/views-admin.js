@@ -26,7 +26,7 @@
       var note = el('div');
       var send = el('button', { type: 'submit', class: 'btn', text: 'Send invitation' });
       var form = el('form', { class: 'stack', novalidate: true }, [
-        el('p', { class: 'muted small-text', text: 'We will email them a link. When they tap it they are signed in straight away, with no password or code.' }),
+        el('p', { class: 'section-note', text: 'We will email them a link. When they tap it they are signed in straight away, with no password or code.' }),
         UI.field('Name', name),
         UI.field('Email address', email),
         note, send,

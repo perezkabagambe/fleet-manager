@@ -190,7 +190,7 @@
     }
     var card = el('section', { class: 'card bin-card' }, [
       el('h2', { text: '🗑 Recycle bin' }),
-      el('p', { class: 'muted small-text', text: 'Entries deleted from the log wait here for 30 days. Restore one to put it back in the log; after 30 days it can no longer be restored.' }),
+      el('p', { class: 'section-note', text: 'Entries deleted from the log wait here for 30 days. Restore one to put it back in the log; after 30 days it can no longer be restored.' }),
       notes, body,
     ]);
     card.onOpen = function () { if (!loaded) { loaded = true; load(); } }; // loaded when the card is first opened
@@ -288,7 +288,7 @@
     }
 
     // A short note under the button: where receipts and invoices can be emailed (filled in once the address is known)
-    var receiptHint = el('p', { class: 'receipt-hint', hidden: true });
+    var receiptHint = el('p', { class: 'receipt-hint section-note', hidden: true });
     receiptEmailFor(car).then(function (address) {
       if (!address) return;
       receiptHint.replaceChildren(
