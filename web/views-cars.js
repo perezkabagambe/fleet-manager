@@ -125,7 +125,28 @@
     var grid = el('div', { class: 'car-list' });
     var deletedBox = el('div');
     FleetApp.setBanner({ title: 'Fleet', icon: 'car', action: { href: '#/car/new', label: 'Add a car', icon: 'plus' } });
-    root.replaceChildren(el('section', { class: 'card fleet-card' }, [msg, grid, deletedBox]));
+
+    // Shown once, in the installed Android app: how to make Fleet Manager links open straight in the app (a phone setting
+    // that an app cannot switch on for itself, and that a downloaded app starts with switched off).
+    function linksTip() {
+      var android = /Android/i.test(navigator.userAgent || '');
+      var installed = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+      var seen = false;
+      try { seen = localStorage.getItem('fm-links-tip') === '1'; } catch (e) { seen = false; }
+      if (!android || !installed || seen) return null;
+      var done = el('button', { type: 'button', class: 'btn small', text: 'Got it' });
+      var box = el('div', { class: 'tip-card', role: 'note' }, [
+        el('strong', { text: 'Open Fleet Manager links in this app' }),
+        el('p', { class: 'small-text', text: 'So that links to a car, or the sign-in link in your email, open straight here and not in your browser: go to Settings → Apps → Fleet Manager → Open by default, and turn on Open supported links.' }),
+        done,
+      ]);
+      done.addEventListener('click', function () {
+        try { localStorage.setItem('fm-links-tip', '1'); } catch (e) { /* ignore */ }
+        box.remove();
+      });
+      return box;
+    }
+    root.replaceChildren(el('section', { class: 'card fleet-card' }, [linksTip(), msg, grid, deletedBox]));
 
     function card(c, mine) {
       // a row: the photo on the left, the plate and model in the middle, the mileage and an arrow on the right

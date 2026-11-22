@@ -865,3 +865,6 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 /* two fields side by side whose labels may wrap: both labels are two lines tall, so the boxes line up */
 .field-pair.aligned > .field > label { display: block; line-height: 1.3; }
 @media (max-width: 359px) { .field-pair.aligned > .field > label { min-height: 2.7em; } } /* a narrow screen may wrap the labels: keep both two lines tall */
+
+.tip-card { border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 12px; padding: 12px 14px; margin: 6px 0 4px; }
+.tip-card p { margin: 4px 0 10px; }
