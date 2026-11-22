@@ -156,7 +156,7 @@ function aiFillPrompt_(known) {
     aiDetailsJson_(),
     '  },',
     '  "fluids": [  // only from these names: ' + AI_FLUID_NAMES.join(', '),
-    '    { "fluid": "Engine oil", "specification": "see the rule below", "capacity": "e.g. 6.7 L", "notes": "" }',
+    '    { "fluid": "Engine oil", "specification": "see the rule below", "capacity": "see the rule below", "notes": "" }',
     '  ],',
     '  "bulbs": [   // only from these locations: ' + AI_BULB_NAMES.join(', '),
     '    { "location": "Dipped beam", "type": "bulb type then the specific bulb, e.g. Halogen H7 55 W", "quantity": "e.g. 2", "notes": "" }',
@@ -172,7 +172,12 @@ function aiFillPrompt_(known) {
     'Coolant: say the technology type (one of IAT, OAT, HOAT, P-OAT, Si-OAT, or the nearest match), whether it is long life (and roughly how many years or km), the typical colour (e.g. pink, blue, green, violet, orange, yellow), ' +
     'the manufacturer specification or VW G-number (e.g. VW TL 774-J G13, G12evo, Toyota Super Long Life, Ford WSS-M97B44-D, MB 325.5) and the mix ratio. ' +
     'Example: "Pink/violet long-life Si-OAT, VW TL 774-J (G13), 50/50 with distilled water". ' +
-    'The same applies to other critical fluids (gearbox oil, brake fluid DOT grade): include the standard. Other strings can stay short. Put any doubt in "notes" (for example "xenon cars use D1S instead").'
+    'Gearbox oil / ATF (the transmission fluid) must always be included, for manual, automatic, CVT and DCT gearboxes alike, following the same principle: ' +
+    'give the fluid type and the exact specification (e.g. "ATF Toyota WS", "Dexron VI", "ZF Lifeguard 8 (ZF 8HP)", "VW G 052 182", "75W-80 API GL-4"), the equivalent standard where there is one (API GL-4 / GL-5, Dexron / Mercedes MB 236.x), ' +
+    'and whether the manufacturer calls it filled for life. If the car has a separate transfer case or differential, include those rows too. ' +
+    'Capacities (every fluid, including coolant, gearbox, brake and power steering): never just a number. Say what the amount covers, e.g. "6.5 L with filter change (5.8 L without)", ' +
+    '"drain and refill 4.5 L, 8.0 L dry fill", "coolant 7.5 L total system", "brake fluid 1.0 L for a full flush". Include any other relevant detail such as the sump or dry-fill difference, and a different amount for another engine variant. ' +
+    'Other strings can stay short. Put any doubt in "notes" (for example "xenon cars use D1S instead").'
   );
   return lines.join('\n');
 }
@@ -293,7 +298,7 @@ function aiClean_(raw) {
   (Array.isArray(raw && raw.fluids) ? raw.fluids : []).forEach(function (f) {
     const name = cleanStr_(f && f.fluid, 40);
     const spec = cleanStr_(f && f.specification, 300);
-    const cap = cleanStr_(f && f.capacity, 40);
+    const cap = cleanStr_(f && f.capacity, 150);
     if (AI_FLUID_NAMES.indexOf(name) === -1 || seenFluid[name] || (!spec && !cap)) return;
     seenFluid[name] = true;
     fluids.push({ kind: 'fluid', fluid: name, specification: spec, capacity: cap, notes: aiNote_(f.notes), source: AI_SOURCE });

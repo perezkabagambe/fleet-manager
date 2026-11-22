@@ -33,7 +33,7 @@
   var FLUID_HINTS = [
     [/transfer/i, { spec: 'e.g. 75W-90 API GL-4', cap: 'e.g. 1 L' }],
     [/differential|diff\b/i, { spec: 'e.g. 75W-90 API GL-5', cap: 'e.g. 1.2 L' }],
-    [/engine|motor oil/i, { spec: 'e.g. 5W-30, ACEA C3, API SN', cap: 'e.g. 5.5 L' }],
+    [/engine|motor oil/i, { spec: 'e.g. 5W-30, ACEA C3, API SN', cap: 'e.g. 5.5 L with filter change' }],
     [/gearbox|transmission|\batf\b|gear oil/i, { spec: 'e.g. ATF Dexron VI, or 75W-80 GL-4', cap: 'e.g. 7 L' }],
     [/coolant|antifreeze/i, { spec: 'e.g. Pink OAT, VW TL 774-J (G12+), 50/50', cap: 'e.g. 8 L' }],
     [/brake|clutch/i, { spec: 'e.g. DOT 4', cap: 'e.g. 1 L' }],
@@ -434,7 +434,7 @@
       }
       var nameIn = inp('fluid', { list: bulb ? 'bulb-names' : 'fluid-names', maxlength: '40' });
       var specIn = inp('specification', { maxlength: '300' });
-      var capIn = inp('capacity', { maxlength: '40' });
+      var capIn = inp('capacity', { maxlength: '150' });
       // The examples follow the name, so a differential oil never suggests an engine oil grade.
       function showHints() {
         var h = bulb ? BULB_HINT : fluidHint(nameIn.value);

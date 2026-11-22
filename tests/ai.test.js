@@ -83,6 +83,8 @@ test('a VIN is used first: the request carries it, everything typed, and a warni
   assert.match(prompt, /engine code D4HB/);
   assert.match(prompt, /colour Black/);
   assert.match(prompt, /trust the VIN/);
+  assert.match(prompt, /Gearbox oil \/ ATF \(the transmission fluid\) must always be included/);
+  assert.match(prompt, /with filter change/);
   assert.match(prompt, /ALWAYS look up what each one is equivalent to and give the ACEA class/);
   assert.match(prompt, /Si-OAT.*long life.*typical colour/s);
   assert.match(q.body.systemInstruction.parts[0].text, /VIN, when given, decodes to the exact vehicle, so it comes before everything else/);
