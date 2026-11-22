@@ -403,8 +403,8 @@
         ]), car.odometer === null ? 'Not set' : num(car.odometer) + ' mi'),
         collapsible('Maintenance & Issues Log', EntryUI.historyCard(car, page && page.entries), page && page.entries ? countText(page.entries.length, 'entry', 'entries') : ''),
         collapsible('Reminders', RemindersUI.card(car, page && page.tasks), page && page.tasks ? reminderHint(page.tasks) : ''),
-        collapsible('Fluids & Specs', el('section', { class: 'card' }, [
-          el('h2', { text: 'Fluids & Specs' }),
+        collapsible('Fluids | Bulbs | Parts', el('section', { class: 'card' }, [
+          el('h2', { text: 'Fluids | Bulbs | Parts' }),
           catalogueBox,
           fluids.some(isAiRow) ? aiCheckNote() : null,
           fluidRows.length ? el('h3', { class: 'spec-group kind-fluid', text: '💧 Fluids' }) : null,
