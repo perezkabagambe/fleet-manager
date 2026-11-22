@@ -186,11 +186,21 @@ function geminiCall_(body, model) {
   const code = res.getResponseCode();
   let json = null;
   try { json = JSON.parse(res.getContentText()); } catch (e) { json = null; }
+  if (code >= 400) geminiNoteProblem_(code, json, model || geminiModel_(), !!body.tools);
   if (code === 401 || code === 403 || (code === 400 && /API key/i.test(JSON.stringify(json || {}).slice(0, 400)))) fail_('ai_not_set_up');
   if (code === 429 || code === 503) fail_('ai_busy');
   if (code === 400) fail_('ai_bad_request');
   if (code >= 400 || !json) fail_('ai_unavailable');
   return json;
+}
+
+/** Remember Google's own words about the latest problem (never the key), so an admin can see the real reason on the Diagnostics page. */
+function geminiNoteProblem_(status, json, model, withSearch) {
+  try {
+    const err = (json && json.error) || {};
+    const text = 'HTTP ' + status + (err.status ? ' ' + err.status : '') + ' · ' + model + (withSearch ? ' with Google Search' : '') + ': ' + cleanStr_(err.message || '', 300);
+    props_().setProperty('GEMINI_LAST_ERROR', nowIso_() + ' | ' + text);
+  } catch (e) { /* the note is only a convenience */ }
 }
 
 /** The text of Gemini's first answer ('' if it was blocked or empty). */

@@ -420,3 +420,13 @@ test('listReceiptAddresses (admin) gives every car both addresses, making any mi
   assert.notEqual(changed, a.cars[0].privateAddress);
   assert.equal(env.call('listReceiptAddresses', { token: admin }).data.cars[0].privateAddress, changed);
 });
+
+test('Diagnostics shows the latest problem Gemini reported', () => {
+  const { env, admin, sam } = setup();
+  env.state.gemini = () => ({ code: 429, body: { error: { status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded' } } });
+  const up = env.call('uploadReceipt', { token: sam, mime: 'application/pdf', data: Buffer.from('%PDF-1.4 test file').toString('base64'), filename: 'r.pdf' });
+  env.call('readReceipt', { token: sam, id: up.data.receipt.id });
+  const h = env.call('getReceiptHealth', { token: admin }).data;
+  assert.match(h.reading.lastError, /HTTP 429 RESOURCE_EXHAUSTED/);
+  assert.match(h.reading.lastError, /Quota exceeded/);
+});

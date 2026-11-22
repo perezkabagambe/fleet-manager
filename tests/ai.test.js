@@ -175,6 +175,20 @@ test('if Google Search is refused the question is asked again without it', () =>
   assert.equal(fill().error, 'ai_unavailable');
 });
 
+test('if Google Search is over its limit ("busy") the question is asked again without it, and Google\'s reason is kept for the admins', () => {
+  const { env, fill } = setup();
+  env.state.gemini = (q) => (q.body.tools ? { code: 429, body: { error: { status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded for grounding requests' } } } : reply(GOOD));
+  const r = fill();
+  assert.equal(r.ok, true, r.error);
+  assert.equal(env.state.geminiRequests.length, 2);
+  assert.equal(env.state.geminiRequests[1].body.tools, undefined);
+  assert.match(env.props.GEMINI_LAST_ERROR, /HTTP 429 RESOURCE_EXHAUSTED · gemini-3\.5-flash-lite with Google Search: Quota exceeded for grounding requests/);
+  assert.equal(env.props.GEMINI_LAST_ERROR.includes(KEY), false);
+  // busy even without searching: the person is told
+  env.state.gemini = () => ({ code: 429, body: { error: { status: 'RESOURCE_EXHAUSTED', message: 'Too many requests' } } });
+  assert.equal(fill().error, 'ai_busy');
+});
+
 test('only values the app can use get through', () => {
   const { env, fill } = setup();
   env.state.gemini = () => reply({

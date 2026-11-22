@@ -482,6 +482,7 @@
       row('Last timer run', h.mail.lastResult || 'nothing recorded yet', /^error/.test(h.mail.lastResult) ? 'bad' : '');
       row('Receipt mailbox', h.mail.mailbox);
       row('Gemini key', h.reading.keyOn ? 'set (' + h.reading.model + ')' : 'MISSING: add GEMINI_API_KEY in the Apps Script project settings', h.reading.keyOn ? 'ok' : 'bad');
+      if (h.reading.lastError) row('Last problem reported by Gemini', h.reading.lastError, 'bad');
       row('Receipts read today', h.reading.usedToday + ' of ' + h.reading.appLimit + ' (up to ' + h.reading.userLimit + ' per person)', h.reading.usedToday >= h.reading.appLimit ? 'bad' : '');
       row('Emails sent today', h.emails.adminNoticesToday + ' admin notices and ' + h.emails.confirmationsToday + ' confirmations (limit ' + h.emails.dailyLimit + ' of each)' + (h.emails.quotaLeft !== null ? '; ' + h.emails.quotaLeft + ' left in the mail allowance' : ''));
       var c = h.inbox.counts;

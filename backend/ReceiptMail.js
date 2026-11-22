@@ -395,7 +395,7 @@ function getReceiptHealth_(p, ctx) {
       timerOn: receiptMailOn_(), timers: receiptTimerList_(), timerMade: props.getProperty('RECEIPT_MAIL_TIMER_MADE') || '', lastRun: props.getProperty('RECEIPT_MAIL_LAST') || '', lastResult: props.getProperty('RECEIPT_MAIL_RESULT') || '', mailbox: receiptMailbox_(),
     },
     reading: {
-      keyOn: !!geminiKey_(), model: geminiModel_(), usedToday: aiUsed_('rc_app'), appLimit: receiptLimit_('RECEIPT_APP_DAILY', RECEIPT_APP_DAILY), userLimit: receiptLimit_('RECEIPT_USER_DAILY', RECEIPT_USER_DAILY),
+      keyOn: !!geminiKey_(), model: geminiModel_(), lastError: props.getProperty('GEMINI_LAST_ERROR') || '', usedToday: aiUsed_('rc_app'), appLimit: receiptLimit_('RECEIPT_APP_DAILY', RECEIPT_APP_DAILY), userLimit: receiptLimit_('RECEIPT_USER_DAILY', RECEIPT_USER_DAILY),
     },
     emails: { adminNoticesToday: aiUsed_('rc_mail'), confirmationsToday: aiUsed_('rc_ack'), dailyLimit: RECEIPT_MAIL_DAILY, quotaLeft: quota },
     inbox: { counts: counts, oldestOpen: open.length ? open[0].received_at : '', openTotal: open.length },

@@ -204,8 +204,10 @@ function aiAsk_(prompt) {
   try {
     json = geminiCall_(body, aiModel_());
   } catch (e) {
-    if (!(e && e.apiError === 'ai_bad_request')) throw e;
-    delete body.tools; // searching was refused: answer from what the model knows (still marked as unverified)
+    // Searching was refused (not supported) or is over its own, tighter limit (a "busy" answer): answer without searching,
+    // from what the model knows. The answer is still marked as unverified.
+    if (!(e && (e.apiError === 'ai_bad_request' || e.apiError === 'ai_busy'))) throw e;
+    delete body.tools;
     try { json = geminiCall_(body, aiModel_()); } catch (e2) { if (e2 && e2.apiError === 'ai_bad_request') fail_('ai_unavailable'); throw e2; }
   }
   const text = geminiText_(json);
