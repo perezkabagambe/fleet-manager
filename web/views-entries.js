@@ -370,6 +370,37 @@
       });
     });
 
+    // ---------- the bar that slides under the chosen filter tile ----------
+    var sliderPos = null; // where the bar last was (position, width, colour), so the next one glides from there
+    function placeSlider(wrap, slider, tile, animate) {
+      var tries = 0;
+      function go() {
+        if (!tile || !wrap.isConnected || !wrap.clientWidth) { if (tries++ < 6) setTimeout(go, 60); return; } // not on screen yet: try again shortly
+        var w = wrap.getBoundingClientRect();
+        var t = tile.getBoundingClientRect();
+        var next = { left: t.left - w.left, width: t.width, color: window.getComputedStyle(tile).color };
+        if (animate && sliderPos) {
+          slider.style.transition = 'none';
+          slider.style.left = sliderPos.left + 'px'; slider.style.width = sliderPos.width + 'px'; slider.style.background = sliderPos.color;
+          slider.offsetWidth; // let the starting place register before moving
+          slider.style.transition = '';
+        } else {
+          slider.style.transition = 'none';
+        }
+        slider.style.left = next.left + 'px'; slider.style.width = next.width + 'px'; slider.style.background = next.color;
+        if (!(animate && sliderPos)) { slider.offsetWidth; slider.style.transition = ''; }
+        sliderPos = next;
+      }
+      go();
+    }
+    window.addEventListener('resize', function () {
+      if (!document.body.contains(list)) return;
+      var wrap = chips.querySelector('.filter-bar');
+      if (!wrap) return;
+      sliderPos = null;
+      placeSlider(wrap, wrap.querySelector('.filter-slider'), wrap.querySelector('.filter-tile.on'), false);
+    });
+
     function render() {
       lines = {};
       selectTools.hidden = !data.length;
@@ -389,7 +420,12 @@
           b.addEventListener('click', function () { filter = t; render(); });
           tiles.append(b);
         });
-        chips.append(el('p', { class: 'filter-note', text: 'You can filter the displayed list of log entries by selecting one of the options below.' }), tiles);
+        // a bar under the chosen tile: it glides from where it was to where it now belongs
+        var wrap = el('div', { class: 'filter-bar' }, [tiles]);
+        var slider = el('div', { class: 'filter-slider', 'aria-hidden': 'true' });
+        wrap.append(slider);
+        chips.append(el('p', { class: 'filter-note', text: 'You can filter the displayed list of log entries by selecting one of the options below.' }), wrap);
+        placeSlider(wrap, slider, tiles.querySelector('.filter-tile.on'), true);
       }
       var shown = data.filter(function (e) { return filter === 'All' || e.type === filter; });
       if (selecting) updateSelectUi();
