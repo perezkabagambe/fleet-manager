@@ -159,16 +159,20 @@
     root.replaceChildren(el('section', { class: 'card fleet-card' }, [linksTip(), msg, grid, deletedBox]));
 
     function card(c, mine) {
-      // a row: the photo on the left, the plate and model in the middle, the mileage and an arrow on the right
+      // a row: the photo on the left; in the middle the plate with the mileage at its top right, the make and model on one line
+      // (cut off with "…" if too long), the year on its own line, then the tags; an arrow on the right
       var link = el('a', { class: 'car-row', href: '#/car/' + c.id }, [
         photo(c, 'row-photo'),
         el('div', { class: 'car-row-body' }, [
-          el('div', { class: 'reg', text: c.registration }),
-          el('div', { class: 'muted small-text car-row-title', text: carTitle(c) }),
+          el('div', { class: 'car-row-top' }, [
+            el('span', { class: 'reg', text: c.registration }),
+            c.odometer === null ? null : el('span', { class: 'muted small-text car-row-odo', text: num(c.odometer) + ' mi' }),
+          ]),
+          el('div', { class: 'muted small-text car-row-title', text: [c.make, c.model].filter(Boolean).join(' ') }),
+          c.year ? el('div', { class: 'muted small-text car-row-year', text: String(c.year) }) : null,
           el('div', { class: 'car-row-tags' }, [chip(c.status), mine && mine.owner ? el('span', { class: 'chip sold', text: 'Yours' }) : null]),
         ]),
         el('div', { class: 'car-row-side' }, [
-          el('span', { class: 'muted small-text', text: c.odometer === null ? '' : num(c.odometer) + ' mi' }),
           el('span', { class: 'menu-chev', 'aria-hidden': 'true', text: '›' }),
         ]),
       ]);
