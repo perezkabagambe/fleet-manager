@@ -878,3 +878,10 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .section-note::before { content: 'i'; position: absolute; left: 11px; top: 11px; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #fff; font: italic 700 0.75rem/18px Georgia, 'Times New Roman', serif; text-align: center; }
 .section-note[hidden] { display: none; }
 .section-note a { color: var(--accent); font-weight: 600; }
+
+/* the two ways of adding a car */
+.choice { margin: 14px 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.choice h2 { margin: 0 0 8px; font-size: 1.05rem; }
+.choice p { margin: 8px 0; }
+.choice .btn-row { margin-top: 10px; }
+.section-note p { margin: 6px 0 0; }

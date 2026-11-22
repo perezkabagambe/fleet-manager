@@ -8,6 +8,7 @@
 const COUNTRIES = ['UK', 'UG'];
 const MARKETS = ['European', 'UK', 'Japanese (JDM)', 'North American', 'Middle East (GCC)', 'Australian', 'African', 'Asian', 'Other'];
 const DRIVE_SIDES = ['LHD', 'RHD'];
+const TRANSMISSIONS = ['Manual', 'Automatic'];
 const CURRENCIES = ['GBP', 'UGX', 'USD', 'KES', 'EUR'];
 const CAR_STATUSES = ['Active', 'Sold', 'Scrapped', 'Off-road'];
 const MAX_ODOMETER = 9999999;
@@ -31,6 +32,7 @@ function summarizeCar_(c) {
     vin: c.vin,
     engineCode: c.engine_code || '',
     gearboxCode: c.gearbox_code || '',
+    transmission: c.transmission || '',
     country: c.country || 'UK',
     market: c.market || '',
     driveSide: c.drive_side || '',
@@ -101,6 +103,7 @@ function parseCarInput_(f, existing) {
   out.vin = vin;
   out.engine_code = cleanStr_(f.engineCode, 30);
   out.gearbox_code = cleanStr_(f.gearboxCode, 30);
+  out.transmission = oneOf_(f.transmission, TRANSMISSIONS, '', 'invalid_transmission');
 
   out.market = oneOf_(f.market, MARKETS, '', 'invalid_market');
   out.drive_side = oneOf_(f.driveSide, DRIVE_SIDES, '', 'invalid_drive_side');

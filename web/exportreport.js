@@ -57,7 +57,7 @@
     var owners = (input.people && input.people.owners || []).map(function (o) { return o.name; }).concat(car.ownerOther ? [car.ownerOther] : []);
     var rows = [
       ['Registration', car.registration], ['Make and model', title], ['Status', car.status], ['Colour', car.colour], ['VIN / chassis', car.vin],
-      ['Engine code', car.engineCode], ['Gearbox code', car.gearboxCode], ['Location', car.country === 'UG' ? 'Uganda' : 'United Kingdom'],
+      ['Engine code', car.engineCode], ['Transmission', car.transmission], ['Gearbox code', car.gearboxCode], ['Location', car.country === 'UG' ? 'Uganda' : 'United Kingdom'],
       ['Market', car.market], ['Drive', car.driveSide === 'LHD' ? 'Left-hand drive (LHD)' : car.driveSide === 'RHD' ? 'Right-hand drive (RHD)' : ''],
       ['Fuel capacity', car.fuelCapacity === null || car.fuelCapacity === undefined ? '' : car.fuelCapacity + ' litres'],
       ['Imported', precise(car.importDate)], ['Acquired', precise(car.acquisitionDate)],

@@ -300,6 +300,7 @@
         detail('Colour', car.colour),
         detail('VIN / chassis', car.vin, 'vin-line'),
         detail('Engine code', car.engineCode),
+        detail('Transmission', car.transmission),
         detail('Gearbox code', car.gearboxCode),
         detail('Location', car.country === 'UG' ? 'Uganda' : 'United Kingdom'),
         detail('Market', car.market),
@@ -595,7 +596,7 @@
   Views.carForm = function (ctx, root) {
     var id = ctx.params.id || '';
     root.replaceChildren(el('section', { class: 'card' }, [loading()]));
-    if (!id) { build(null, [], { owners: [] }, null); return; }
+    if (!id) { chooser(); return; }
     var calls = [FleetApi.call('getCar', { id: id })];
     if (FleetAuth.isAdmin()) calls.push(FleetApi.call('listUsers')); // admins can pick any user as an owner/custodian
     Promise.all(calls).then(function (res) {
@@ -606,7 +607,74 @@
       else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e))]));
     });
 
-    function build(car, fluids, people, users) {
+    // Adding a car starts with a choice: read the log book with AI, or fill the form in yourself.
+    function chooser() {
+      var reading = false;
+      var heading = el('h1', { text: 'Add a car' });
+      var card = el('section', { class: 'card' });
+
+      function draw(status, errorNote) {
+        var left = status && status.available ? status.remaining : 0;
+        var canAi = !!(status && status.available && left > 0);
+        var kids = [heading, el('p', { class: 'muted', text: 'How would you like to add it?' })];
+        if (errorNote) kids.push(errorNote);
+        kids.push(!status ? null : !status.available
+          ? el('p', { class: 'section-note', text: 'AI is not set up yet, so only the manual option is available. An administrator needs to add the Gemini key.' })
+          : left > 0
+            ? el('p', { class: 'section-note', text: 'You have ' + left + ' of ' + status.limit + ' AI lookups left today. Reading a log book uses one; each time you use the optional AI help in the manual option uses one too.' })
+            : el('p', { class: 'section-note', text: 'You have used all ' + status.limit + ' of your AI lookups for today. They come back tomorrow. You can still add a car manually, without AI.' }));
+
+        // option 1: the log book
+        var pickBtn = canAi
+          ? Photos.fileButton('Choose the log book (PDF)', 'application/pdf', false, readBook)
+          : el('button', { type: 'button', class: 'btn small secondary', disabled: true, text: 'Choose the log book (PDF)' });
+        kids.push(el('div', { class: 'choice' }, [
+          el('h2', { text: '1. Upload the vehicle log book' }),
+          el('p', { text: 'Upload a clear copy of the vehicle\'s log book (a PDF). AI reads it, fills in the key details and the technical details, and attaches that PDF to the new vehicle. It may take up to a minute to process.' }),
+          el('p', { class: 'section-note', text: 'AI can misread a document or get things wrong. Nothing is saved until you have looked it over: check every box carefully, fill in any key details it could not find (such as the odometer reading), check the technical details too, and then save, edit or add to it.' }),
+          el('div', { class: 'btn-row' }, [pickBtn]),
+        ]));
+
+        // option 2: the form as it was
+        var manual = el('button', { type: 'button', class: 'btn small secondary', text: 'Add it manually' });
+        manual.addEventListener('click', function () { build(null, [], { owners: [] }, null); });
+        kids.push(el('div', { class: 'choice' }, [
+          el('h2', { text: '2. Add it yourself' }),
+          el('p', { text: 'Manually with some optional AI assistance available for retrieving technical details like fluid specs.' }),
+          el('div', { class: 'btn-row' }, [manual]),
+        ]));
+        card.replaceChildren.apply(card, kids.filter(Boolean));
+      }
+
+      function load(errorNote) {
+        return FleetApi.call('aiStatus', {}).then(function (r) { draw(r.data, errorNote); })
+          .catch(function () { draw(null, errorNote); });
+      }
+
+      function readBook(file) {
+        if (reading) return Promise.resolve();
+        reading = true;
+        card.replaceChildren(heading, UI.notice('ok', 'Reading the log book with AI… this can take up to a minute. Please keep this screen open.'));
+        return Photos.prepareAttachment(file).then(function (att) {
+          if (att.mime !== 'application/pdf') throw new FleetApi.ApiError('logbook_pdf_only', 'PDF only');
+          return FleetApi.call('aiReadLogbook', { mime: att.mime, data: att.data }, { timeoutMs: 170000 }).then(function (r) { return { att: att, result: r.data }; });
+        }).then(function (pre) {
+          reading = false;
+          build(null, [], { owners: [] }, null, pre);
+          window.scrollTo(0, 0);
+        }).catch(function (e) {
+          reading = false;
+          return load(UI.notice('error', UI.errorText(e)));
+        });
+      }
+
+      root.replaceChildren(card);
+      card.replaceChildren(heading, loading());
+      load();
+    }
+
+    // `prefill` (a car added from its log book): { att: the PDF, result: what AI read and looked up }
+    function build(car, fluids, people, users, prefill) {
       var f = {};
       var msg = el('div');
       function text(name, value, attrs) {
@@ -620,7 +688,7 @@
         return f[name];
       }
 
-      var v = car || { country: 'UK', currency: 'GBP', status: 'Active' };
+      var v = car || Object.assign({ country: 'UK', currency: 'GBP', status: 'Active' }, prefill ? prefill.result.details : {});
 
       // Optional purchase price with its own currency, which can differ from the car's running-cost currency.
       function acquisitionCostField() {
@@ -665,6 +733,7 @@
           UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
           odometerField()
         ),
+        UI.field('Transmission', select('transmission', [['', 'Not recorded'], ['Manual', 'Manual'], ['Automatic', 'Automatic']], v.transmission), 'Manual or automatic. AI uses this to find the right gearbox code.'),
         pair(
           UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.'),
           acquisitionCostField(),
@@ -682,7 +751,7 @@
         ),
         pair(
           UI.field('Engine code', text('engineCode', v.engineCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. 1GR-FE.'),
-          UI.field('Gearbox code', text('gearboxCode', v.gearboxCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. A750F.')
+          UI.field('Gearbox code', text('gearboxCode', v.gearboxCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. A750F. It can be checked against the vehicle\'s UK log book.')
         ),
         pair(
           UI.field('Market', select('market', [['', 'Not recorded']].concat(MARKETS.map(function (m) { return [m, m]; })), v.market), 'Where it was built and sold for.'),
@@ -737,6 +806,7 @@
           setIfEmpty(f.year, det.year, 'year', filled);
           setIfEmpty(f.colour, det.colour, 'colour', filled);
           setIfEmpty(f.engineCode, det.engineCode, 'engine code', filled);
+          setIfEmpty(f.transmission, det.transmission, 'transmission', filled);
           setIfEmpty(f.gearboxCode, det.gearboxCode, 'gearbox code', filled);
           setIfEmpty(f.market, det.market, 'market', filled);
           setIfEmpty(f.driveSide, det.driveSide, 'drive side', filled);
@@ -766,7 +836,7 @@
         function typed() {
           return {
             registration: f.registration.value, vin: f.vin.value, country: f.country.value, make: f.make.value, model: f.model.value, year: f.year.value,
-            colour: f.colour.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value,
+            colour: f.colour.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, transmission: f.transmission.value, market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value,
           };
         }
 
@@ -820,7 +890,7 @@
         });
         return box;
       }
-      if (!car) techFields.unshift(aiAssist()); // at the top of the technical details
+      if (!car && !(prefill && prefill.result.technical)) techFields.unshift(aiAssist()); // at the top of the technical details (not needed when the log book already filled them in)
 
       // Owner/custodian: people who use this app are ticked; anyone else is written in.
       var ownerFields = [
@@ -837,6 +907,20 @@
       }
 
       var fluidsEd = fluidsEditor(fluids);
+      if (prefill) fluidsEd.addSuggested((prefill.result.fluids || []).concat(prefill.result.bulbs || []));
+
+      // What was read from the log book, and what to do about it
+      var prefillNote = null;
+      if (prefill) {
+        var rs = prefill.result;
+        prefillNote = el('div', { class: 'section-note' }, [
+          el('strong', { text: 'Filled in from the log book by AI.' }),
+          el('p', { text: 'Please check every box against the log book before you save, fill in any key details it could not find (such as the odometer reading and acquisition details), and check the technical details too. You can then save, edit or add to it.' }),
+          el('p', { text: rs.technical ? 'The technical details and fluid specifications were looked up using what the log book says.' : 'The technical details could not be looked up this time. Fill them in yourself, or use the AI button in the technical details.' }),
+          rs.method ? el('p', { text: methodText(rs.method) }) : null,
+          el('p', { text: 'The log book PDF is attached to this vehicle\'s documents when you save. You have ' + rs.remaining + ' AI lookups left today.' }),
+        ]);
+      }
 
       // Photos: up to 15. Add some, remove some, choose which is the main one (shown first, and on the fleet list).
       // Nothing is sent until you tap Save, like the other parts.
@@ -1039,6 +1123,7 @@
       var photoSection = section('Photos', photoFields);
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: car ? 'Save changes' : 'Add car' });
       var form = el('form', { novalidate: true }, [
+        prefillNote,
         detailsSection,
         ownersSection,
         fluidsSection,
@@ -1049,7 +1134,7 @@
       function collect() {
         return {
           registration: f.registration.value, make: f.make.value, model: f.model.value, year: f.year.value, colour: f.colour.value,
-          vin: f.vin.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, country: f.country.value,
+          vin: f.vin.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, transmission: f.transmission.value, country: f.country.value,
           market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value, importDate: f.importDate.value,
           status: f.status.value, odometer: f.odometer.value,
           acquisitionCost: f.acquisitionCost.value, acquisitionCurrency: f.acquisitionCurrency.value, acquisitionDate: f.acquisitionDate.value,
@@ -1059,7 +1144,7 @@
       }
 
       // What has been saved so far. If a later step fails, a retry only repeats the steps that did not finish.
-      var state = { carId: car ? car.id : '', version: car ? car.version : 0, snapshot: car ? JSON.stringify(collect()) : '', markedMine: false, photoDone: false };
+      var state = { carId: car ? car.id : '', version: car ? car.version : 0, snapshot: car ? JSON.stringify(collect()) : '', markedMine: false, photoDone: false, logbookDone: false };
       function carDirty() { return !state.carId || JSON.stringify(collect()) !== state.snapshot; }
 
       function saveCarStep(extra) {
@@ -1124,6 +1209,17 @@
             if (car) throw e; // editing: stay here so the photos can be retried
             // A brand-new car is already saved, so report the photos on the next screen instead of blocking.
             FleetApp.setFlash('error', 'The car was saved, but its photos could not be added: ' + UI.errorText(e) + ' You can add them with Edit car.');
+          });
+        }).then(function (stop) {
+          if (stop === 'stop') return 'stop';
+          if (!prefill || state.logbookDone) return null;
+          step = 'the log book';
+          return FleetApi.call('uploadCarDocument', { carId: state.carId, type: 'Logbook', note: 'Read by AI when the vehicle was added', mime: prefill.att.mime, data: prefill.att.data, filename: prefill.att.filename }, { timeoutMs: 240000 }).then(function () {
+            state.logbookDone = true;
+            done.push('log book');
+          }, function (e) {
+            // the car is already saved: report it on the next screen instead of blocking
+            FleetApp.setFlash('error', 'The car was saved, but the log book could not be attached: ' + UI.errorText(e) + ' You can add it under Documents.');
           });
         }).then(function (stop) {
           if (stop === 'stop') return;

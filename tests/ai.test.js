@@ -363,3 +363,86 @@ test('the model check lists what the key can use and tries the likely ones with 
   assert.equal(JSON.stringify(r).includes(KEY), false);
   assert.equal(env.state.geminiRequests.filter((q) => q.body).length, 8, 'two searches for each of four models');
 });
+
+// ---------- reading a log book ----------
+const PDF = Buffer.from('%PDF-1.4 log book').toString('base64');
+const BOOK = { isLogbook: true, registration: 'lb06 xyz', vin: 'WBAVB11060PK12345', make: 'BMW', model: '325i SE', colour: 'SILVER', dateFirstRegistered: '2006-03-01', engineCapacityCc: '2497 cc', fuelType: 'PETROL', bodyType: 'SALOON', confidence: 'high', keeperName: 'A. Person' };
+const isBook = (q) => q.body.contents[0].parts.some((x) => x.inline_data);
+
+test('a log book is read, then the technical details are looked up from it, for one lookup', () => {
+  const { env, sam } = setup();
+  env.state.gemini = (q) => (isBook(q) ? { code: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify(BOOK) }] } }] } } : reply(GOOD));
+  const r = env.call('aiReadLogbook', { token: sam, mime: 'application/pdf', data: PDF });
+  assert.equal(r.ok, true, r.error);
+  const sent = env.state.geminiRequests;
+  assert.equal(sent.length, 2);
+  assert.equal(sent[0].body.contents[0].parts[0].inline_data.mime_type, 'application/pdf');
+  assert.equal(sent[0].body.tools, undefined);
+  assert.match(sent[0].body.contents[0].parts[1].text, /Never return the keeper's name, address/);
+  assert.deepEqual(sent[1].body.tools, [{ google_search: {} }]);
+  const prompt = sent[1].body.contents[0].parts[0].text;
+  assert.match(prompt, /VIN: WBAVB11060PK12345/);
+  assert.match(prompt, /The vehicle log book also says: first registered 2006-03-01, 2497 cc, PETROL, SALOON/);
+  const d = r.data;
+  assert.equal(d.technical, true);
+  assert.equal(d.details.registration, 'LB06 XYZ');
+  assert.equal(d.details.make, 'BMW', 'what the document says wins over the lookup');
+  assert.equal(d.details.model, '325i SE');
+  assert.equal(d.details.year, '2006');
+  assert.equal(d.details.engineCode, 'D4HB', 'the technical details come from the lookup');
+  assert.deepEqual(d.logbook, { registration: 'LB06 XYZ', vin: 'WBAVB11060PK12345', firstRegistered: '2006-03-01', engineCapacity: '2497', fuelType: 'PETROL', confidence: 'high' });
+  assert.ok(d.fluids.length > 0);
+  assert.equal(JSON.stringify(d).includes('A. Person'), false, 'no personal details come back');
+  assert.equal(d.remaining, 9, 'both steps cost one lookup');
+  assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 9);
+});
+
+test('log book: only a PDF, a key, a readable book; a failed read costs nothing', () => {
+  const { env, sam, ann } = setup({ key: false });
+  assert.equal(env.call('aiReadLogbook', { token: sam, mime: 'application/pdf', data: PDF }).error, 'ai_not_set_up');
+  env.props.GEMINI_API_KEY = KEY;
+  assert.equal(env.call('aiReadLogbook', { token: sam, mime: 'image/jpeg', data: PDF }).error, 'logbook_pdf_only');
+  assert.equal(env.call('aiReadLogbook', { token: sam, mime: 'application/pdf', data: Buffer.from('not a pdf at all').toString('base64') }).error, 'invalid_attachment');
+  assert.equal(env.call('aiReadLogbook', { token: undefined, mime: 'application/pdf', data: PDF }).error, 'unauthorized');
+  assert.equal(env.state.geminiRequests.length, 0);
+  env.state.gemini = () => ({ code: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify({ isLogbook: false }) }] } }] } });
+  assert.equal(env.call('aiReadLogbook', { token: ann, mime: 'application/pdf', data: PDF }).error, 'logbook_unreadable');
+  assert.equal(env.call('aiStatus', { token: ann }).data.remaining, 10, 'nothing was used up');
+  env.state.gemini = () => ({ code: 429, body: { error: { status: 'RESOURCE_EXHAUSTED' } } });
+  assert.equal(env.call('aiReadLogbook', { token: ann, mime: 'application/pdf', data: PDF }).error, 'ai_busy');
+  assert.equal(env.call('aiStatus', { token: ann }).data.remaining, 10);
+});
+
+test('log book: if only the technical step fails, the log book details are still returned', () => {
+  const { env, sam } = setup();
+  env.state.gemini = (q) => (isBook(q) ? { code: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify(BOOK) }] } }] } } : { code: 404, body: { error: { message: 'gone' } } });
+  const r = env.call('aiReadLogbook', { token: sam, mime: 'application/pdf', data: PDF });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.technical, false);
+  assert.equal(r.data.technicalError, 'ai_unavailable');
+  assert.deepEqual([r.data.details.make, r.data.details.model, r.data.details.registration], ['BMW', '325i SE', 'LB06 XYZ']);
+  assert.deepEqual(r.data.fluids, []);
+});
+
+test('log book: the daily allowance applies', () => {
+  const { env, ann } = setup();
+  env.props.AI_USER_DAILY = '1';
+  env.state.gemini = (q) => (isBook(q) ? { code: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify(BOOK) }] } }] } } : reply(GOOD));
+  assert.equal(env.call('aiReadLogbook', { token: ann, mime: 'application/pdf', data: PDF }).ok, true);
+  assert.equal(env.call('aiReadLogbook', { token: ann, mime: 'application/pdf', data: PDF }).error, 'ai_limit_user');
+});
+
+test('the transmission type is sent to the AI, which is asked for the gearbox code and may fill it in', () => {
+  const { env, fill } = setup();
+  env.state.gemini = () => reply(Object.assign({}, GOOD, { details: Object.assign({}, GOOD.details, { transmission: 'Automatic', gearboxCode: 'A750F' }) }));
+  const r = fill({ transmission: 'Automatic' });
+  assert.equal(r.ok, true, r.error);
+  const prompt = env.state.geminiRequests[0].body.contents[0].parts[0].text;
+  assert.match(prompt, /transmission Automatic/);
+  assert.match(prompt, /"transmission": ""/);
+  assert.match(prompt, /gearbox \/ transmission code/);
+  assert.equal(r.data.details.transmission, 'Automatic');
+  assert.equal(r.data.details.gearboxCode, 'A750F');
+  env.state.gemini = () => reply(Object.assign({}, GOOD, { details: Object.assign({}, GOOD.details, { transmission: 'Hovercraft' }) }));
+  assert.equal(fill().data.details.transmission, undefined);
+});

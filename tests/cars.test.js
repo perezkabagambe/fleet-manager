@@ -107,6 +107,7 @@ test('market, drive side, import date and fuel capacity are optional and validat
   const bad = (fields, code) => assert.equal(addCar(env, sam, Object.assign({ registration: 'BADDET' + Math.random(), vin: '' }, fields)).error, code, code);
   bad({ market: 'Martian' }, 'invalid_market');
   bad({ driveSide: 'CHD' }, 'invalid_drive_side');
+  bad({ transmission: 'CVT' }, 'invalid_transmission');
   bad({ importDate: 'sometime' }, 'invalid_date');
   bad({ importDate: String(new Date().getFullYear() + 1) }, 'invalid_date');
   ['0', '-5', 'lots', '1000', '45.55'].forEach((x) => bad({ fuelCapacity: x }, 'invalid_fuel_capacity'));

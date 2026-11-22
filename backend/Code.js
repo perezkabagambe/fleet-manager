@@ -79,6 +79,7 @@ function actions_() {
     setAttachmentThumb: { auth: 'user', lock: true, fn: setAttachmentThumb_ },
     deleteAttachment: { auth: 'admin', lock: true, fn: deleteAttachment_ },
     aiStatus: { auth: 'user', fn: aiStatus_ },
+    aiReadLogbook: { auth: 'user', fn: aiReadLogbook_ }, // reads a log book PDF, then the technical details (one lookup from the allowance)
     aiFindCar: { auth: 'user', fn: aiFindCar_ }, // no script lock: it waits for an outside service and must not block everyone else
     aiRefreshSpecs: { auth: 'user', fn: aiRefreshSpecs_ },
     aiFillCar: { auth: 'user', fn: aiFillCar_ }, // no script lock: it waits for an outside service and must not block everyone else
