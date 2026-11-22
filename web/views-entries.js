@@ -326,7 +326,7 @@
       aiPart.replaceChildren.apply(aiPart, kids);
     }
     function readReceiptFile(file, status) {
-      aiPart.replaceChildren(el('p', { text: 'Reading the receipt with AI… this can take up to a minute. Please keep this screen open.' }));
+      aiPart.replaceChildren(UI.waiting('Reading the receipt with AI… this can take up to a minute. Please keep this screen open.'));
       Photos.prepareAttachment(file).then(function (a) {
         if (a.mime !== 'image/jpeg' && a.mime !== 'application/pdf') throw new FleetApi.ApiError('invalid_attachment', 'Not a photo or PDF');
         return FleetApi.call('uploadReceipt', { carId: car.id, mime: a.mime, data: a.data, filename: a.filename }, { timeoutMs: 240000 });
@@ -1008,13 +1008,29 @@
       var notesField = UI.field('Notes', area('notes', v.notes));
       var staged = [];
       var stagedBox = el('div', { class: 'stack' });
+      // A receipt being turned into this entry is listed with the files to add, and is attached when the entry is saved
+      var receiptRow = null;
+      var skipReceipt = false;
+      if (draft) {
+        var rView = el('button', { type: 'button', class: 'btn small secondary', text: 'View' });
+        rView.addEventListener('click', function () {
+          Viewer.show({ mime: draft.mime, filename: draft.filename, load: function () { return FleetApi.call('getReceiptFile', { id: draft.id }, { timeoutMs: UPLOAD_TIMEOUT_MS }).then(function (r) { return r.data; }); } })
+            .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+        });
+        var rDrop = el('button', { type: 'button', class: 'btn small secondary', text: 'Don\'t add' });
+        rDrop.addEventListener('click', function () { skipReceipt = true; receiptRow.remove(); receiptRow = null; drawStaged(); });
+        receiptRow = el('div', { class: 'attach-row staged' }, [
+          el('div', { class: 'attach-name', text: fileIcon(draft.mime) + (draft.filename || 'receipt') }),
+          el('div', { class: 'attach-actions' }, [rView, rDrop]),
+        ]);
+      }
       function drawStaged() {
         stagedBox.replaceChildren.apply(stagedBox, staged.map(function (s, i) {
           var rm = el('button', { type: 'button', class: 'btn small secondary', text: 'Don\'t add' });
           rm.addEventListener('click', function () { staged.splice(i, 1); drawStaged(); });
           return el('div', { class: 'attach-row staged' }, [el('div', { class: 'attach-name', text: fileIcon(/^image\//.test(s.type || '') ? 'image/jpeg' : s.type === 'application/pdf' ? 'application/pdf' : '') + s.name }), rm]);
         }));
-        if (stagedBox.parentNode) stagedBox.parentNode.hidden = !staged.length;
+        if (stagedBox.parentNode) stagedBox.parentNode.hidden = !staged.length && !(receiptRow && receiptRow.parentNode);
       }
       function stage(file) { staged.push({ file: file, name: file.name || 'photo', type: file.type }); drawStaged(); }
       var attachList = el('div', { class: 'stack' });
@@ -1033,7 +1049,7 @@
       else attachList.append(el('p', { class: 'muted', text: 'Nothing attached yet.' }));
       var stagedHead = el('div', { class: 'attach-title', text: 'Ready to add when you save' });
       var addBlock = addPanel(stage, 'Receipts, invoices, quotes, photos of the problem or any other file. Photos are shrunk automatically; other files can be up to 5 MB.');
-      addBlock.append(el('div', { class: 'attach-staged', hidden: true }, [stagedHead, stagedBox]));
+      addBlock.append(el('div', { class: 'attach-staged', hidden: !receiptRow }, [stagedHead, receiptRow, stagedBox]));
       var attachSection = el('div', { class: 'field attach-section' }, [
         el('div', { class: 'field-label', text: 'Photos and documents' }),
         el('div', { class: 'attach-existing' }, [existingHead, attachList]),
@@ -1080,7 +1096,7 @@
       // A receipt from the Inbox is attached to the saved entry, and leaves the Inbox. (Saving again after a failure only repeats this step.)
       function attachReceipt(entryId) {
         if (!draft || state.receiptDone) return Promise.resolve();
-        return FleetApi.call('resolveReceipt', { id: draft.id, entryId: entryId }).then(function () {
+        return FleetApi.call('resolveReceipt', { id: draft.id, entryId: entryId, attach: !skipReceipt }).then(function () {
           state.receiptDone = true;
           if (window.InboxUI) InboxUI.refreshCount();
         }, function (e) {

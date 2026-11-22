@@ -232,3 +232,16 @@ test('the receipt status says how many reads the person has left today (the smal
   assert.equal(env.call('getReceiptStatus', { token: sam }).data.remaining, 0);
   assert.equal(env.call('getReceiptStatus', {}).error, 'unauthorized');
 });
+
+test('a receipt can be closed without attaching its file when the person chose "Don\'t add"', () => {
+  const { env, sam, car, add, read } = setup();
+  env.state.gemini = () => answer(PARTS);
+  const id = add().data.receipt.id;
+  read(id);
+  const saved = env.call('saveEntry', { token: sam, carId: car.id, type: 'Purchase', fields: { date: '2026-10-03' }, items: [{ name: 'Pads', quantity: '1', unitCost: '5' }] }).data.entry;
+  const r = env.call('resolveReceipt', { token: sam, id, entryId: saved.id, attach: false });
+  assert.equal(r.data.done, true);
+  assert.equal(r.data.attachment, null);
+  assert.equal(env.call('getEntry', { token: sam, id: saved.id }).data.attachments.length, 0);
+  assert.equal(env.call('getInboxItem', { token: sam, id }).data.receipt.status, 'Approved');
+});

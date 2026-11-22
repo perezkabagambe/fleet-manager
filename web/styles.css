@@ -894,3 +894,17 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .choice p { margin: 8px 0; }
 .choice .btn-row { margin-top: 10px; }
 .section-note p { margin: 6px 0 0; }
+
+/* the blue "AI is working" panel */
+.ai-wait { margin: 10px 0; padding: 12px 14px 0; border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--text); overflow: hidden; }
+.ai-wait-row { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; }
+.ai-wait-text { font-size: 0.9rem; line-height: 1.4; }
+.ai-wait-dots { flex: none; display: inline-flex; gap: 5px; align-items: center; }
+.ai-wait-dots i { display: block; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: ai-bounce 1.2s ease-in-out infinite; }
+.ai-wait-dots i:nth-child(2) { animation-delay: 0.16s; }
+.ai-wait-dots i:nth-child(3) { animation-delay: 0.32s; }
+.ai-wait-bar { height: 4px; margin: 0 -14px; background: color-mix(in srgb, var(--accent) 18%, transparent); position: relative; overflow: hidden; }
+.ai-wait-bar span { position: absolute; top: 0; bottom: 0; width: 40%; border-radius: 4px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: ai-slide 1.4s ease-in-out infinite; }
+@keyframes ai-bounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.45; } 40% { transform: translateY(-6px); opacity: 1; } }
+@keyframes ai-slide { 0% { left: -40%; } 100% { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .ai-wait-dots i, .ai-wait-bar span { animation: none; } .ai-wait-bar span { left: 0; width: 100%; opacity: 0.5; } }

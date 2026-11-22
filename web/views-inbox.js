@@ -96,7 +96,7 @@
       go.addEventListener('click', function () {
         var files = file.files ? Array.prototype.slice.call(file.files) : [];
         if (!files.length) { status.replaceChildren(UI.notice('error', 'Choose a photo or a PDF first.')); return; }
-        status.replaceChildren();
+        status.replaceChildren(UI.waiting(reading ? 'Adding the receipt and reading it with AI… this can take up to a minute.' : 'Adding the receipt…'));
         // each file becomes its own receipt, added one after another
         var done = [];
         var failed = [];
@@ -104,10 +104,16 @@
         var label = go.textContent;
         files.forEach(function (f, i) {
           chain = chain.then(function () {
-            return send(f, carSelect.value, function (t) { go.textContent = files.length > 1 ? 'Receipt ' + (i + 1) + ' of ' + files.length + ': ' + t : t; }).then(function (r) { done.push(r); }, function (e) { failed.push({ name: f.name || 'a file', error: e }); });
+            return send(f, carSelect.value, function (t) {
+              var label2 = files.length > 1 ? 'Receipt ' + (i + 1) + ' of ' + files.length + ': ' + t : t;
+              go.textContent = label2;
+              var w = status.querySelector('.ai-wait-text');
+              if (w) w.textContent = label2 + (/Reading/.test(t) ? ' with AI… this can take up to a minute.' : '');
+            }).then(function (r) { done.push(r); }, function (e) { failed.push({ name: f.name || 'a file', error: e }); });
           });
         });
         UI.busy(go, 'Adding…', chain.then(function () { go.textContent = label; })).then(function () {
+          status.replaceChildren();
           if (failed.length) {
             status.replaceChildren.apply(status, (done.length ? [UI.notice('ok', done.length + ' receipt' + (done.length === 1 ? ' was' : 's were') + ' added. They are in the list below.')] : [])
               .concat(failed.map(function (x) { return UI.notice('error', x.name + ': ' + UI.errorText(x.error)); })));
@@ -258,7 +264,7 @@
       if (r.status !== 'Pending' && open) {
         again = el('button', { type: 'button', class: 'btn small secondary', text: 'Try reading it again' });
         again.addEventListener('click', function () {
-          msg.replaceChildren();
+          msg.replaceChildren(UI.waiting('Reading the receipt with AI… this can take up to a minute.'));
           UI.busy(again, 'Reading…', FleetApi.call('readReceipt', { id: r.id }, { timeoutMs: READ_TIMEOUT_MS })).then(function () {
             refreshCount();
             FleetApp.go('/inbox/' + r.id);

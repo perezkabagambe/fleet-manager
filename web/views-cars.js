@@ -683,7 +683,7 @@
       function readBook(file) {
         if (reading) return Promise.resolve();
         reading = true;
-        card.replaceChildren(heading, UI.notice('ok', 'Reading the log book with AI… this can take up to a minute. Please keep this screen open.'));
+        card.replaceChildren(heading, UI.waiting('Reading the log book with AI… this can take up to a minute. Please keep this screen open.'));
         return Photos.prepareAttachment(file).then(function (att) {
           if (att.mime !== 'application/pdf') throw new FleetApi.ApiError('logbook_pdf_only', 'PDF only');
           return FleetApi.call('aiReadLogbook', { mime: att.mime, data: att.data }, { timeoutMs: 170000 }).then(function (r) { return { att: att, result: r.data }; });
@@ -875,7 +875,7 @@
         }
 
         function fillFrom(extra) {
-          status.replaceChildren(UI.notice('ok', 'Asking AI to look the car up… this can take up to a minute. Please wait.'));
+          status.replaceChildren(UI.waiting('Asking AI to look the car up… this can take up to a minute. Please wait.'));
           picker.replaceChildren();
           btn.disabled = true;
           return FleetApi.call('aiFillCar', Object.assign(typed(), extra || {}), { timeoutMs: 120000 }).then(function (r) { apply(r.data); })
@@ -885,7 +885,7 @@
 
         // No VIN: AI first suggests a few versions this could be; the person picks one, and then the specs are filled in for it.
         function findFirst() {
-          status.replaceChildren(UI.notice('ok', 'Asking AI which cars this could be… this can take up to a minute. Please wait.'));
+          status.replaceChildren(UI.waiting('Asking AI which cars this could be… this can take up to a minute. Please wait.'));
           picker.replaceChildren();
           btn.disabled = true;
           FleetApi.call('aiFindCar', typed(), { timeoutMs: 120000 }).then(function (r) {
@@ -1139,7 +1139,7 @@
           UI.confirm('AI can get things wrong. Its answers are suggestions, not facts, and you choose which to use.\n\nTo look the car up, its registration, VIN, make, model and year are sent to Google\'s Gemini AI service, which may search the web. Google may use what is sent to improve its products. It can take up to a minute.', { okLabel: 'Ask AI' }).then(function (yes) {
             if (!yes) return;
             panel.replaceChildren();
-            status.replaceChildren(UI.notice('ok', 'Asking AI to look the car up… this can take up to a minute. Please wait.'));
+            status.replaceChildren(UI.waiting('Asking AI to look the car up… this can take up to a minute. Please wait.'));
             btn.disabled = true;
             FleetApi.call('aiRefreshSpecs', { carId: car.id }, { timeoutMs: 120000 }).then(function (r) {
               status.replaceChildren();

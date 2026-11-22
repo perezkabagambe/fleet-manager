@@ -450,7 +450,7 @@ function resolveReceipt_(p, ctx) {
   if (!car) fail_('not_found');
   const existing = Db.all('Attachments').filter(function (a) { return a.entry_id === entry.id && !isTrue_(a.deleted); });
   let attached = null;
-  if (existing.length < MAX_ATTACHMENTS_PER_ENTRY) {
+  if (p.attach !== false && existing.length < MAX_ATTACHMENTS_PER_ENTRY) { // attach: false = the person chose not to attach the receipt file
     try { DriveApp.getFileById(row.drive_file_id).moveTo(carFolder_(car.id)); } catch (e) { /* it stays where it is: the attachment still points at it */ }
     attached = Object.assign(baseColumns_(ctx), {
       car_id: car.id, entry_id: entry.id, drive_file_id: row.drive_file_id, filename: row.filename, mime: attachmentKind_(row.mime), size: row.size, thumb_file_id: '', ref: nextFileRef_(),

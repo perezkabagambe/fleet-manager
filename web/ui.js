@@ -79,6 +79,15 @@
     return el('div', { class: 'notice ' + kind, role: kind === 'error' ? 'alert' : 'status', text: text });
   }
 
+  /** The blue "AI is working" panel: bouncing dots, the message, and a sliding bar. Used for every AI lookup in the app. */
+  function waiting(text) {
+    var dots = el('span', { class: 'ai-wait-dots', 'aria-hidden': 'true' }, [el('i'), el('i'), el('i')]);
+    return el('div', { class: 'ai-wait', role: 'status', 'aria-live': 'polite' }, [
+      el('div', { class: 'ai-wait-row' }, [dots, el('span', { class: 'ai-wait-text', text: text })]),
+      el('div', { class: 'ai-wait-bar', 'aria-hidden': 'true' }, [el('span')]),
+    ]);
+  }
+
   var MESSAGES = {
     invalid_or_expired: 'That link or code is invalid or has expired. Please request a new one.',
     too_many_attempts: 'Too many wrong codes. Please request a new sign-in email.',
@@ -264,5 +273,5 @@
     return btn;
   }
 
-  window.UI = { el: el, field: field, notice: notice, errorText: errorText, busy: busy, copyValueButton: copyValueButton, confirm: confirmDialog, editToggle: editToggle, copyText: copyText, shareButton: shareButton };
+  window.UI = { el: el, field: field, notice: notice, waiting: waiting, errorText: errorText, busy: busy, copyValueButton: copyValueButton, confirm: confirmDialog, editToggle: editToggle, copyText: copyText, shareButton: shareButton };
 })();
