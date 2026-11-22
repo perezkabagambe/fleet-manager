@@ -347,9 +347,9 @@
     receiptEmailFor(car).then(function (address) {
       if (!address) return;
       receiptHint.replaceChildren(
-        document.createTextNode('Purchase receipts or garage invoices can be emailed directly to '),
+        document.createTextNode('Part purchase receipts or garage invoices can be emailed directly to this car\'s address for automatic processing: '),
         el('a', { class: 'receipt-hint-link', href: 'mailto:' + address, text: address }),
-        document.createTextNode(' for automatic processing.')
+        document.createTextNode('.')
       );
       receiptHint.hidden = false;
     }).catch(function () { /* no note: the log works without it */ });
