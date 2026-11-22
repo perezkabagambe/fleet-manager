@@ -846,8 +846,10 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .car-row-body { flex: 1; min-width: 0; }
 .car-row .reg { font-weight: 700; font-size: 1.05rem; }
 .car-row-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.car-row-tags { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
-.car-row-side { flex: none; display: flex; align-items: center; gap: 4px; }
+.car-row-tags { display: flex; gap: 6px; margin-top: 4px; flex-wrap: nowrap; } /* the status and "Yours" always sit side by side, in that order */
+.car-row-tags .chip { flex: none; white-space: nowrap; font-size: 0.74rem; padding: 1px 8px; }
+.car-row-side { flex: none; display: flex; align-items: center; gap: 4px; font-size: 0.85rem; white-space: nowrap; }
+@media (max-width: 340px) { .car-row-tags { flex-wrap: wrap; } } /* a very small phone has no room for both tags beside the mileage */
 .car-row:hover .reg, .car-row:focus-visible .reg { text-decoration: underline; }
 .car-row-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .has-tabs .footer .feedback-link, .has-tabs .footer a[href="#/diag"] { display: none; }
