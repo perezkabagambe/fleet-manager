@@ -159,24 +159,6 @@ test('deleting a purchase is refused while any of its items has been used', () =
   assert.equal(s.env.call('listPurchases', { token: s.sam, carId: s.car.id }).data.purchases.some((p) => p.from && p.from.includes(free.ref)), false, 'its items leave the picker');
 });
 
-test('copying a purchase to another car takes its items with it (not the stock of the first car)', () => {
-  const s = setup();
-  const e = s.order(ITEMS, { title: 'Order' }).data.entry;
-  const [pads] = s.get(e.id).data.items;
-  s.job([{ purchaseId: pads.id, quantity: '2' }]);
-  const c = s.env.call('copyEntry', { token: s.sam, id: e.id, carId: s.car2.id });
-  assert.equal(c.ok, true);
-  const d = s.get(c.data.entry.id).data;
-  assert.deepEqual(d.items.map((i) => [i.name, i.quantity, i.used]), [['Brake pads', 2, 0], ['Brake discs', 2, 0], ['Brake fluid', 1, 0]], 'fresh stock on the other car');
-  assert.equal(d.stock.total, 159.25);
-  assert.ok(!d.items.some((i) => ITEMS.length && s.get(e.id).data.items.some((o) => o.id === i.id && o.id !== e.id)), 'its items are its own');
-  assert.equal(s.get(e.id).data.items[0].used, 2, 'the original is unchanged');
-  // a single-item purchase copies as a single item with its own id
-  const one = s.order([ITEMS[0]]).data.entry;
-  const oneCopy = s.env.call('copyEntry', { token: s.sam, id: one.id, carId: s.car2.id }).data.entry;
-  assert.equal(s.get(oneCopy.id).data.items[0].id, oneCopy.id);
-});
-
 test('a guest\'s purchase (one item in the fields) works, and the phones see item changes', () => {
   const s = setup();
   const secret = s.env.call('getCar', { token: s.sam, id: s.car.id }).data.car.guestSecret;
