@@ -209,17 +209,15 @@
     }
     var initials = user.name.split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w.charAt(0).toUpperCase(); }).join('') || '?';
     var refreshRow = menuRow('Refresh all app data', { onClick: function () { if (window.FleetSync) FleetSync.refreshAll(); } });
-    // Android app only: open the phone's "Open by default" page, so links to Fleet Manager open in this app (it may not open from here)
-    var linksResult = el('p', { class: 'section-note', hidden: true });
-    var androidApp = /Android/i.test(navigator.userAgent || '') && ((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true);
-    var linksRow = androidApp ? menuRow('Open Fleet Manager links in this app', { onClick: function () {
-      linksResult.hidden = true;
-      Views.openLinksSetting(function (opened) {
-        if (opened) return;
-        linksResult.hidden = false;
-        linksResult.textContent = 'Your phone did not open that screen from here. Please go to ' + Views.linksSettingText;
-      });
-    } }) : null;
+    // "Edit my name" is a row like the others; it opens the name form just below the list
+    var nameBox = el('div', { class: 'name-box', hidden: true }, [msg, form]);
+    var nameRow = menuRow('Edit my name', { onClick: function () {
+      nameBox.hidden = !nameBox.hidden;
+      nameRow.setAttribute('aria-expanded', nameBox.hidden ? 'false' : 'true');
+      nameRow.classList.toggle('open', !nameBox.hidden);
+      if (!nameBox.hidden) { name.focus(); }
+    } });
+    nameRow.setAttribute('aria-expanded', 'false');
     root.replaceChildren(el('section', { class: 'card narrow' }, [
       el('div', { class: 'me-head' }, [
         el('div', { class: 'me-avatar', 'aria-hidden': 'true', text: initials }),
@@ -227,13 +225,12 @@
       ]),
       el('div', { class: 'menu-list' }, [
         refreshRow,
-        linksRow,
+        nameRow,
         menuRow('Diagnostics', { href: '#/diag' }),
         menuRow('Report a bug or request a feature', { href: '#/feedback' }),
         menuRow('Sign out', { danger: true, onClick: function () { FleetApp.signOut(); } }),
       ]),
-      linksResult,
-      el('details', { class: 'copy-section' }, [el('summary', { text: 'Edit my name' }), msg, form]),
+      nameBox,
       el('h2', { text: 'My cars' }),
       el('p', { class: 'muted', text: 'The cars you own or look after.' }),
       mine,

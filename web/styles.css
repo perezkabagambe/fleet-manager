@@ -925,3 +925,8 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .readout-items { margin: 4px 0 6px; font-size: 0.95rem; }
 
 .btn.draft-btn { font-size: 0.95rem; padding-left: 10px; padding-right: 10px; }
+
+/* "Edit my name" opens its form under the menu list */
+.name-box { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; }
+.name-box[hidden] { display: none; }
+.menu-row.open .menu-chev { transform: rotate(90deg); }
