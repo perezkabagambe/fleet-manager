@@ -287,15 +287,11 @@
     }
 
     function row(e) {
-      // One line of details under the title: the date, then (not for a purchase) the mileage and the garage with a pin.
-      // A line that is too long is cut off with "…" rather than wrapping.
-      var bits = [el('span', { text: dateText(e.date) })];
-      if (e.type !== 'Purchase') {
-        if (e.mileage !== null) bits.push(el('span', { text: mileageText(e, car) }));
-        if (e.vendor) bits.push(el('span', { class: 'entry-garage' }, [pinIcon(), document.createTextNode(e.vendor)]));
-      }
-      var details = [];
-      bits.forEach(function (n, i) { if (i) details.push(document.createTextNode(' · ')); details.push(n); });
+      // Under the title: the date and mileage on one line, the garage (with a pin) on the next. A line that is too long
+      // is cut off with "…" rather than wrapping. A purchase shows only its date (and its status below).
+      var dm = [dateText(e.date)];
+      if (e.type !== 'Purchase' && e.mileage !== null) dm.push(mileageText(e, car));
+      var showGarage = e.type !== 'Purchase' && !!e.vendor;
       var tags = [];
       if (e.type === 'Issue') tags.push(el('span', { class: 'chip st-' + e.status.toLowerCase().replace(/[^a-z]/g, ''), text: e.status }));
       if (e.type === 'Purchase') tags.push(el('span', { class: 'chip ' + (e.stockStatus === 'In stock' ? 'active' : e.stockStatus === 'Fitted' ? 'sold' : 'pending'), text: e.stockStatus }));
@@ -312,7 +308,8 @@
         // the title, one line of details, then the status tags: each on a single line
         el('div', { class: 'entry-main' }, [
           el('div', { class: 'entry-title', text: e.title }),
-          el('div', { class: 'muted small-text entry-ref-line' }, details),
+          el('div', { class: 'muted small-text entry-ref-line', text: dm.join(' · ') }),
+          showGarage ? el('div', { class: 'muted small-text entry-garage-line' }, [pinIcon(), document.createTextNode(e.vendor)]) : null,
           // the status tags on the left, and the price in the bottom right corner
           el('div', { class: 'entry-foot' }, [
             el('div', { class: 'entry-foot-tags' }, (editing ? [typeChip(e.type, true)] : []).concat(tags)),

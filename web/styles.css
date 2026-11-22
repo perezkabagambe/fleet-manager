@@ -761,3 +761,11 @@ details.collapsible:has(.bin-card) { border-style: dashed; background: var(--bg)
 .entry-line.is-editing .entry-foot { display: block; }
 .entry-line.is-editing .entry-foot-tags { flex-wrap: wrap; }
 .entry-line.is-editing .entry-cost { display: block; text-align: right; margin-top: 4px; }
+
+/* log rows: title, then date and mileage, then the garage, then the tags and price */
+.entry-line:not(.is-editing) .entry-lead { grid-row: 1 / span 4; }
+.entry-line:not(.is-editing) .entry-garage-line { grid-column: 2; grid-row: 3; margin-top: 1px; }
+.entry-line:not(.is-editing) .entry-foot { grid-row: 4; }
+.entry-garage-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.72rem; line-height: 1.35; }
+.entry-garage-line .pin { display: inline-block; vertical-align: -1px; margin-right: 3px; line-height: 0; }
+.entry-line .entry-ref-line { font-size: 0.72rem; }
