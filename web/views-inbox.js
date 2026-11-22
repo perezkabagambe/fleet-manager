@@ -1,4 +1,4 @@
-// The receipt Inbox: add a photo or PDF of a receipt, see what is waiting for review, check what the AI read from it,
+// The AI Inbox: add a photo or PDF of a receipt, see what is waiting for review, check what the AI read from it,
 // and send it to the normal entry form (pre-filled) to be corrected and saved. Nothing is added to a car by itself.
 (function () {
   'use strict';
@@ -58,7 +58,7 @@
       el('div', { class: 'attach-title', text: 'Checking a receipt' }),
       el('p', { class: 'section-note', text: 'The boxes below were filled in from it by the AI. Check them against the receipt and correct anything that is wrong. When you save, the receipt is attached to the entry.' }),
       mismatch ? UI.notice('warn', mismatch) : null,
-      receipt.duplicateOf ? UI.notice('warn', 'This looks like the same order as another receipt in the Inbox. Check it has not been added already.') : null,
+      receipt.duplicateOf ? UI.notice('warn', 'This looks like the same order as another receipt in the AI Inbox. Check it has not been added already.') : null,
       viewer(receipt, function (e) { box.replaceChildren(UI.notice('error', UI.errorText(e))); }),
       box,
     ]);
@@ -72,14 +72,14 @@
     var recentBox = el('div');
     var fileBox = el('div');
     root.replaceChildren(el('section', { class: 'card' }, [
-      el('div', { class: 'page-head' }, [el('h1', { text: 'Receipt Inbox' })]),
+      el('div', { class: 'page-head' }, [el('h1', { text: 'AI Inbox' })]),
       el('p', { class: 'section-note', text: 'Receipts waiting to be checked. Nothing is added to a vehicle\'s log until someone has looked at it and saved it.' }),
       msg, fileBox, listBox, recentBox,
     ]));
 
     var cars = [];
     var reading = true;
-    FleetApp.setBanner({ title: 'Receipt Inbox', icon: 'inbox', action: null });
+    FleetApp.setBanner({ title: 'AI Inbox', icon: 'inbox', action: null });
     var flash = FleetApp.takeFlash();
     if (flash) msg.append(UI.notice(flash.kind === 'ok' ? 'ok' : 'info', flash.text)); // e.g. "3 receipts added"
 
@@ -204,27 +204,30 @@
 
       // Everything that was read from the receipt, including what was not found.
       var money = function (n) { return n === null || n === undefined ? '' : fmt().money(n, r.currency || 'GBP'); };
-      var rows = [];
-      function line(label, value, extra) {
-        rows.push(el('dt', { text: label }), el('dd', { class: value ? '' : 'muted', text: value || 'Not found on the receipt' }));
-        if (extra) rows.push(extra);
+      // What the AI read, as small tiles (a label above its value) rather than one long cramped list. A missing value says so.
+      var facts = [];
+      function fact(label, value, wide) {
+        facts.push(el('div', { class: 'fact' + (wide ? ' wide' : '') + (value ? '' : ' missing') }, [
+          el('div', { class: 'fact-label', text: label }),
+          el('div', { class: 'fact-value', text: value || 'Not found' }),
+        ]));
       }
       var carName = '';
       cars.forEach(function (c) { if (c.id === r.carId) carName = c.registration + ' · ' + c.make + ' ' + c.model; });
-      line('Looks like', KIND_LABEL[r.kind] || '');
-      line('Title it would get', d.title);
-      line('Shop or garage', r.vendor);
-      line('Date', r.date ? when(r.date) : '');
-      line('Currency', r.currency);
-      line('Total', money(r.total));
-      line('Order or invoice number', d.orderNumber);
-      line('Vehicle registration on it', d.registration);
-      line('Vehicle described', d.vehicle);
-      line('Mileage on it', d.mileage ? fmt().num(d.mileage) + ' mi' : '');
-      line('Work described', d.work);
-      line('Vehicle chosen', carName ? carName + (r.source === 'email' || d.registration ? '' : '') : '');
-      line('How sure the AI is', d.confidence);
-      line('AI summary', d.summary);
+      fact('Shop or garage', r.vendor);
+      fact('Date', r.date ? when(r.date) : '');
+      fact('Total', money(r.total));
+      fact('Order or invoice no.', d.orderNumber);
+      fact('Registration on it', d.registration);
+      fact('Mileage on it', d.mileage ? fmt().num(d.mileage) + ' mi' : '');
+      if (d.title) fact('Entry title it would get', d.title, true);
+      if (d.vehicle) fact('Vehicle described', d.vehicle, true);
+      if (d.work) fact('Work described', d.work, true);
+      if (d.summary) fact('AI summary', d.summary, true);
+      var readoutHead = el('div', { class: 'readout-head' }, [
+        KIND_LABEL[r.kind] ? el('span', { class: 'chip ' + (r.kind === 'Maintenance' ? 't-maintenance' : 't-purchase'), text: KIND_LABEL[r.kind] }) : el('span', { class: 'chip', text: 'Type not clear' }),
+        d.confidence ? el('span', { class: 'chip conf-' + d.confidence, text: 'AI confidence: ' + d.confidence }) : null,
+      ]);
 
       var itemList = d.items || [];
       var sum = 0;
@@ -254,7 +257,7 @@
         el('option', { value: 'Purchase', text: 'A parts purchase (receipt for things bought)', selected: r.kind !== 'Maintenance' }),
         el('option', { value: 'Maintenance', text: 'A garage invoice (work done on the vehicle)', selected: r.kind === 'Maintenance' }),
       ]);
-      var go = el('button', { type: 'button', class: 'btn block big', text: 'Fill in the entry from this receipt' });
+      var go = el('button', { type: 'button', class: 'btn block big draft-btn', text: 'Draft an entry from this receipt\u00a0→' });
       go.addEventListener('click', function () {
         if (!carSelect.value) { msg.replaceChildren(UI.notice('error', 'Choose which vehicle this is for.')); return; }
         FleetApp.go('/car/' + carSelect.value + '/add/' + kindSelect.value.toLowerCase(), { inbox: r.id });
@@ -290,15 +293,16 @@
       else if (r.status === 'Dismissed') done = el('p', { class: 'muted', text: 'This receipt was dismissed.' });
 
       root.replaceChildren(el('section', { class: 'card' }, [
-        fmt().backLink('#/inbox', 'Receipt Inbox'),
+        fmt().backLink('#/inbox', 'AI Inbox'),
         el('h1', { text: r.vendor || r.subject || 'Receipt' }),
         el('p', { class: 'muted small-text', text: (STATUS_LABEL[r.status] || r.status) + ' · ' + (r.source === 'email' ? 'Emailed' : 'Added') + (r.sender ? ' by ' + r.sender : '') + ' · ' + when(r.receivedAt) + ' · ' + r.filename + ' (' + kb(r.size) + ')' }),
         msg,
         r.note ? UI.notice(r.status === 'Pending' ? 'warn' : 'info', r.note) : null,
         viewer(r, function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); }),
-        r.status === 'New' ? null : el('h2', { text: 'What was read from it' }),
-        r.status === 'New' ? null : el('dl', { class: 'details' }, rows),
-        r.status === 'New' ? null : el('div', { class: 'field-label', text: 'Items' }),
+        r.status === 'New' ? null : el('h2', { text: 'What AI read from it' }),
+        r.status === 'New' ? null : readoutHead,
+        r.status === 'New' ? null : el('div', { class: 'facts' }, facts),
+        r.status === 'New' ? null : el('h3', { class: 'readout-items', text: 'Items' }),
         r.status === 'New' ? null : table,
         r.status === 'New' ? null : el('p', { class: 'muted small-text', text: itemsNote }),
         r.status === 'New' ? null : raw,
@@ -308,6 +312,7 @@
           el('div', { class: 'field' }, [el('label', { text: 'Which vehicle is it for?' }), carSelect]),
           el('div', { class: 'field' }, [el('label', { text: 'What kind of entry should it become?' }), kindSelect]),
           go,
+          el('p', { class: 'small-text muted center' , text: 'You\'ll have a chance to edit before saving the entry.' }),
           el('div', { class: 'btn-row' }, [again, dismiss]),
         ]) : null,
       ]));

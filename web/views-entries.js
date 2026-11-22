@@ -339,8 +339,8 @@
           return;
         }
         var text = r.status === 'Pending'
-          ? 'That does not look like a parts purchase receipt or a garage invoice, so it cannot be used here. It is saved in the Receipt Inbox.'
-          : (r.note || (r.status === 'Queued' ? 'AI could not read it just now. It is saved in the Receipt Inbox and will be read later.' : 'AI could not read it. It is saved in the Receipt Inbox, where you can fill in the entry by hand.'));
+          ? 'That does not look like a parts purchase receipt or a garage invoice, so it cannot be used here. It is saved in the AI Inbox.'
+          : (r.note || (r.status === 'Queued' ? 'AI could not read it just now. It is saved in the AI Inbox and will be read later.' : 'AI could not read it. It is saved in the AI Inbox, where you can fill in the entry by hand.'));
         FleetApi.call('getReceiptStatus').then(function (st) { drawAiPart(st.data, UI.notice('info', text)); }, function () { drawAiPart(status, UI.notice('info', text)); });
       }).catch(function (e) {
         FleetApi.call('getReceiptStatus').then(function (st) { drawAiPart(st.data, UI.notice('error', UI.errorText(e))); }, function () { drawAiPart(status, UI.notice('error', UI.errorText(e))); });

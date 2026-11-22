@@ -162,7 +162,8 @@
     back: '<path d="M15 6l-6 6l6 6"/>',
     plus: '<path d="M12 5l0 14"/><path d="M5 12l14 0"/>',
     car: '<path d="M5 17a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M15 17a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"/>',
-    inbox: '<path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"/><path d="M4 13h3l3 3h4l3 -3h3"/>',
+    // an inbox tray with a sparkle above it: things arrive, and AI reads them
+    inbox: '<path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-4"/><path d="M4 14h4.5l1.5 2.5h4l1.5 -2.5h4.5"/><path d="M11 2.5l1.3 3.2l3.2 1.3l-3.2 1.3l-1.3 3.2l-1.3 -3.2l-3.2 -1.3l3.2 -1.3z"/><path d="M18 3.5v3m-1.5 -1.5h3"/>',
     users: '<path d="M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/>',
     user: '<path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0"/><path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/>',
   };
@@ -179,7 +180,7 @@
   function defaultBanner(path) {
     var m;
     if (path === '/') return { title: 'Fleet', icon: 'car' };
-    if (path === '/inbox') return { title: 'Receipt Inbox', icon: 'inbox' };
+    if (path === '/inbox') return { title: 'AI Inbox', icon: 'inbox' };
     if (/^\/inbox\/[0-9a-f-]+$/.test(path)) return { title: 'Receipt', back: '#/inbox' };
     if (path === '/admin/users') return { title: 'Users', icon: 'users' };
     if ((m = /^\/admin\/users\/([0-9a-f-]+)\/cars$/.exec(path))) return { title: 'Their cars', back: '#/admin/users' };
@@ -271,7 +272,7 @@
     if (bar.hidden) { bar.replaceChildren(); return; }
     var here = currentTab(currentPath);
     var n = window.InboxUI ? InboxUI.getCount() : 0;
-    var tabs = [{ id: 'fleet', label: 'Fleet', icon: 'car', href: '#/' }, { id: 'inbox', label: 'Inbox', icon: 'inbox', href: '#/inbox', badge: n }];
+    var tabs = [{ id: 'fleet', label: 'Fleet', icon: 'car', href: '#/' }, { id: 'inbox', label: 'AI Inbox', icon: 'inbox', href: '#/inbox', badge: n }];
     if (FleetAuth.isAdmin()) tabs.push({ id: 'users', label: 'Users', icon: 'users', href: '#/admin/users' });
     tabs.push({ id: 'me', label: 'Me', icon: 'user', href: '#/profile' });
     bar.replaceChildren.apply(bar, tabs.map(function (t) {
@@ -486,7 +487,7 @@
       row('Receipts read today', h.reading.usedToday + ' of ' + h.reading.appLimit + ' (up to ' + h.reading.userLimit + ' per person)', h.reading.usedToday >= h.reading.appLimit ? 'bad' : '');
       row('Emails sent today', h.emails.adminNoticesToday + ' admin notices and ' + h.emails.confirmationsToday + ' confirmations (limit ' + h.emails.dailyLimit + ' of each)' + (h.emails.quotaLeft !== null ? '; ' + h.emails.quotaLeft + ' left in the mail allowance' : ''));
       var c = h.inbox.counts;
-      row('Inbox now', h.inbox.openTotal + ' open: ' + c.Pending + ' ready to check, ' + c.Queued + ' waiting to be read, ' + c.Unreadable + ' to fill in by hand, ' + c.New + ' not read yet');
+      row('AI Inbox now', h.inbox.openTotal + ' open: ' + c.Pending + ' ready to check, ' + c.Queued + ' waiting to be read, ' + c.Unreadable + ' to fill in by hand, ' + c.New + ' not read yet');
       if (h.inbox.oldestOpen) row('Oldest open receipt', ago(h.inbox.oldestOpen), Date.parse(h.now) - Date.parse(h.inbox.oldestOpen) > 3 * 86400000 ? 'bad' : '');
       row('Handled so far', c.Approved + ' approved, ' + c.Dismissed + ' dismissed');
       recent.replaceChildren.apply(recent, h.recent.length ? h.recent.map(function (r) {

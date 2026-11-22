@@ -388,7 +388,7 @@ function notifyReceiptWaiting_(row, exceptUserId) {
   const html = layout_('A receipt is waiting for review',
     '<p>' + esc_(what) + '.' + (row.sender ? ' Added by ' + esc_(row.sender) + '.' : '') + '</p>' +
     '<p>Nothing is added to a vehicle\'s log until someone has checked it in the app. You will be asked to sign in first.</p>' +
-    button_(url, 'Open the Inbox'));
+    button_(url, 'Open the AI Inbox'));
   const text = what + '.' + (row.sender ? ' Added by ' + row.sender + '.' : '') + '\nCheck it here (sign-in required):\n' + url;
   sendMail_(admins.map(function (a) { return a.email; }).join(','), 'A receipt is waiting for review', html, text);
 }

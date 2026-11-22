@@ -263,9 +263,9 @@ function notifyReceiptSender_(row, user) {
   const url = SITE_URL + '#/inbox';
   const html = layout_('Your receipt is waiting for approval',
     '<p>Hi ' + esc_(user.name) + ',</p>' +
-    '<p>' + esc_(what) + ' It is now in the Inbox in Fleet Manager, waiting for someone to check it and add it to the vehicle\'s log. Nothing has been added yet.</p>' +
-    button_(url, 'Open the Inbox'));
-  const text = 'Hi ' + user.name + ',\n\n' + what + ' It is now in the Inbox in Fleet Manager, waiting for someone to check it and add it to the vehicle\'s log. Nothing has been added yet.\n' + url;
+    '<p>' + esc_(what) + ' It is now in the AI Inbox in Fleet Manager, waiting for someone to check it and add it to the vehicle\'s log. Nothing has been added yet.</p>' +
+    button_(url, 'Open the AI Inbox'));
+  const text = 'Hi ' + user.name + ',\n\n' + what + ' It is now in the AI Inbox in Fleet Manager, waiting for someone to check it and add it to the vehicle\'s log. Nothing has been added yet.\n' + url;
   sendMail_(user.email, 'Your receipt is waiting for approval', html, text);
 }
 
@@ -275,9 +275,9 @@ function notifyReceiptQueued_(row, user) {
   const url = SITE_URL + '#/inbox';
   const html = layout_('Your receipt will be read tomorrow',
     '<p>Hi ' + esc_(user.name) + ',</p>' +
-    '<p>We received your receipt, but the daily limit for reading receipts automatically has been reached. It is saved in the Inbox and will be read automatically tomorrow. We will email you again when it has been read and is waiting for approval.</p>' +
-    '<p>You do not need to send it again.</p>' + button_(url, 'Open the Inbox'));
-  const text = 'Hi ' + user.name + ',\n\nWe received your receipt, but the daily limit for reading receipts automatically has been reached. It is saved in the Inbox and will be read automatically tomorrow. We will email you again when it has been read and is waiting for approval. You do not need to send it again.\n' + url;
+    '<p>We received your receipt, but the daily limit for reading receipts automatically has been reached. It is saved in the AI Inbox and will be read automatically tomorrow. We will email you again when it has been read and is waiting for approval.</p>' +
+    '<p>You do not need to send it again.</p>' + button_(url, 'Open the AI Inbox'));
+  const text = 'Hi ' + user.name + ',\n\nWe received your receipt, but the daily limit for reading receipts automatically has been reached. It is saved in the AI Inbox and will be read automatically tomorrow. We will email you again when it has been read and is waiting for approval. You do not need to send it again.\n' + url;
   sendMail_(user.email, 'Your receipt will be read tomorrow', html, text);
 }
 
