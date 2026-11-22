@@ -223,7 +223,7 @@
   var openCards = { carId: '', keys: {} };
 
   /** Turn a card into a section that opens and closes. Its heading stays visible; `hint` is a short summary beside it. */
-  function collapsible(key, card, hint) {
+  function collapsible(key, card, hint, action) {
     if (!card) return null;
     var kids = Array.prototype.slice.call(card.childNodes);
     var heading = kids.filter(function (n) { return n.tagName === 'H2'; })[0];
@@ -231,6 +231,7 @@
     var summary = el('summary', {}, [
       heading || el('h2', { text: key }),
       hint ? el('span', { class: 'muted small-text collapse-hint', text: hint }) : null,
+      action ? el('span', { class: 'collapse-action' }, [action]) : null, // e.g. an Edit button beside the title (shown while the section is open)
     ]);
     var d = el('details', { class: 'card collapsible' }, [summary, el('div', { class: 'collapse-body' }, rest)]);
     d.open = !!openCards.keys[key];
@@ -372,9 +373,8 @@
         ]), car.odometer === null ? 'Not set' : num(car.odometer) + ' mi'),
         collapsible('Maintenance & Issues Log', EntryUI.historyCard(car, page && page.entries), page && page.entries ? countText(page.entries.length, 'entry', 'entries') : ''),
         collapsible('Reminders', RemindersUI.card(car, page && page.tasks), page && page.tasks ? reminderHint(page.tasks) : ''),
-        collapsible('Fluids, Bulbs & Specifications', el('section', { class: 'card' }, [
-          el('h2', { text: 'Fluids, Bulbs & Specifications' }),
-          el('div', { class: 'section-tools' }, [el('a', { class: 'btn small secondary section-edit', href: '#/car/' + car.id + '/fluids', text: 'Edit', 'aria-label': 'Edit the fluids, bulbs and specifications' })]),
+        collapsible('Fluids & Specs', el('section', { class: 'card' }, [
+          el('h2', { text: 'Fluids & Specs' }),
           el('div', { class: 'catalogue' }, car.partsouqUrl
             ? [el('a', { class: 'btn small secondary', href: car.partsouqUrl, target: '_blank', rel: 'noopener noreferrer', text: 'Parts catalogue: ' + hostOf(car.partsouqUrl) })]
             : [el('span', { class: 'muted', text: 'No parts catalogue link yet. Tap Edit car to add one.' })]),
@@ -383,7 +383,7 @@
           fluidRows.length ? el('ul', { class: 'fluids' }, fluidRows) : (bulbRows.length ? null : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' })),
           bulbRows.length ? el('h3', { class: 'spec-group kind-bulb', text: '💡 Bulbs' }) : null,
           bulbRows.length ? el('ul', { class: 'fluids' }, bulbRows) : null,
-        ])),
+        ]), '', el('a', { class: 'btn small secondary section-edit', href: '#/car/' + car.id + '/fluids', text: 'Edit', 'aria-label': 'Edit the fluids, bulbs and specifications' })),
         collapsible('Documents', DocumentsUI.card(car, page && page.documents), page && page.documents ? countText(page.documents.length, 'document', 'documents') : ''),
         collapsible('Costs', EntryUI.costsCard(car, page && page.costs)),
         collapsible('Guest access', GuestUI.card(car), car.guestEnabled ? 'On' : 'Off'),

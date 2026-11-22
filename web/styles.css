@@ -1004,3 +1004,8 @@ body.selecting #app { padding-bottom: 110px; }
 .filter-tile.on.ft-compliance { background: var(--accent); color: #fff; }
 .has-compliance .filter-tile.on.ft-all { background: var(--muted); color: #fff; }
 .filter-tile:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* an action (Edit) beside a collapsible section's title: pushed right, and only while the section is open */
+details.collapsible > summary .collapse-action { margin-left: auto; display: flex; align-items: center; }
+details.collapsible:not([open]) > summary .collapse-action { display: none; }
+details.collapsible > summary .collapse-action + .collapse-hint, details.collapsible > summary .collapse-hint + .collapse-action { margin-left: 8px; }
