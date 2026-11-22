@@ -200,6 +200,52 @@
         return api;
       },
       spacer: function (h) { y += h; return api; },
+      /** Is the next thing drawn at the very top of a page? */
+      atTop: function () { return y <= MARGIN + 1; },
+      /**
+       * A heading band for one entry: a soft tint across the page, a darker stripe at its left edge, the title in bold and a
+       * small label in capitals (the type) at the right. o: { text, label, tint, accent, size }. The label is words, so the
+       * band still reads clearly on a black and white printout.
+       */
+      banner: function (o) {
+        var size = o.size || 11.5;
+        var labelSize = 8;
+        var label = encode(String(o.label || '').toUpperCase());
+        var labelW = label ? textWidth(label, 'F2', labelSize) : 0;
+        var pad = 8;
+        var lines = wrap(encode(o.text), 'F2', size, PAGE_W - 2 * MARGIN - pad - 12 - labelW - pad);
+        var lh = size * 1.32;
+        var h = lines.length * lh + 9;
+        ensure(h + 4);
+        var top = PAGE_H - y - h;
+        page.ops.push(color(o.tint || [0.93, 0.94, 0.95]) + MARGIN + ' ' + top.toFixed(2) + ' ' + (PAGE_W - 2 * MARGIN) + ' ' + h.toFixed(2) + ' re f\n');
+        page.ops.push(color(o.accent || [0.3, 0.3, 0.3]) + MARGIN + ' ' + top.toFixed(2) + ' 3.5 ' + h.toFixed(2) + ' re f\n');
+        lines.forEach(function (ln, i) { put(ln, 'F2', size, MARGIN + pad + 3.5, y + 4.5 + size + i * lh - 1.5, [0.08, 0.08, 0.08]); });
+        if (label) put(label, 'F2', labelSize, PAGE_W - MARGIN - pad - labelW, y + 4.5 + size - 1.5, o.accent || [0.3, 0.3, 0.3]);
+        y += h + 4;
+        return api;
+      },
+      /**
+       * Draw something that should stay on one page. If it runs over onto the next page and it did not start at the top of a
+       * page, it is drawn again on a fresh page instead (an entry longer than a whole page simply continues).
+       */
+      keepTogether: function (draw) {
+        var startPage = pages.length - 1;
+        var startOps = page.ops.length;
+        var startY = y;
+        var startImages = images.length;
+        draw();
+        if (pages.length - 1 > startPage && startY > MARGIN + 1) {
+          pages.length = startPage + 1;
+          page = pages[startPage];
+          page.ops.length = startOps;
+          images.length = startImages;
+          y = startY;
+          newPage();
+          draw();
+        }
+        return api;
+      },
       /** Start a new page now unless `h` points of space are left (keeps a heading with what follows it). */
       need: function (h) { ensure(h); return api; },
       /** One picture, scaled to fit within maxWidth x maxHeight, left aligned. */

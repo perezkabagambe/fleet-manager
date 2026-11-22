@@ -77,7 +77,12 @@
     var entries = input.entries || [];
     doc.heading('Maintenance & Issues Log', 1);
     doc.text(entries.length ? entries.length + (entries.length === 1 ? ' entry' : ' entries') + ', newest first.' : 'No entries.', { size: 10, color: [0.35, 0.4, 0.45], after: 4 });
-    entries.forEach(function (summary) { entryBlock(doc, summary, (input.details || {})[summary.id], input); });
+    entries.forEach(function (summary, i) {
+      doc.keepTogether(function () {
+        if (i > 0 && !doc.atTop()) { doc.spacer(8); doc.rule(); doc.spacer(4); } // a line and some space between entries (not at the top of a page)
+        entryBlock(doc, summary, (input.details || {})[summary.id], input);
+      });
+    });
 
     // ----- reminders -----
     doc.heading('Reminders', 1);
@@ -147,14 +152,21 @@
     return doc.finish({ title: 'Vehicle data export - ' + car.registration, date: exportedAt });
   }
 
+  // each type of entry has its own soft tint and a darker accent (the type is also written out in capitals)
+  var TYPE_STYLE = {
+    Maintenance: { tint: [0.90, 0.96, 0.92], accent: [0.10, 0.50, 0.29] },
+    Issue: { tint: [0.98, 0.91, 0.90], accent: [0.70, 0.15, 0.12] },
+    Purchase: { tint: [1.00, 0.96, 0.84], accent: [0.52, 0.36, 0.00] },
+    Compliance: { tint: [0.90, 0.95, 0.98], accent: [0.11, 0.45, 0.72] },
+  };
+
   function entryBlock(doc, summary, d, input) {
     var e = d ? d.entry : summary;
     var missing = input.missing || {};
     doc.need(90); // a heading never sits alone at the bottom of a page
-    doc.spacer(4);
-    doc.text((e.ref ? e.ref + '  ·  ' : '') + e.title, { bold: true, size: 11.5, after: 1 });
+    var style = TYPE_STYLE[e.type] || TYPE_STYLE.Maintenance;
+    doc.banner({ text: (e.ref ? e.ref + '   ' : '') + e.title, label: e.type, tint: style.tint, accent: style.accent });
     var kv = function (label, value) { if (value !== '' && value !== null && value !== undefined) doc.kv(label, value, { indent: 8, labelWidth: 105 }); };
-    kv('Type', e.type);
     kv('Date', day(e.date));
     kv('Mileage', e.mileage === null || e.mileage === undefined ? '' : num(e.mileage) + ' mi');
     kv('Vendor', e.vendor);
