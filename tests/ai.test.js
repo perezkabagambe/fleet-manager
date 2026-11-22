@@ -333,3 +333,29 @@ test('the person limit and the model can be changed with script properties', () 
   assert.equal(fill().ok, true);
   assert.match(env.state.geminiRequests[0].url, /models\/gemini-other:generateContent$/);
 });
+
+test('the model check lists what the key can use and tries the likely ones with a search, twice each (admins only)', () => {
+  const { env, sam } = setup();
+  env.seedUser({ name: 'Admin', email: 'admin@example.com', role: 'admin' });
+  const admin = env.signInAs('admin@example.com');
+  const LIST = { models: ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.8-pro', 'gemini-embedding-001', 'gemini-3.8-flash-preview-tts', 'gemma-3-27b'].map((n) => ({ name: 'models/' + n, supportedGenerationMethods: n.includes('embedding') ? ['embedContent'] : ['generateContent'] })) };
+  const grounded = { candidates: [{ content: { parts: [{ text: 'x' }] }, groundingMetadata: { webSearchQueries: ['q'] } }] };
+  env.state.gemini = (q) => {
+    if (!q.body) return { code: 200, body: LIST };
+    const m = modelOf(q);
+    if (m === 'gemini-3.8-flash') return { code: 200, body: grounded };
+    if (m === 'gemini-3.5-flash-lite') return SEARCH_ERR;
+    if (m === 'gemini-2.5-flash') return { code: 404, body: { error: { status: 'NOT_FOUND', message: 'no longer available' } } };
+    return { code: 200, body: { candidates: [{ content: { parts: [{ text: 'x' }] } }] } };
+  };
+  assert.equal(env.call('checkGeminiModels', { token: sam }).error, 'forbidden');
+  const r = env.call('checkGeminiModels', { token: admin });
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual(r.data.models, ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.8-pro'], 'no embeddings, speech or other families');
+  assert.equal(r.data.results[0].model, 'gemini-3.8-flash');
+  assert.deepEqual([r.data.results[0].answered, r.data.results[0].searched], [2, true]);
+  assert.match(r.data.lines.join('\n'), /✗ gemini-2\.5-flash: 0 of 2 answered.*NOT_FOUND/);
+  assert.match(r.data.lines.join('\n'), /GEMINI_SEARCH_FALLBACK_MODEL to e\.g\. gemini-3\.8-flash/);
+  assert.equal(JSON.stringify(r).includes(KEY), false);
+  assert.equal(env.state.geminiRequests.filter((q) => q.body).length, 8, 'two searches for each of four models');
+});

@@ -89,6 +89,7 @@ function actions_() {
     replaceReceiptSecret: { auth: 'admin', lock: true, fn: replaceReceiptSecret_ },
     getReceiptHealth: { auth: 'admin', fn: getReceiptHealth_ },
     inspectReceiptMail: { auth: 'admin', fn: inspectReceiptMail_ },
+    checkGeminiModels: { auth: 'admin', fn: checkGeminiModels_ },
     resetReceiptTimer: { auth: 'admin', fn: resetReceiptTimer_ },
     processReceiptsNow: { auth: 'admin', fn: processReceiptsNow_ }, // no script lock: it waits for outside services
     uploadReceipt: { auth: 'user', lock: true, fn: uploadReceipt_ },

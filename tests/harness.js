@@ -189,9 +189,10 @@ function createEnv() {
       sendEmail: (m) => { outbox.push(m); },
     },
     UrlFetchApp: {
+      fetchAll(reqs) { return reqs.map((r) => this.fetch(r.url, r)); },
       fetch: (url, opts) => {
         if (/generativelanguage\.googleapis\.com/.test(url)) { // Gemini: tests set state.gemini = (request) => ({ code, body })
-          const sent = { url, headers: opts.headers, body: JSON.parse(opts.payload) };
+          const sent = { url, headers: opts.headers, body: opts.payload ? JSON.parse(opts.payload) : null };
           state.geminiRequests.push(sent);
           if (!state.gemini) throw new Error('no Gemini mock');
           const g = state.gemini(sent);

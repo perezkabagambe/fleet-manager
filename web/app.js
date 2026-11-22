@@ -562,6 +562,15 @@
       })).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
     });
 
+    var models = el('button', { type: 'button', class: 'btn small secondary', text: 'Check which Gemini models work' });
+    models.addEventListener('click', function () {
+      msg.replaceChildren();
+      UI.busy(models, 'Trying the models…', FleetApi.call('checkGeminiModels', {}, { timeoutMs: 60000 }).then(function (r) {
+        report.hidden = false;
+        report.textContent = r.data.lines.join('\n');
+      })).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+    });
+
     // keep it fresh while the page is open
     timer = setInterval(function () { if (location.hash !== '#/diag' || !document.body.contains(list)) { clearInterval(timer); return; } load(); }, 30000);
     load();
@@ -569,7 +578,7 @@
       el('h2', { text: 'Receipts' }),
       el('p', { class: 'muted small-text', text: 'Is everything behind emailed and photographed receipts working? This refreshes every 30 seconds.' }),
       msg, list,
-      el('div', { class: 'btn-row' }, [now, inspect, reset, refresh]),
+      el('div', { class: 'btn-row' }, [now, inspect, models, reset, refresh]),
       report,
       addrBox,
       el('h3', { text: 'Latest receipts' }), recent,

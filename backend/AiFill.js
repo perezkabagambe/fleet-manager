@@ -384,3 +384,80 @@ function aiRefreshSpecs_(p, ctx) {
   delete out.details; // a refresh is about the specs only: the car's own details are left alone
   return out;
 }
+
+
+// ---------- which models can this key use? (Diagnostics, admins) ----------
+
+const GEMINI_LIST_URL = 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200';
+const GEMINI_PROBE_MAX = 8; // models tried with a search (two requests each)
+
+/**
+ * Lists the Gemini models the key can use and tries the most likely ones with Google Search, twice each, so an admin can see
+ * which still answer with search (and pick one for GEMINI_SEARCH_FALLBACK_MODEL). The key is never returned.
+ */
+function checkGeminiModels_() {
+  if (!aiKey_()) fail_('ai_not_set_up');
+  const headers = { 'x-goog-api-key': geminiKey_() };
+  let res;
+  try { res = UrlFetchApp.fetch(GEMINI_LIST_URL, { method: 'get', headers: headers, muteHttpExceptions: true }); } catch (e) { fail_('ai_unavailable'); }
+  const code = res.getResponseCode();
+  if (code === 401 || code === 403 || code === 400) fail_('ai_not_set_up');
+  if (code >= 400) fail_('ai_unavailable');
+  let list = [];
+  try { list = JSON.parse(res.getContentText()).models || []; } catch (e) { fail_('ai_unavailable'); }
+  const names = list.filter(function (m) {
+    return m && /^models\/gemini-/.test(m.name) && (m.supportedGenerationMethods || []).indexOf('generateContent') !== -1 &&
+      !/embed|tts|image|live|audio|imagen|veo|robot|computer-use|native|learnlm|aqa/i.test(m.name);
+  }).map(function (m) { return m.name.replace(/^models\//, ''); });
+  // newest first (higher version numbers sort first), flash models before the rest
+  const version = function (n) { const m = /gemini-(\d+(?:\.\d+)?)/.exec(n); return m ? Number(m[1]) : 0; };
+  names.sort(function (a, b) {
+    const fa = /flash/.test(a) ? 0 : 1, fb = /flash/.test(b) ? 0 : 1;
+    return fa - fb || version(b) - version(a) || (a < b ? -1 : 1);
+  });
+  const wanted = [aiModel_(), aiSearchFallbackModel_()].filter(function (n, i, all) { return n && all.indexOf(n) === i; });
+  const pick = names.slice(0, GEMINI_PROBE_MAX);
+  wanted.forEach(function (n) { if (names.indexOf(n) !== -1 && pick.indexOf(n) === -1) pick.push(n); });
+
+  const ask = {
+    contents: [{ role: 'user', parts: [{ text: 'Search the web and answer in one short sentence: what is the current Bank of England base rate?' }] }],
+    tools: [{ google_search: {} }],
+    generationConfig: { temperature: 0, maxOutputTokens: 200 },
+  };
+  const requests = [];
+  pick.forEach(function (n) {
+    for (let i = 0; i < 2; i++) requests.push({ url: GEMINI_BASE + encodeURIComponent(n) + ':generateContent', method: 'post', contentType: 'application/json', headers: headers, payload: JSON.stringify(ask), muteHttpExceptions: true });
+  });
+  let replies = [];
+  try { replies = UrlFetchApp.fetchAll(requests); } catch (e) { fail_('ai_unavailable'); }
+
+  const results = pick.map(function (n, i) {
+    let answered = 0, searched = false, error = '';
+    [replies[i * 2], replies[i * 2 + 1]].forEach(function (r) {
+      let json = null;
+      try { json = JSON.parse(r.getContentText()); } catch (e) { json = null; }
+      if (r.getResponseCode() < 400 && json) {
+        answered++;
+        const cand = json.candidates && json.candidates[0];
+        const g = cand && cand.groundingMetadata;
+        if (g && ((g.webSearchQueries || []).length || (g.groundingChunks || []).length)) searched = true;
+      } else if (!error) {
+        const err = (json && json.error) || {};
+        error = 'HTTP ' + r.getResponseCode() + (err.status ? ' ' + err.status : '') + ': ' + cleanStr_(err.message || '', 140);
+      }
+    });
+    return { model: n, answered: answered, searched: searched, error: error };
+  });
+  results.sort(function (a, b) { return (b.searched ? 1 : 0) - (a.searched ? 1 : 0) || b.answered - a.answered; });
+
+  const lines = ['Models this key can use (' + names.length + '): ' + (names.join(', ') || 'none'), '',
+    'Each of these was asked a question needing a web search, twice:'];
+  results.forEach(function (r) {
+    lines.push((r.searched && r.answered === 2 ? '✓ ' : r.searched || r.answered ? '~ ' : '✗ ') + r.model + ': ' + r.answered + ' of 2 answered' +
+      (r.searched ? ', searched the web' : r.answered ? ', answered without searching' : '') + (r.error ? ' (' + r.error + ')' : ''));
+  });
+  const good = results.filter(function (r) { return r.searched && r.answered === 2; }).map(function (r) { return r.model; });
+  lines.push('', good.length ? 'To use one for the second step, set the Script Property GEMINI_SEARCH_FALLBACK_MODEL to e.g. ' + good[0] + '.' : 'No model searched twice in a row, so searching is out of allowance for this key right now; lookups will use step 3 (no search).');
+  lines.push('This check used up a few requests of the allowance.');
+  return { models: names, results: results, lines: lines };
+}
