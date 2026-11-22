@@ -70,7 +70,8 @@
       open.addEventListener('click', function () { shut(); openInApp(); });
       blocks.push(el('div', { class: 'install-option' }, [el('strong', { text: 'It is installed on this phone' }), el('p', { class: 'small-text muted', text: 'Open this page in the Fleet Manager app.' }), open]));
     }
-    // 1. the web app
+    // 1. the web app (on Android only the Android app is offered, so the phone does not end up with both)
+    var apkOnly = android && !!cfg.androidApkUrl;
     var webKids = [el('strong', { text: ios ? 'Add it to your Home Screen' : 'Install the web app' })];
     if (deferred) {
       var go = el('button', { type: 'button', class: 'btn', text: 'Install' });
@@ -81,12 +82,12 @@
     } else {
       webKids.push(el('p', { class: 'small-text', text: 'Open your browser menu (⋮) and choose Install app, or Add to Home screen.' }));
     }
-    blocks.push(el('div', { class: 'install-option' }, webKids));
+    if (!apkOnly) blocks.push(el('div', { class: 'install-option' }, webKids));
     // 2. the Android app (not for iPhones)
     if (android && cfg.androidApkUrl) {
       blocks.push(el('div', { class: 'install-option' }, [
         el('strong', { text: 'Download the Android app' }),
-        el('p', { class: 'small-text muted', text: 'An APK file. If your phone asks, allow installing from your browser.' }),
+        el('p', { class: 'small-text muted', text: 'The best way to use Fleet Manager on Android. If you added Fleet Manager to your home screen before, remove that shortcut first. If your phone asks, allow installing from your browser.' }),
         el('a', { class: 'btn', href: cfg.androidApkUrl, rel: 'noopener', text: 'Download the APK' }),
       ]));
     }

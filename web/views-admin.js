@@ -28,12 +28,34 @@
         }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); window.scrollTo(0, 0); });
       });
     });
+    // Tell everyone about the Android app by email (a test to yourself first is the safe way)
+    var announceMsg = el('div');
+    var testBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Send me a test' });
+    var allBtn = el('button', { type: 'button', class: 'btn small', text: 'Email everyone' });
+    function announce(testOnly, btn) {
+      announceMsg.replaceChildren();
+      UI.busy(btn, 'Sending…', FleetApi.call('sendAppAnnouncement', { testOnly: testOnly }, { timeoutMs: 170000 })).then(function (r) {
+        var d = r.data;
+        announceMsg.replaceChildren(UI.notice(d.sent === d.total ? 'ok' : 'error', testOnly ? 'A test was sent to you. Check your inbox, and your spam folder.'
+          : 'Sent to ' + d.sent + ' of ' + d.total + ' users.' + (d.sent < d.total ? ' The rest could not be sent.' : '')));
+      }).catch(function (e) { announceMsg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+    }
+    testBtn.addEventListener('click', function () { announce(true, testBtn); });
+    allBtn.addEventListener('click', function () {
+      UI.confirm('Email every approved user about the Android app? It goes from the app\'s email address, one personal email each.', { okLabel: 'Email everyone' }).then(function (yes) { if (yes) announce(false, allBtn); });
+    });
+    var announceBox = el('div', { class: 'form-section finish-zone' }, [
+      el('h2', { text: 'Tell users about the Android app' }),
+      el('p', { class: 'section-note', text: 'Asks Android users to remove the home screen shortcut and install the Android app. Send yourself a test first.' }),
+      announceMsg,
+      el('div', { class: 'btn-row' }, [testBtn, allBtn]),
+    ]);
     var signOutBox = el('div', { class: 'form-section finish-zone' }, [
       el('h2', { text: 'Sign everyone out' }),
       el('p', { class: 'section-note', text: 'Everyone, including you, is sent back to the sign-in page.' }),
       signOutBtn,
     ]);
-    root.replaceChildren(el('section', { class: 'card' }, [el('h1', { text: 'Users' }), msg, inviteBox, listBox, signOutBox]));
+    root.replaceChildren(el('section', { class: 'card' }, [el('h1', { text: 'Users' }), msg, inviteBox, listBox, announceBox, signOutBox]));
 
     // Invite someone by email: they get a link that signs them straight in.
     function inviteForm() {

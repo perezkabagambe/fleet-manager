@@ -82,3 +82,22 @@ function sendInviteEmail_(user, link, inviter) {
     link + '\n\nIf it has expired, enter this email address on the sign-in page at ' + SITE_URL + ' to get a new one.\nPlease do not forward this email: the link signs in as you.';
   return sendMail_(user.email, 'You\'re invited to Fleet Manager', html, text);
 }
+
+/** The announcement about the Android app (sent by an admin from the Users page). Plain and personal, and it links to the website, not to the file. */
+function sendAndroidAnnouncementEmail_(user) {
+  const html = layout_('Fleet Manager now has an Android app',
+    '<p>Hi ' + esc_(user.name) + ',</p>' +
+    '<p>Fleet Manager now has an Android app. It is the best way to use Fleet Manager on an Android phone: links to a car open straight in the app, and you can share a receipt or invoice from another app into the AI Inbox.</p>' +
+    '<p><strong>If you use Fleet Manager on an Android phone:</strong></p>' +
+    '<ol style="padding-left:20px"><li>Remove the Fleet Manager shortcut you added to your home screen earlier (touch and hold it, then choose Uninstall or Remove).</li>' +
+    '<li>Open the link below on your phone, tap <strong>Install app</strong>, then <strong>Download the APK</strong>.</li>' +
+    '<li>Open the downloaded file to install it. If your phone asks, allow installing from your browser. Then sign in with your email address as usual.</li></ol>' +
+    button_(SITE_URL, 'Get the Android app') +
+    '<p>If you use an iPhone or a computer, nothing changes. Keep using Fleet Manager as you do now.</p>');
+  const text = 'Hi ' + user.name + ',\n\nFleet Manager now has an Android app. It is the best way to use Fleet Manager on an Android phone: links to a car open straight in the app, and you can share a receipt or invoice from another app into the AI Inbox.' +
+    '\n\nIf you use Fleet Manager on an Android phone:\n1. Remove the Fleet Manager shortcut you added to your home screen earlier (touch and hold it, then choose Uninstall or Remove).' +
+    '\n2. Open ' + SITE_URL + ' on your phone, tap Install app, then Download the APK.' +
+    '\n3. Open the downloaded file to install it. If your phone asks, allow installing from your browser. Then sign in with your email address as usual.' +
+    '\n\nIf you use an iPhone or a computer, nothing changes. Keep using Fleet Manager as you do now.';
+  return sendMail_(user.email, 'Fleet Manager now has an Android app', html, text);
+}

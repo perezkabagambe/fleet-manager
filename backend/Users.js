@@ -115,3 +115,25 @@ function setUserRole_(p, ctx) {
     target.name + ' (' + target.email + '): ' + before.role + ' to ' + role, before, { role: role });
   return { user: summarizeUser_(Object.assign({}, target, { role: role })) };
 }
+
+const ANNOUNCE_GAP_MS = 30 * 60 * 1000; // a second full send within this time is refused (a double tap)
+
+/**
+ * Admin: email the Android app announcement. `testOnly` sends it to the admin alone; otherwise it goes to every approved user,
+ * one personal email each (never a visible list of everyone). Refused if there is not enough of today's email allowance left.
+ */
+function sendAppAnnouncement_(p, ctx) {
+  const test = p.testOnly === true || p.testOnly === 'true';
+  const users = test ? [ctx.user] : Db.all('Users').filter(function (u) { return !isTrue_(u.deleted) && u.status === 'Approved' && u.email; });
+  if (!users.length) fail_('not_found');
+  if (!test) {
+    const last = Number(props_().getProperty('ANNOUNCE_LAST') || 0);
+    if (last && Date.now() - last < ANNOUNCE_GAP_MS) fail_('announcement_recent');
+  }
+  if (MailApp.getRemainingDailyQuota() < users.length) fail_('mail_quota');
+  let sent = 0;
+  users.forEach(function (u) { if (sendAndroidAnnouncementEmail_(u)) sent++; });
+  if (!test && sent) props_().setProperty('ANNOUNCE_LAST', String(Date.now()));
+  audit_(ctx.user, test ? 'announce_test' : 'announce_all', 'User', '', 'Android app announcement ' + (test ? 'test sent to the admin' : 'sent to ' + sent + ' of ' + users.length + ' users'));
+  return { sent: sent, total: users.length, test: test };
+}
