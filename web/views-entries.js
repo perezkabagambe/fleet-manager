@@ -730,6 +730,16 @@
       var odoRow = el('label', { class: 'check', hidden: true }, [odoCheck, odoText]);
       function mileageField(withoutOffer) {
         var m = text('mileage', v.mileage === null || v.mileage === undefined ? '' : v.mileage, { inputmode: 'numeric', id: 'f-mileage' });
+        // A new entry starts with the car's current mileage in grey: it is only a suggestion. Clicking into the box accepts it
+        // (it turns into ordinary text you can edit); left alone, no mileage is saved.
+        if (!existing && car.odometer !== null && car.odometer !== undefined && m.value === '') {
+          m.value = String(car.odometer);
+          m.classList.add('suggested-value');
+          m._suggested = true;
+          var accept = function () { if (m._suggested) { m._suggested = false; m.classList.remove('suggested-value'); } };
+          m.addEventListener('focus', accept);
+          m.addEventListener('input', accept);
+        }
         // The car's odometer is offered a rise whenever the reading is higher than what it shows now.
         function check() {
           var reading = num0(m.value);
@@ -1071,6 +1081,7 @@
           'labourCurrency', 'otherCurrency', 'lumpCurrency'].forEach(function (k) {
           if (f[k]) fields[k] = f[k].value;
         });
+        if (f.mileage && f.mileage._suggested) fields.mileage = ''; // the grey suggestion was never accepted
         // the entry's main currency: for maintenance it follows the labour (or the invoice total)
         fields.currency = isJob ? (f.modeLump.checked ? f.lumpCurrency.value : f.labourCurrency.value) : currencySelect.value;
         if (isJob) fields.costMode = f.modeLump.checked ? 'lump' : 'itemised';

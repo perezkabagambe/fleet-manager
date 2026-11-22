@@ -780,3 +780,5 @@ details.collapsible:has(.bin-card) { border-style: dashed; background: var(--bg)
 .addr-row { border-bottom: 1px solid var(--border); padding: 8px 0; }
 .addr-row:last-child { border-bottom: 0; }
 .addr-row code { overflow-wrap: anywhere; font-size: 0.8rem; }
+
+input.suggested-value { color: var(--muted); }
