@@ -723,15 +723,20 @@
         }
         m.addEventListener('input', check);
         check();
+        // a small note under the box says what the vehicle's recorded mileage is now
+        var recorded = car.odometer !== null && car.odometer !== undefined
+          ? 'The vehicle\'s recorded mileage is ' + fmt.num(car.odometer) + ' mi.'
+          : 'No mileage is recorded for this vehicle yet.';
         return el('div', { class: 'field' }, [
           el('label', { for: 'f-mileage', text: 'Mileage (miles)' }),
           m,
+          el('div', { class: 'hint recorded-mileage', text: recorded }),
           withoutOffer ? null : odoRow,
         ]);
       }
 
-      // Issues and renewals: the date and the mileage share a line; the offer to update the odometer sits just below them.
-      if (type === 'Issue' || type === 'Compliance') {
+      // Issues, maintenance and renewals: the date and the mileage share a line; the offer to update the odometer sits just below them.
+      if (type !== 'Purchase') {
         var at = top.indexOf(dateField);
         top.splice(at, 1, el('div', { class: 'field-pair' }, [dateField, mileageField(true)]), odoRow);
       }
@@ -844,7 +849,7 @@
 
       // ----- maintenance: parts, labour, other costs -----
       function jobFields() {
-        var out = [UI.field('Garage or who did the work', text('vendor', v.vendor, { maxlength: '80' }), 'Optional.'), mileageField()];
+        var out = [UI.field('Garage or who did the work', text('vendor', v.vendor, { maxlength: '80' }), 'Optional.')]; // the mileage sits beside the date, near the top
 
         var issueSelect = null;
         var resolveCheck = null;
