@@ -134,7 +134,7 @@
     var msg = el('div');
     var grid = el('div', { class: 'car-list' });
     var deletedBox = el('div');
-    FleetApp.setBanner({ title: 'Fleet', icon: 'car', action: { href: '#/car/new', label: 'Add a car', icon: 'plus' } });
+    FleetApp.setBanner({ title: 'Fleet', icon: 'car', action: { href: '#/car/new', label: 'Add a car', text: 'Add car', icon: 'plus' } });
 
     // Shown once, in the installed Android app: how to make Fleet Manager links open straight in the app (a phone setting
     // that an app cannot switch on for itself, and that a downloaded app starts with switched off).

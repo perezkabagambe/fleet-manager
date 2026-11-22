@@ -218,7 +218,8 @@
     sub.hidden = !banner.subtitle;
     var kids = [];
     if (banner.action) {
-      var a = el('a', { class: 'bar-action', href: banner.action.href, 'aria-label': banner.action.label }, [icon(banner.action.icon || 'plus', 24)]);
+      // an action can carry a short visible label (action.text) beside its icon
+      var a = el('a', { class: 'bar-action' + (banner.action.text ? ' labelled' : ''), href: banner.action.href, 'aria-label': banner.action.label }, [icon(banner.action.icon || 'plus', banner.action.text ? 20 : 24), banner.action.text ? el('span', { class: 'bar-action-text', text: banner.action.text }) : null]);
       kids.push(a);
     }
     if (banner.share) {

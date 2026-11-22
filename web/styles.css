@@ -948,3 +948,7 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .install-dialog h2 { margin: 0 0 12px; }
 .install-option { margin: 0 0 14px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; }
 .install-option p { margin: 6px 0 10px; }
+
+/* a banner action with a visible label (Add car on the Fleet page) */
+.topbar .bar-action.labelled { gap: 6px; padding: 0 12px 0 10px; border: 1px solid rgba(255, 255, 255, 0.55); font-weight: 600; font-size: 0.9rem; }
+.topbar .bar-action-text { white-space: nowrap; }
