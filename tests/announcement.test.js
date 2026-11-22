@@ -40,10 +40,11 @@ test('everyone approved gets their own personal email, nobody else, and not twic
   assert.match(sam.body, /^Hi Sam,/);
   assert.match(sam.htmlBody, /Hi Sam,/);
   assert.match(sam.body, /Remove the Fleet Manager shortcut/);
-  assert.match(sam.body, /Download the APK/);
-  // it links to the website, never straight to the .apk file (mail filters distrust those)
-  assert.ok(sam.body.includes('https://perezkabagambe.github.io/fleet-manager/'));
-  assert.ok(!/\.apk/i.test(sam.body + sam.htmlBody));
+  // the button and the plain-text link both go straight to the app file
+  const apk = 'https://github.com/perezkabagambe/fleet-manager/releases/download/android-v1.2/FleetManager-1.2.apk';
+  assert.ok(sam.body.includes(apk));
+  assert.ok(sam.htmlBody.includes('href="' + apk + '"'));
+  assert.match(sam.htmlBody, /Download the Android app/);
   assert.equal(env.call('sendAppAnnouncement', { token: admin }).error, 'announcement_recent');
   env.advance(31 * 60 * 1000);
   assert.equal(env.call('sendAppAnnouncement', { token: env.signInAs('admin@example.com') }).ok, true);
