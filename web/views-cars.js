@@ -618,20 +618,19 @@
         var canAi = !!(status && status.available && left > 0);
         var kids = [heading, el('p', { class: 'muted', text: 'How would you like to add it?' })];
         if (errorNote) kids.push(errorNote);
-        kids.push(!status ? null : !status.available
-          ? el('p', { class: 'section-note', text: 'AI is not set up yet, so only the manual option is available. An administrator needs to add the Gemini key.' })
-          : left > 0
-            ? el('p', { class: 'section-note', text: 'You have ' + left + ' of ' + status.limit + ' AI lookups left today. Reading a log book uses one; each time you use the optional AI help in the manual option uses one too.' })
-            : el('p', { class: 'section-note', text: 'You have used all ' + status.limit + ' of your AI lookups for today. They come back tomorrow. You can still add a car manually, without AI.' }));
 
-        // option 1: the log book
+        // option 1: the log book, with its own note (including how many AI lookups are left)
+        var noteText = !status ? 'AI can get things wrong, so check every box before you save.'
+          : !status.available ? 'AI is not set up yet, so this option is not available.'
+          : left > 0 ? 'AI can get things wrong, so check every box and fill in anything missing before you save. ' + left + ' of ' + status.limit + ' AI lookups left today.'
+          : 'No AI lookups left today. They come back tomorrow.';
         var pickBtn = canAi
           ? Photos.fileButton('Choose the log book (PDF)', 'application/pdf', false, readBook)
           : el('button', { type: 'button', class: 'btn small secondary', disabled: true, text: 'Choose the log book (PDF)' });
         kids.push(el('div', { class: 'choice' }, [
           el('h2', { text: '1. Upload the vehicle log book' }),
-          el('p', { text: 'Upload a clear copy of the vehicle\'s log book (a PDF). AI reads it, fills in the key details and the technical details, and attaches that PDF to the new vehicle. It may take up to a minute to process.' }),
-          el('p', { class: 'section-note', text: 'AI can misread a document or get things wrong. Nothing is saved until you have looked it over: check every box carefully, fill in any key details it could not find (such as the odometer reading), check the technical details too, and then save, edit or add to it.' }),
+          el('p', { text: 'Upload a clear PDF of the log book. AI fills in the key and technical details and attaches the PDF. It may take up to a minute.' }),
+          el('p', { class: 'section-note', text: noteText }),
           el('div', { class: 'btn-row' }, [pickBtn]),
         ]));
 
