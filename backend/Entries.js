@@ -691,6 +691,28 @@ function deleteEntry_(p, ctx) {
   return { done: true, restorableDays: ENTRY_BIN_DAYS };
 }
 
+/**
+ * Admin only: delete several entries at once (each goes to the recycle bin, like a single delete). One that cannot be deleted
+ * (a purchase whose items were used in maintenance, say) is left alone and reported; the rest are still deleted.
+ */
+function deleteEntries_(p, ctx) {
+  const ids = (Array.isArray(p.ids) ? p.ids : []).map(function (x) { return cleanStr_(x, 64); }).filter(Boolean);
+  if (!ids.length) fail_('not_found');
+  if (ids.length > 100) fail_('too_many');
+  const failed = [];
+  let deleted = 0;
+  ids.forEach(function (id) {
+    try {
+      deleteEntry_({ id: id }, ctx);
+      deleted++;
+    } catch (e) {
+      if (!(e && e.apiError)) throw e; // a real fault is not hidden
+      failed.push({ id: id, error: e.apiError });
+    }
+  });
+  return { deleted: deleted, failed: failed, restorableDays: ENTRY_BIN_DAYS };
+}
+
 /** When a deleted entry was deleted (entries deleted before the bin existed use the time they were last changed). */
 function deletedAt_(e) { return Date.parse(e.deleted_at || e.updated_at) || 0; }
 

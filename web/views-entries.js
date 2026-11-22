@@ -249,16 +249,130 @@
         ]),
       ]);
       // On the right: the share symbol with the ID under it (and, in the link, the price in the bottom right corner).
-      return el('div', { class: 'entry-line' }, [
-        link,
-        el('div', { class: 'share-stack' }, [
+      // While selecting, a tick box takes its place and tapping the row ticks it instead of opening the entry.
+      var side;
+      if (selecting) {
+        var tick = el('input', { type: 'checkbox', class: 'entry-select', 'aria-label': 'Select ' + e.title });
+        tick.checked = !!selected[e.id];
+        tick.addEventListener('change', function () { setSelected(e.id, tick.checked); });
+        side = el('div', { class: 'select-box' }, [tick]);
+        link.addEventListener('click', function (ev) { ev.preventDefault(); setSelected(e.id, !selected[e.id]); });
+      } else {
+        side = el('div', { class: 'share-stack' }, [
           UI.shareButton(fmt.entryUrl(car.id, e.id), { title: e.title + ' · ' + car.registration, aria: 'Share ' + e.title }),
           e.ref ? refTiny(e.ref) : null,
-        ]),
-      ]);
+        ]);
+      }
+      var line = el('div', { class: 'entry-line' + (selecting ? ' is-selecting' : '') + (selecting && selected[e.id] ? ' selected' : '') }, [link, side]);
+      lines[e.id] = line;
+      return line;
     }
 
+    // ---------- choosing several entries to share or delete ----------
+    var selecting = false;
+    var selected = {};   // entry id -> true
+    var lines = {};      // entry id -> its row
+    var selectBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Select' });
+    var selectTools = el('div', { class: 'select-tools' }, [selectBtn]);
+    var selectInfo = el('span', { class: 'select-info' });
+    var selectMsg = el('div', { class: 'select-msg small-text', hidden: true });
+    var selectAll = el('button', { type: 'button', class: 'btn small secondary', text: 'Select all' });
+    var shareSel = el('button', { type: 'button', class: 'btn small', text: 'Share' });
+    var deleteSel = el('button', { type: 'button', class: 'btn small danger-outline', text: 'Delete' });
+    var selectBar = el('div', { class: 'select-bar', role: 'region', 'aria-label': 'Selected entries' }, [
+      selectMsg,
+      el('div', { class: 'select-bar-row' }, [selectInfo, selectAll, shareSel, FleetAuth.isAdmin() ? deleteSel : null]),
+    ]);
+    function shownEntries() { return data.filter(function (e) { return filter === 'All' || e.type === filter; }); }
+    function pickedEntries() { return data.filter(function (e) { return selected[e.id]; }); }
+    function updateSelectUi() {
+      var n = pickedEntries().length;
+      selectInfo.textContent = n ? n + ' selected' : 'Tap entries to select';
+      shareSel.disabled = !n;
+      deleteSel.disabled = !n;
+      var shown = shownEntries();
+      selectAll.textContent = shown.length && shown.every(function (e) { return selected[e.id]; }) ? 'None' : 'Select all';
+    }
+    function setSelected(id, on) {
+      if (on) selected[id] = true; else delete selected[id];
+      var line = lines[id];
+      if (line) { line.classList.toggle('selected', !!on); var t = line.querySelector('.entry-select'); if (t) t.checked = !!on; }
+      selectMsg.hidden = true;
+      updateSelectUi();
+    }
+    function enterSelect() {
+      selecting = true;
+      selected = {};
+      selectBtn.textContent = 'Done';
+      document.body.append(selectBar);
+      document.body.classList.add('selecting');
+      positionBar();
+      render();
+    }
+    function leaveSelect() {
+      selecting = false;
+      selected = {};
+      selectBtn.textContent = 'Select';
+      selectBar.remove();
+      document.body.classList.remove('selecting');
+      selectMsg.hidden = true;
+      render();
+    }
+    function positionBar() { selectBar.style.bottom = (document.getElementById('tabbar') && !document.getElementById('tabbar').hidden ? document.getElementById('tabbar').offsetHeight : 0) + 'px'; }
+    window.addEventListener('resize', positionBar);
+    // the bar belongs to this card: when the page changes it goes too
+    function dropBarIfGone() {
+      if (document.body.contains(list)) return;
+      selectBar.remove();
+      document.body.classList.remove('selecting');
+      window.removeEventListener('hashchange', dropBarIfGone);
+      window.removeEventListener('fleet:data-updated', dropBarIfGone);
+      window.removeEventListener('resize', positionBar);
+    }
+    window.addEventListener('hashchange', function () { setTimeout(dropBarIfGone, 0); });
+    window.addEventListener('fleet:data-updated', function () { setTimeout(dropBarIfGone, 0); });
+    selectBtn.addEventListener('click', function () { if (selecting) leaveSelect(); else enterSelect(); });
+    selectAll.addEventListener('click', function () {
+      var shown = shownEntries();
+      var all = shown.length && shown.every(function (e) { return selected[e.id]; });
+      shown.forEach(function (e) { setSelected(e.id, !all); });
+    });
+    shareSel.addEventListener('click', function () {
+      var picked = pickedEntries();
+      if (!picked.length) return;
+      var text = car.registration + ' · ' + picked.length + (picked.length === 1 ? ' entry' : ' entries') + '\n\n' + picked.map(function (e) {
+        return e.title + (e.ref ? ' (' + e.ref + ')' : '') + '\n' + fmt.entryUrl(car.id, e.id);
+      }).join('\n\n');
+      function copied() {
+        UI.copyText(text).then(function (ok) {
+          if (!ok) { window.prompt('Copy these links:', text); return; }
+          selectMsg.textContent = 'The links were copied.';
+          selectMsg.hidden = false;
+        });
+      }
+      if (navigator.share) {
+        navigator.share({ title: car.registration + ' entries', text: text }).catch(function (e) { if (!(e && e.name === 'AbortError')) copied(); });
+      } else copied();
+    });
+    deleteSel.addEventListener('click', function () {
+      var picked = pickedEntries();
+      if (!picked.length) return;
+      UI.confirm('Delete ' + (picked.length === 1 ? 'this entry' : picked.length + ' entries') + '? ' + (picked.length === 1 ? 'It goes' : 'They go') + ' to the recycle bin and can be restored for 30 days.', { okLabel: 'Delete', danger: true }).then(function (yes) {
+        if (!yes) return;
+        selectMsg.hidden = true;
+        UI.busy(deleteSel, 'Deleting…', FleetApi.call('deleteEntries', { ids: picked.map(function (e) { return e.id; }) }, { timeoutMs: 120000 })).then(function (r) {
+          var d = r.data;
+          var text = d.deleted + (d.deleted === 1 ? ' entry' : ' entries') + ' deleted.' + (d.failed.length ? ' ' + d.failed.length + ' could not be deleted (a purchase whose items were used in maintenance has to stay).' : '');
+          selectBar.remove();
+          document.body.classList.remove('selecting');
+          dataChanged(car.id, text);
+        }).catch(function (e) { selectMsg.textContent = UI.errorText(e); selectMsg.hidden = false; });
+      });
+    });
+
     function render() {
+      lines = {};
+      selectTools.hidden = !data.length;
       chips.replaceChildren();
       var counts = {};
       data.forEach(function (e) { counts[e.type] = (counts[e.type] || 0) + 1; });
@@ -271,6 +385,7 @@
         });
       }
       var shown = data.filter(function (e) { return filter === 'All' || e.type === filter; });
+      if (selecting) updateSelectUi();
       list.replaceChildren.apply(list, shown.length ? shown.map(row)
         : [el('p', { class: 'muted', text: data.length ? 'Nothing of that kind yet.' : 'Nothing recorded yet. Add the first entry above.' })]);
     }
@@ -356,7 +471,7 @@
       el('h2', { text: 'Maintenance & Issues Log' }),
       el('a', { class: 'btn block big', href: '#/car/' + car.id + '/add', text: 'Add entry' }),
       receiptHint,
-      chips, list,
+      chips, selectTools, list,
     ]);
   }
 

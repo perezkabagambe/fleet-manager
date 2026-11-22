@@ -958,3 +958,17 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .entry-line:not(.is-editing) { position: relative; }
 .entry-line:not(.is-editing) .entry-row::after { content: ''; position: absolute; inset: 0; }
 .entry-line:not(.is-editing) .share-stack { position: relative; z-index: 2; }
+
+/* choosing several entries to share or delete */
+.select-tools { display: flex; justify-content: flex-end; margin: 4px 0 6px; }
+.select-tools[hidden] { display: none; }
+.entry-line.is-selecting.selected { background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 10px; }
+.entry-line:not(.is-editing) .select-box { grid-column: 3; grid-row: 1 / span 2; position: relative; z-index: 2; padding: 2px 4px 0 0; }
+.entry-select { width: 24px; height: 24px; accent-color: var(--accent); }
+.select-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -4px 14px rgba(15, 25, 35, 0.12); padding: 10px var(--gutter); }
+.select-bar-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.select-info { flex: 1 0 100%; font-weight: 600; font-size: 0.9rem; }
+.select-bar-row .btn { flex: 1 1 0; text-align: center; justify-content: center; }
+.select-msg { margin: 0 0 6px; color: var(--muted); }
+.select-msg[hidden] { display: none; }
+body.selecting #app { padding-bottom: 110px; }

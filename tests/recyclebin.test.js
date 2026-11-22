@@ -127,3 +127,24 @@ test('a phone is told the car changed when an entry is deleted and again when it
   assert.notEqual(r1, r2);
   assert.notEqual(r0, r2); // the version number moved on
 });
+
+test('several entries can be deleted at once (admins); one that cannot be is reported and the rest still go to the bin', () => {
+  const { env, admin, sam, car, entry, list, bin } = setup();
+  const a = entry('Issue', { title: 'A' }).data.entry;
+  const b = entry('Maintenance', { title: 'B', labourCost: '10', costMode: 'itemised' }).data.entry;
+  const keep = entry('Issue', { title: 'Keep' }).data.entry;
+  const p = entry('Purchase', { vendor: 'ECP' }, { items: [{ name: 'Pads', quantity: '2', unitCost: '30' }] }).data.entry;
+  const itemId = env.call('getEntry', { token: sam, id: p.id }).data.items[0].id;
+  entry('Maintenance', { title: 'Fit' }, { parts: [{ purchaseId: itemId, quantity: '1' }] }); // the purchase is now in use
+  assert.equal(env.call('deleteEntries', { token: sam, ids: [a.id] }).error, 'forbidden');
+  assert.equal(env.call('deleteEntries', { token: admin, ids: [] }).error, 'not_found');
+  const r = env.call('deleteEntries', { token: admin, ids: [a.id, b.id, p.id, 'nope'] });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.data.deleted, 2);
+  assert.deepEqual(r.data.failed, [{ id: p.id, error: 'purchase_in_use' }, { id: 'nope', error: 'not_found' }]);
+  assert.equal(list().length, 3, 'Keep, the purchase that is in use, and the maintenance that used it');
+  assert.deepEqual(bin().entries.map((x) => x.title).sort(), ['A', 'B']);
+  assert.ok(list().some((x) => x.id === keep.id));
+  // a restore brings one back
+  assert.equal(env.call('restoreEntry', { token: admin, id: a.id }).ok, true);
+});
