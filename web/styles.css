@@ -853,3 +853,6 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .car-row:hover .reg, .car-row:focus-visible .reg { text-decoration: underline; }
 .car-row-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .has-tabs .footer .feedback-link, .has-tabs .footer a[href="#/diag"] { display: none; }
+
+/* signed in: the small print (version, Privacy, Terms) is at the bottom of the Me page only */
+.has-tabs:not(.on-me-page) .footer { display: none; }

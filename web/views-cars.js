@@ -662,7 +662,7 @@
       function aiAssist() {
         var box = el('div', { class: 'ai-box' });
         var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Fill in the rest with AI' });
-        var HINT = 'Enter the VIN if you have it: it is used first. Without a VIN, enter at least the make and model (the year, engine and registration help). AI looks the car up and fills the empty boxes. Its answers are not always right: you must check them.';
+        var HINT = 'Enter the VIN, or at least the make and model. AI fills the empty boxes, but it can be wrong: check what it adds.';
         var hint = el('div', { class: 'hint', text: HINT });
         var picker = el('div', { class: 'ai-matches' });
         var status = el('div', { class: 'ai-status' });

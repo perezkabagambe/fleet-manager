@@ -267,6 +267,7 @@
     var onGuestPage = GUEST_PATH.test(currentPath) || (!FleetAuth.hasSession());
     bar.hidden = !signedIn || onGuestPage;
     document.body.classList.toggle('has-tabs', !bar.hidden);
+    document.body.classList.toggle('on-me-page', !bar.hidden && currentPath === '/profile'); // the version line, Privacy and Terms live at the bottom of Me
     if (bar.hidden) { bar.replaceChildren(); return; }
     var here = currentTab(currentPath);
     var n = window.InboxUI ? InboxUI.getCount() : 0;
