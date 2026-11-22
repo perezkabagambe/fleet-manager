@@ -273,35 +273,46 @@
   // Email scanners often open links automatically. Nothing happens until the
   // person taps the button, so a scanner cannot use up the one-time link.
   Views.verify = function (ctx, root) {
+    // The link in the sign-in email (or an invitation) signs you in as soon as it opens: there is nothing to tap. If that
+    // does not work (the link was already used, or has expired, or the phone is offline) the page says so and offers a way on.
     var token = ctx.query.t || '';
-    var invited = ctx.query.i === '1'; // an invitation link signs in without a tap
+    var invited = ctx.query.i === '1';
     var msg = el('div');
-    var btn = el('button', { type: 'button', class: 'btn block', text: invited ? 'Join Fleet Manager' : 'Tap to sign in' });
+    var btn = el('button', { type: 'button', class: 'btn block', text: 'Try again', hidden: true });
+    var intro = el('p', { class: 'muted', text: 'Signing you in…' });
+    var heading = el('h1', { text: invited ? 'Welcome to Fleet Manager' : 'Signing in to Fleet Manager' });
     var card = el('section', { class: 'card narrow' }, [
-      el('h1', { text: invited ? 'Welcome to Fleet Manager' : 'Sign in to Fleet Manager' }),
-      el('p', { class: 'muted', text: invited ? 'Signing you in…' : 'Tap the button below to finish signing in on this device.' }),
-      msg, btn,
+      heading,
+      intro, msg, btn,
       el('p', { class: 'center' }, [el('a', { href: '#/login', text: 'Back to sign in' })]),
     ]);
     root.replaceChildren(card);
-    if (!token) { msg.append(UI.notice('error', UI.errorText({ code: 'invalid_or_expired' }))); btn.disabled = true; return; }
+    if (!token) { intro.hidden = true; msg.append(UI.notice('error', UI.errorText({ code: 'invalid_or_expired' }))); return; }
 
     var started = false;
     function go() {
       if (started) return;
       started = true;
       msg.replaceChildren();
-      UI.busy(btn, 'Signing in…', FleetApi.call('verifyLink', { token: token }))
+      btn.hidden = true;
+      intro.hidden = false;
+      FleetApi.call('verifyLink', { token: token })
         .then(function (r) { signedIn(r.data, ''); })
         .catch(function (e) {
           started = false;
-          if (invited && e && e.code === 'invalid_or_expired') {
-            msg.append(UI.notice('error', 'This invitation link has already been used or has expired. Enter your email address on the sign-in page and we will send you a new sign-in link.'));
-            btn.hidden = true;
-          } else msg.append(UI.notice('error', UI.errorText(e)));
+          intro.hidden = true;
+          if (e && e.code === 'invalid_or_expired') {
+            if (FleetAuth.hasSession()) { window.FleetApp.go('/'); return; } // the link was already used on this phone: you are in
+            heading.textContent = 'This link cannot be used';
+            msg.append(UI.notice('error', 'This sign-in link has already been used or has expired. Enter your email address on the sign-in page and we will send you a new one.'));
+          } else {
+            heading.textContent = 'Could not sign you in';
+            msg.append(UI.notice('error', UI.errorText(e)));
+            btn.hidden = false; // a problem that may pass (no connection, busy): try again
+          }
         });
     }
     btn.addEventListener('click', go);
-    if (invited) go();
+    go();
   };
 })();
