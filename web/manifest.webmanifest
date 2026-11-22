@@ -43,5 +43,11 @@
         }
       ]
     }
-  }
+  },
+  "related_applications": [
+    {
+      "platform": "play",
+      "id": "com.potentiamotus.fleetmanager"
+    }
+  ]
 }

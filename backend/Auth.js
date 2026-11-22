@@ -128,6 +128,21 @@ function revokeSessions_(userId) {
   });
 }
 
+/** Admin: sign every user out at once (the admin too). Their next request is refused and the app returns to the sign-in page. */
+function signOutAll_(p, ctx) {
+  const now = nowIso_();
+  let count = 0;
+  Db.all('Sessions').forEach(function (s) {
+    if (isTrue_(s.revoked)) return;
+    if (s.expires_at && String(s.expires_at) < now) return; // already over: nothing to switch off
+    Db.update('Sessions', s._row, { revoked: true });
+    cacheRemove_('sess:' + s.hash);
+    count++;
+  });
+  audit_(ctx.user, 'signout_all', 'User', '', 'Signed everyone out (' + count + ' session' + (count === 1 ? '' : 's') + ')');
+  return { done: true, sessions: count };
+}
+
 // ---------- public actions ----------
 
 /** Anyone can ask for an account. The response never reveals whether the email is known. */

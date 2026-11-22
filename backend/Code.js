@@ -30,6 +30,7 @@ function actions_() {
     logout: { auth: 'user', lock: true, fn: logout_ },
     listUsers: { auth: 'admin', fn: listUsers_ },
     setUserStatus: { auth: 'admin', lock: true, fn: setUserStatus_ },
+    signOutAll: { auth: 'admin', lock: true, fn: signOutAll_ },
     inviteUser: { auth: 'admin', lock: true, fn: inviteUser_ },
     setUserRole: { auth: 'admin', lock: true, fn: setUserRole_ },
     updateMyName: { auth: 'user', lock: true, fn: updateMyName_ },

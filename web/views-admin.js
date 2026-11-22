@@ -17,7 +17,23 @@
     var msg = el('div');
     var listBox = el('div', { class: 'stack' });
     var inviteBox = el('div');
-    root.replaceChildren(el('section', { class: 'card' }, [el('h1', { text: 'Users' }), msg, inviteBox, listBox]));
+    // Sign everyone out (the admin too): kept at the bottom of the page, behind a confirmation
+    var signOutBtn = el('button', { type: 'button', class: 'btn block danger-outline', text: 'Sign everyone out' });
+    signOutBtn.addEventListener('click', function () {
+      UI.confirm('Sign out every user, including you? Everyone has to sign in again.', { okLabel: 'Sign everyone out', danger: true }).then(function (yes) {
+        if (!yes) return;
+        msg.replaceChildren();
+        UI.busy(signOutBtn, 'Signing everyone out…', FleetApi.call('signOutAll', {}, { timeoutMs: 120000 })).then(function () {
+          FleetApp.signOut(); // this phone too: back to the sign-in page
+        }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); window.scrollTo(0, 0); });
+      });
+    });
+    var signOutBox = el('div', { class: 'form-section finish-zone' }, [
+      el('h2', { text: 'Sign everyone out' }),
+      el('p', { class: 'section-note', text: 'Everyone, including you, is sent back to the sign-in page.' }),
+      signOutBtn,
+    ]);
+    root.replaceChildren(el('section', { class: 'card' }, [el('h1', { text: 'Users' }), msg, inviteBox, listBox, signOutBox]));
 
     // Invite someone by email: they get a link that signs them straight in.
     function inviteForm() {

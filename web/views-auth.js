@@ -79,6 +79,9 @@
         cfg.googleClientId ? el('div', { class: 'or', text: 'or' }) : null,
         cfg.googleClientId ? google : null,
         el('p', { class: 'center' }, [el('span', { class: 'muted', text: 'New here? ' }), el('a', { href: '#/request', text: 'Request an account' })]),
+        // Android: the app can be downloaded from here (not for the installed app itself, nor iPhones)
+        /Android/i.test(navigator.userAgent || '') && !(window.InstallUI && InstallUI.standalone()) && cfg.androidApkUrl
+          ? el('p', { class: 'center' }, [el('a', { href: cfg.androidApkUrl, rel: 'noopener', text: 'Download the Android app' })]) : null,
       ].filter(Boolean));
       if (cfg.googleClientId) renderGoogle(google, msg, next);
     }

@@ -9,6 +9,8 @@ window.FLEET_CONFIG = {
   googleClientId: '',
   // The installed Android app (a sign-in link opened in a browser hands the sign-in over to it).
   androidPackage: 'com.potentiamotus.fleetmanager',
+  // The Android app file people can download (update this when a new version is released).
+  androidApkUrl: 'https://github.com/perezkabagambe/fleet-manager/releases/download/android-v1.2/FleetManager-1.2.apk',
   // Must match API_VERSION in backend/Code.js.
   apiVersion: 1,
   commit: '__COMMIT__',

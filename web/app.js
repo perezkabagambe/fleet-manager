@@ -661,6 +661,12 @@
         history.replaceState(null, '', location.pathname);
         location.hash = '#/login/verify?t=' + handed + '&b=1';
       }
+      // "Open in app" from the browser passes the page the person was on as ?go=#/... (the part after # cannot go in an app link)
+      var go = new URLSearchParams(location.search).get('go');
+      if (go && /^#\/[A-Za-z0-9\-_\/?=&.%]*$/.test(go)) {
+        history.replaceState(null, '', location.pathname);
+        location.hash = go;
+      }
     } catch (e) { /* no hand-over: the app starts as usual */ }
     renderFooter();
     refreshNav();
