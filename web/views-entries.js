@@ -279,9 +279,23 @@
       return b;
     }
 
+    // A small location pin before the garage's name.
+    function pinIcon() {
+      var span = el('span', { class: 'pin', 'aria-hidden': 'true' });
+      span.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/><path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"/></svg>'; // a fixed drawing
+      return span;
+    }
+
     function row(e) {
-      var meta = [dateText(e.date)].filter(Boolean); // (the reference is under the share symbol)
-      if (e.mileage !== null) meta.push(mileageText(e, car));
+      // One line of details under the title: the date, then (not for a purchase) the mileage and the garage with a pin.
+      // A line that is too long is cut off with "…" rather than wrapping.
+      var bits = [el('span', { text: dateText(e.date) })];
+      if (e.type !== 'Purchase') {
+        if (e.mileage !== null) bits.push(el('span', { text: mileageText(e, car) }));
+        if (e.vendor) bits.push(el('span', { class: 'entry-garage' }, [pinIcon(), document.createTextNode(e.vendor)]));
+      }
+      var details = [];
+      bits.forEach(function (n, i) { if (i) details.push(document.createTextNode(' · ')); details.push(n); });
       var tags = [];
       if (e.type === 'Issue') tags.push(el('span', { class: 'chip st-' + e.status.toLowerCase().replace(/[^a-z]/g, ''), text: e.status }));
       if (e.type === 'Purchase') tags.push(el('span', { class: 'chip ' + (e.stockStatus === 'In stock' ? 'active' : e.stockStatus === 'Fitted' ? 'sold' : 'pending'), text: e.stockStatus }));
@@ -290,24 +304,23 @@
       if (e.guestName) tags.push(GuestUI.chip(e));
       var cost = costText(e);
       var link = el('a', { class: 'entry-row', href: '#/car/' + car.id + '/entry/' + e.id }, [
-        // the picture, with the type tag beneath it (while editing there is no room: the tag joins the others in the footer)
+        // the picture, with the type tag beneath it (while editing there is no room: the tag joins the others below)
         el('div', { class: 'entry-lead' }, [
           e.thumbAttachmentId ? Photos.thumbBox(e.thumbAttachmentId, 'row-thumb') : typeThumb(e.type),
           editing ? null : typeChip(e.type, true),
         ]),
-        // the title has the whole width; under it the reference, date and mileage, then the garage in grey,
-        // then a footer with the tags (type, status, attachments) on the left and the cost on the right
+        // the title, one line of details, then the status tags: each on a single line
         el('div', { class: 'entry-main' }, [
           el('div', { class: 'entry-title', text: e.title }),
-          el('div', { class: 'muted small-text entry-ref-line', text: meta.join(' · ') }),
-          e.vendor ? el('div', { class: 'muted small-text entry-vendor', text: e.vendor }) : null,
+          el('div', { class: 'muted small-text entry-ref-line' }, details),
+          // the status tags on the left, and the price in the bottom right corner
           el('div', { class: 'entry-foot' }, [
             el('div', { class: 'entry-foot-tags' }, (editing ? [typeChip(e.type, true)] : []).concat(tags)),
             cost ? el('strong', { class: 'entry-cost', text: cost }) : null,
           ]),
         ]),
       ]);
-      // a small link icon beside each row copies a link straight to that entry
+      // On the right: the share symbol with the ID under it (and, in the link, the price in the bottom right corner).
       return el('div', { class: 'entry-line' + (editing ? ' is-editing' : '') }, [
         link,
         editing ? el('div', { class: 'row-actions' }, [

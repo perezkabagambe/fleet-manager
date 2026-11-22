@@ -722,3 +722,42 @@ details.collapsible:has(.bin-card) { border-style: dashed; background: var(--bg)
 .photo-tile-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .photo-tile-actions .btn { flex: 1 1 auto; min-height: 36px; padding: 4px 8px; font-size: 0.85rem; }
 .btn.danger-text { color: var(--bad); border-color: var(--bad); }
+
+/* log rows: single-line title and details (cut off with ...); the price in the very bottom right corner */
+.entry-main .entry-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.entry-main .entry-ref-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.entry-garage { white-space: nowrap; }
+.entry-garage .pin { display: inline-block; vertical-align: -1px; margin-right: 2px; line-height: 0; }
+.entry-line { align-items: stretch; }
+.entry-line .row-side { align-self: stretch; justify-content: space-between; align-items: flex-end; margin-left: 8px; }
+.entry-line .row-side > .share-stack { margin-left: 0; }
+.entry-line .row-side .entry-cost { margin: 0; font-size: 0.8rem; font-weight: 600; white-space: nowrap; padding-bottom: 12px; }
+.entry-foot { margin-top: 4px; }
+.entry-foot-tags { min-height: 22px; }
+
+/* log rows, normal view: a grid, so the details line gets the full width and the price sits in the bottom right corner */
+.entry-line:not(.is-editing) { display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; column-gap: 8px; row-gap: 0; align-items: start; padding: 12px 0; }
+.entry-line:not(.is-editing) .entry-row { display: contents; }
+.entry-line:not(.is-editing) .entry-main { display: contents; }
+.entry-line:not(.is-editing) .entry-lead { grid-column: 1; grid-row: 1 / span 3; }
+.entry-line:not(.is-editing) .entry-title { grid-column: 2; grid-row: 1; margin: 0; }
+.entry-line:not(.is-editing) .entry-ref-line { grid-column: 2; grid-row: 2; margin-top: 2px; }
+.entry-line:not(.is-editing) .entry-foot { grid-column: 2 / 4; grid-row: 3; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: 6px; min-width: 0; }
+.entry-line:not(.is-editing) .entry-foot-tags { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.entry-line:not(.is-editing) .share-stack { grid-column: 3; grid-row: 1 / span 2; margin-left: 0; }
+.entry-line .entry-cost { font-size: 0.8rem; font-weight: 600; white-space: nowrap; flex: none; margin: 0; }
+.entry-line .row-side { display: none; }
+/* a little more room for the details line */
+.entry-line .entry-ref-line { font-size: 0.72rem; }
+.entry-line .share-btn { width: 32px; height: 32px; min-width: 0; min-height: 0; padding: 0; }
+.entry-line .share-btn svg { width: 20px; height: 20px; }
+.entry-line:not(.is-editing) { grid-template-columns: 78px minmax(0, 1fr) auto; }
+.entry-line:not(.is-editing) .entry-lead { width: 78px; }
+.entry-lead .chip { font-size: 0.64rem; padding: 1px 5px; }
+.entry-line .entry-ref-line { font-size: 0.7rem; }
+.entry-line .entry-ref-line { font-size: 0.68rem; }
+.entry-line:not(.is-editing) { column-gap: 6px; }
+/* while editing there is little width: the price goes on its own line under the tags, still at the right */
+.entry-line.is-editing .entry-foot { display: block; }
+.entry-line.is-editing .entry-foot-tags { flex-wrap: wrap; }
+.entry-line.is-editing .entry-cost { display: block; text-align: right; margin-top: 4px; }
