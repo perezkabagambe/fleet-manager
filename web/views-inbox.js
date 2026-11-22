@@ -20,6 +20,30 @@
 
   function kb(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
 
+  // ---------- files shared to the app from another app (the phone's share sheet) ----------
+  // The service worker keeps each shared file in this cache; the AI Inbox picks them up and sends them for reading.
+  var SHARED_CACHE = 'fm-shared-v1';
+  function readShared() {
+    if (!window.caches) return Promise.resolve([]);
+    return caches.open(SHARED_CACHE).then(function (cache) {
+      return cache.keys().then(function (keys) {
+        return Promise.all(keys.map(function (k) {
+          return cache.match(k).then(function (res) {
+            if (!res) return null;
+            return res.blob().then(function (b) {
+              var name = 'shared-file';
+              try { name = decodeURIComponent(res.headers.get('X-File-Name') || name); } catch (e) { /* keep the plain name */ }
+              return { key: k, file: new File([b], name, { type: res.headers.get('Content-Type') || b.type || '' }) };
+            });
+          });
+        }));
+      });
+    }).then(function (list) { return list.filter(Boolean); }).catch(function () { return []; });
+  }
+  function dropShared(key) {
+    return caches.open(SHARED_CACHE).then(function (cache) { return cache.delete(key); }).catch(function () { /* it is only a cache */ });
+  }
+
   // ---------- how many are waiting (the number on the menu) ----------
   var count = 0;
   function setCount(n) {
@@ -71,10 +95,11 @@
     var listBox = el('div', { class: 'stack' });
     var recentBox = el('div');
     var fileBox = el('div');
+    var sharedBox = el('div');
     root.replaceChildren(el('section', { class: 'card' }, [
       el('div', { class: 'page-head' }, [el('h1', { text: 'AI Inbox' })]),
       el('p', { class: 'section-note', text: 'Receipts waiting to be checked. Nothing is added to a vehicle\'s log until someone has looked at it and saved it.' }),
-      msg, fileBox, listBox, recentBox,
+      msg, sharedBox, fileBox, listBox, recentBox,
     ]));
 
     var cars = [];
@@ -141,6 +166,43 @@
         status, go,
       ]);
     }
+
+    // Files shared to the app: read them straight away (AI tries to tell which vehicle), then open the result
+    function checkShared() {
+      readShared().then(function (items) {
+        if (!items.length) {
+          if (ctx.query.shared) sharedBox.replaceChildren(UI.notice('info', 'No shared file was found. Share it again, or add it below.'));
+          return;
+        }
+        var wait = UI.waiting(items.length > 1 ? 'Reading ' + items.length + ' shared files with AI… this can take up to a minute each.' : 'Reading the shared file with AI… this can take up to a minute.');
+        sharedBox.replaceChildren(wait);
+        var done = [];
+        var failed = [];
+        var chain = Promise.resolve();
+        items.forEach(function (it, i) {
+          chain = chain.then(function () {
+            return send(it.file, '', function (t) {
+              var w = wait.querySelector('.ai-wait-text');
+              if (w) w.textContent = (items.length > 1 ? 'File ' + (i + 1) + ' of ' + items.length + ': ' : '') + t + (/Reading/.test(t) ? ' with AI… this can take up to a minute.' : '');
+            }).then(function (r) { done.push(r); }, function (e) { failed.push({ name: it.file.name, error: e }); })
+              .then(function () { return dropShared(it.key); });
+          });
+        });
+        chain.then(function () {
+          sharedBox.replaceChildren.apply(sharedBox, failed.map(function (x) { return UI.notice('error', x.name + ': ' + UI.errorText(x.error) + ' Share it again, or add it below.'); }));
+          if (failed.length) { refreshCount(); return; }
+          if (done.length === 1) {
+            var r = done[0];
+            FleetApp.setFlash(r.status === 'Pending' ? 'ok' : 'info', r.status === 'Pending' ? 'The shared file was read. Check what it says, then draft the entry.' : (r.note || 'The shared file was saved here.'));
+            FleetApp.go('/inbox/' + r.id);
+          } else {
+            FleetApp.setFlash('ok', done.length + ' shared files added. Open each one to check it.');
+            FleetApp.go('/inbox');
+          }
+        });
+      });
+    }
+    checkShared();
 
     /** Store the file, then have it read. Resolves to the receipt (read, or kept for filling in by hand). */
     function send(f, carId, progress) {

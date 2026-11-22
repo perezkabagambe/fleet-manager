@@ -62,9 +62,32 @@ self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });
 
+// Files shared to the app from another app on the phone (the Android share sheet) arrive as a POST to <scope>share-target.
+// They are kept in this cache until the AI Inbox page picks them up and sends them for reading.
+const SHARED = 'fm-shared-v1';
+
+async function takeSharedFiles(req) {
+  try {
+    const form = await req.formData();
+    const cache = await caches.open(SHARED);
+    let n = 0;
+    for (const f of form.getAll('file')) {
+      if (!f || typeof f === 'string' || !f.size) continue;
+      await cache.put('shared/' + Date.now() + '-' + (n++), new Response(f, {
+        headers: { 'Content-Type': f.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(f.name || 'shared-file') },
+      }));
+    }
+  } catch (e) { /* nothing was kept: the AI Inbox opens and says nothing is waiting */ }
+  return Response.redirect(new URL('./#/inbox?shared=1', self.registration.scope).href, 303);
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
+  if (req.method === 'POST' && url.origin === self.location.origin && /\/share-target$/.test(url.pathname)) {
+    event.respondWith(takeSharedFiles(req));
+    return;
+  }
   if (req.method !== 'GET' || url.origin !== self.location.origin) return;
 
   event.respondWith(

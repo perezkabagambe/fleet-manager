@@ -148,7 +148,7 @@ function setup() {
   Logger.log('Setup complete.\nDB: ' + ss.getUrl() + '\nRoot folder: ' + root.getUrl());
 }
 
-const ANDROID_APP_URL = 'https://github.com/perezkabagambe/fleet-manager/releases/download/android-v1.1/FleetManager-1.1.apk';
+const ANDROID_APP_URL = 'https://github.com/perezkabagambe/fleet-manager/releases/download/android-v1.2/FleetManager-1.2.apk';
 const ANDROID_LINK_FILE = 'Fleet Manager - Android app download link.txt';
 
 /**

@@ -12,7 +12,7 @@ test('saveAndroidLinkToDrive writes the link into the Fleet Manager folder, and 
   const file = env.files[id];
   assert.equal(file.folder, 'root-folder');
   assert.equal(file.name, 'Fleet Manager - Android app download link.txt');
-  assert.match(String(file.content), /releases\/download\/android-v1\.1\/FleetManager-1\.1\.apk/);
+  assert.match(String(file.content), /releases\/download\/android-v1\.2\/FleetManager-1\.2\.apk/);
   assert.match(String(file.content), /allow installing apps from that source/);
   const again = vm.runInContext('saveAndroidLinkToDrive()', env.ctx);
   assert.equal(again, id);
