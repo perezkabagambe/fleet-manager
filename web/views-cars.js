@@ -27,9 +27,9 @@
   var FLUID_HINTS = [
     [/transfer/i, { spec: 'e.g. 75W-90 API GL-4', cap: 'e.g. 1 L' }],
     [/differential|diff\b/i, { spec: 'e.g. 75W-90 API GL-5', cap: 'e.g. 1.2 L' }],
-    [/engine|motor oil/i, { spec: 'e.g. 5W-30 ACEA C3', cap: 'e.g. 5.5 L' }],
+    [/engine|motor oil/i, { spec: 'e.g. 5W-30, ACEA C3, API SN', cap: 'e.g. 5.5 L' }],
     [/gearbox|transmission|\batf\b|gear oil/i, { spec: 'e.g. ATF Dexron VI, or 75W-80 GL-4', cap: 'e.g. 7 L' }],
-    [/coolant|antifreeze/i, { spec: 'e.g. OAT coolant (G12+), 50/50', cap: 'e.g. 8 L' }],
+    [/coolant|antifreeze/i, { spec: 'e.g. Pink OAT, VW TL 774-J (G12+), 50/50', cap: 'e.g. 8 L' }],
     [/brake|clutch/i, { spec: 'e.g. DOT 4', cap: 'e.g. 1 L' }],
     [/steering/i, { spec: 'e.g. ATF Dexron III, or CHF 11S', cap: 'e.g. 1 L' }],
     [/refrigerant|a\/c|\bac\b|air con/i, { spec: 'e.g. R134a or R1234yf', cap: 'e.g. 450 g' }],
@@ -427,7 +427,7 @@
         return input;
       }
       var nameIn = inp('fluid', { list: bulb ? 'bulb-names' : 'fluid-names', maxlength: '40' });
-      var specIn = inp('specification', { maxlength: '120' });
+      var specIn = inp('specification', { maxlength: '250' });
       var capIn = inp('capacity', { maxlength: '40' });
       // The examples follow the name, so a differential oil never suggests an engine oil grade.
       function showHints() {
@@ -730,10 +730,6 @@
           setIfEmpty(f.fuelCapacity, det.fuelCapacity, 'fuel capacity', filled);
           var nFluids = fluidsEd.addSuggested(d.fluids || []);
           var nBulbs = fluidsEd.addSuggested(d.bulbs || []);
-          if (filled.length) { // a note on the car itself says which details came from AI
-            var line = 'AI suggested these details (check them): ' + filled.join(', ') + '.';
-            f.notes.value = f.notes.value.trim() ? f.notes.value.replace(/\s+$/, '') + '\n' + line : line;
-          }
           var parts = [];
           if (filled.length) parts.push('the ' + filled.join(', '));
           if (nFluids) parts.push(nFluids + ' fluid' + (nFluids === 1 ? '' : 's'));

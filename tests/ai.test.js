@@ -92,7 +92,7 @@ test('a VIN is used first: the request carries it, everything typed, and a warni
   assert.deepEqual(d.fluids.map((f) => f.fluid), ['Engine oil', 'Coolant'], 'in the app\'s order');
   assert.deepEqual(d.bulbs.map((b) => b.fluid), ['Dipped beam', 'Full beam'], 'in the app\'s order, with no "Bulb: " prefix');
   [].concat(d.fluids, d.bulbs).forEach((row) => {
-    assert.match(row.notes, /AI suggestion: check before relying on it\.$/);
+    assert.ok(!/check before relying/.test(row.notes), 'no AI warning is added to the notes');
     assert.match(row.source, /AI suggestion/);
     assert.ok(row.notes.length <= 200);
   });
@@ -208,7 +208,7 @@ test('only values the app can use get through', () => {
   assert.equal(d.details.fuelCapacity, undefined);
   assert.equal(d.details.gearboxCode, '5');
   assert.deepEqual(d.fluids.map((f) => [f.fluid, f.specification.slice(0, 3)]), [['Engine oil', 'a'], ['Brake fluid', 'SSS']]);
-  assert.equal(d.fluids[1].specification.length, 120);
+  assert.equal(d.fluids[1].specification.length, 250);
   assert.ok(d.fluids[1].notes.length <= 200);
   assert.deepEqual(d.bulbs.map((b) => [b.fluid, b.specification]), [['Front fog', 'Halogen H8 35 W']]);
   assert.equal(d.confidence, 'low', 'an unknown confidence is treated as low');

@@ -374,7 +374,7 @@ function cleanFluid_(it) {
   const out = {
     kind: kind,
     fluid: name.slice(0, 40),
-    specification: cleanStr_(it.specification, 120),
+    specification: cleanStr_(it.specification, 250),
     capacity: cleanStr_(it.capacity, 40),
     notes: cleanStr_(it.notes, 200),
     source: cleanStr_(it.source, 120),

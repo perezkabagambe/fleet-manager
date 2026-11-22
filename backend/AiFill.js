@@ -17,7 +17,6 @@
 const AI_USER_DAILY = 10;   // lookups per person per day
 const AI_APP_DAILY = 100;   // lookups for everyone together per day (keeps the free allowance safe)
 const AI_MAX_CANDIDATES = 3;
-const AI_MARK = 'AI suggestion: check before relying on it.';
 const AI_SOURCE = 'AI suggestion (Gemini with Google Search), not verified';
 
 // The names the app uses (they must match the standard lists in web/views-cars.js).
@@ -155,7 +154,7 @@ function aiFillPrompt_(known) {
     aiDetailsJson_(),
     '  },',
     '  "fluids": [  // only from these names: ' + AI_FLUID_NAMES.join(', '),
-    '    { "fluid": "Engine oil", "specification": "e.g. 5W-30 ACEA C3", "capacity": "e.g. 6.7 L", "notes": "" }',
+    '    { "fluid": "Engine oil", "specification": "see the rule below", "capacity": "e.g. 6.7 L", "notes": "" }',
     '  ],',
     '  "bulbs": [   // only from these locations: ' + AI_BULB_NAMES.join(', '),
     '    { "location": "Dipped beam", "type": "bulb type then the specific bulb, e.g. Halogen H7 55 W", "quantity": "e.g. 2", "notes": "" }',
@@ -163,7 +162,10 @@ function aiFillPrompt_(known) {
     '  "summary": "one or two sentences: what vehicle this is and how sure you are",',
     '  "confidence": "high, medium or low"',
     '}',
-    'Keep every string short. Put any doubt in "notes" (for example "xenon cars use D1S instead").'
+    'Engine oil and coolant are critical fluids, so give as much specification as you can find, separated by commas, and never just a viscosity. ' +
+    'Engine oil: viscosity grade, then every approval or standard the manufacturer requires, e.g. "5W-30, ACEA C3, API SN, VW 504 00 / 507 00" (ACEA class such as A3/B4 or C2/C3, API class, and manufacturer approvals such as MB 229.51, BMW Longlife-04, Ford WSS-M2C913-D, Toyota). ' +
+    'Coolant: the type and technology (e.g. OAT, HOAT, IAT), the colour, the manufacturer specification (e.g. VW TL 774-J G13, Toyota Super Long Life, Ford WSS-M97B44-D) and the mix ratio, e.g. "Pink OAT, VW TL 774-J (G13), 50/50 with distilled water". ' +
+    'The same applies to other critical fluids (gearbox oil, brake fluid DOT grade): include the standard. Other strings can stay short. Put any doubt in "notes" (for example "xenon cars use D1S instead").'
   );
   return lines.join('\n');
 }
@@ -243,11 +245,8 @@ function aiExtractJson_(text) {
   return null;
 }
 
-function aiNote_(note) {
-  const room = 200 - AI_MARK.length - 1;
-  const n = cleanStr_(note, room);
-  return n ? n + ' ' + AI_MARK : AI_MARK;
-}
+// The row's own note is only the model's doubt: rows are marked as AI's by their source, not by text added to the notes.
+function aiNote_(note) { return cleanStr_(note, 200); }
 
 /** Keep only what the app can use, in the shape it uses, and mark it as AI's. Never trusts the model's field names or lengths. */
 function aiClean_(raw) {
@@ -268,7 +267,7 @@ function aiClean_(raw) {
   const seenFluid = {};
   (Array.isArray(raw && raw.fluids) ? raw.fluids : []).forEach(function (f) {
     const name = cleanStr_(f && f.fluid, 40);
-    const spec = cleanStr_(f && f.specification, 120);
+    const spec = cleanStr_(f && f.specification, 250);
     const cap = cleanStr_(f && f.capacity, 40);
     if (AI_FLUID_NAMES.indexOf(name) === -1 || seenFluid[name] || (!spec && !cap)) return;
     seenFluid[name] = true;
