@@ -960,10 +960,10 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 .entry-line:not(.is-editing) .share-stack { position: relative; z-index: 2; }
 
 /* choosing several entries to share or delete */
-.select-tools { display: flex; justify-content: flex-end; margin: 4px 0 6px; }
+.select-tools { display: flex; justify-content: flex-start; margin: 4px 0 6px; }
 .select-tools[hidden] { display: none; }
 .entry-line.is-selecting.selected { background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 10px; }
-.entry-line:not(.is-editing) .select-box { grid-column: 3; grid-row: 1 / span 2; position: relative; z-index: 2; padding: 2px 4px 0 0; }
+.entry-line:not(.is-editing) .select-box { grid-column: 1; grid-row: 1 / span 4; align-self: center; position: relative; z-index: 2; padding: 0; }
 .entry-select { width: 24px; height: 24px; accent-color: var(--accent); }
 .select-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -4px 14px rgba(15, 25, 35, 0.12); padding: 10px var(--gutter); }
 .select-bar-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -975,3 +975,11 @@ body.selecting #app { padding-bottom: 110px; }
 
 /* log rows: the ID sits a little lower, clear of the share icon */
 .entry-line .share-stack .ref-tiny { margin-top: 3px; }
+
+/* while selecting, the tick box is a column of its own on the left and everything else moves one column along */
+.entry-line.is-selecting:not(.is-editing) { grid-template-columns: 30px 78px minmax(0, 1fr); }
+.entry-line.is-selecting:not(.is-editing) .entry-lead { grid-column: 2; }
+.entry-line.is-selecting:not(.is-editing) .entry-title,
+.entry-line.is-selecting:not(.is-editing) .entry-ref-line,
+.entry-line.is-selecting:not(.is-editing) .entry-garage-line { grid-column: 3; }
+.entry-line.is-selecting:not(.is-editing) .entry-foot { grid-column: 3 / -1; }
