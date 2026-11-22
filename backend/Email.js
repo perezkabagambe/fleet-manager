@@ -101,3 +101,19 @@ function sendAndroidAnnouncementEmail_(user) {
     '\n\nIf you use an iPhone or a computer, nothing changes. Keep using Fleet Manager as you do now.';
   return sendMail_(user.email, 'Fleet Manager now has an Android app', html, text);
 }
+
+/** "An Android app update is available" (sent by an admin from the Users page): what the update adds, and who needs to do anything. */
+function sendApkUpdateEmail_(user, changes) {
+  const items = changes.map(function (c) { return '<li style="margin:4px 0">' + esc_(c) + '</li>'; }).join('');
+  const html = layout_('An Android app update is available',
+    '<p>Hi ' + esc_(user.name) + ',</p>' +
+    '<p>There is an update to the Fleet Manager Android app. <strong>This update adds:</strong></p>' +
+    '<ul style="padding-left:20px">' + items + '</ul>' +
+    '<p><strong>If you use the Fleet Manager Android app:</strong> tap the button below on your phone, open the downloaded file, and tap Update. Everything stays as it is.</p>' +
+    button_(ANDROID_APP_URL, 'Download the update') +
+    '<p>If you use Fleet Manager any other way (an iPhone, a computer, or the web app on an Android phone), there is nothing to do. The web app keeps getting its updates automatically.</p>');
+  const text = 'Hi ' + user.name + ',\n\nThere is an update to the Fleet Manager Android app. This update adds:\n' + changes.map(function (c) { return '- ' + c; }).join('\n') +
+    '\n\nIf you use the Fleet Manager Android app: open this link on your phone, open the downloaded file, and tap Update. Everything stays as it is.\n' + ANDROID_APP_URL +
+    '\n\nIf you use Fleet Manager any other way (an iPhone, a computer, or the web app on an Android phone), there is nothing to do. The web app keeps getting its updates automatically.';
+  return sendMail_(user.email, 'Fleet Manager Android app update available', html, text);
+}

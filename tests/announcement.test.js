@@ -57,3 +57,49 @@ test('it is refused, and nothing is sent, if there is not enough email allowance
   assert.equal(announcements(env).length, 0);
   assert.equal(env.call('sendAppAnnouncement', { token: admin, testOnly: true }).ok, true, 'a test still fits');
 });
+
+// ---------- "an Android app update is available" ----------
+const updates = (env) => env.outbox.filter((m) => /app update available/.test(m.subject));
+const CHANGES = '- Share a PDF or photo from another app straight into the AI Inbox\n* It is read and ready to draft as an entry\n\n   Faster start-up  ';
+
+test('the update email needs what it adds, and is for admins only', () => {
+  const { env, admin, sam } = setup();
+  assert.equal(env.call('sendApkUpdateAnnouncement', { token: sam, changes: CHANGES }).error, 'forbidden');
+  assert.equal(env.call('sendApkUpdateAnnouncement', { token: admin, changes: '  \n ' }).error, 'changes_required');
+  assert.equal(env.call('sendApkUpdateAnnouncement', { token: admin }).error, 'changes_required');
+  assert.equal(updates(env).length, 0);
+});
+
+test('the update email lists the changes, links to the app file, and tells everyone else nothing is needed', () => {
+  const { env, admin } = setup();
+  const r = env.call('sendApkUpdateAnnouncement', { token: admin, testOnly: true, changes: CHANGES });
+  assert.deepEqual([r.data.sent, r.data.test], [1, true]);
+  const m = updates(env)[0];
+  assert.equal(m.to, 'admin@example.com');
+  assert.match(m.body, /This update adds:\n- Share a PDF or photo from another app straight into the AI Inbox\n- It is read and ready to draft as an entry\n- Faster start-up\n/);
+  assert.match(m.htmlBody, /<li[^>]*>Share a PDF or photo from another app straight into the AI Inbox<\/li>/);
+  assert.match(m.htmlBody, /<li[^>]*>Faster start-up<\/li>/);
+  const apk = 'https://github.com/perezkabagambe/fleet-manager/releases/download/android-v1.2/FleetManager-1.2.apk';
+  assert.ok(m.body.includes(apk) && m.htmlBody.includes('href="' + apk + '"'));
+  assert.match(m.body, /nothing to do\. The web app keeps getting its updates automatically/);
+});
+
+test('the update email goes to everyone approved, escapes what was typed, and has its own repeat guard', () => {
+  const { env, admin } = setup();
+  const r = env.call('sendApkUpdateAnnouncement', { token: admin, changes: '<b>Bold</b> & more' });
+  assert.deepEqual([r.data.sent, r.data.total], [3, 3]);
+  const html = updates(env)[0].htmlBody;
+  assert.ok(html.includes('&lt;b&gt;Bold&lt;/b&gt; &amp; more') && !html.includes('<b>Bold</b>'));
+  assert.equal(env.call('sendApkUpdateAnnouncement', { token: admin, changes: 'x' }).error, 'announcement_recent');
+  // the other announcement is not blocked by it
+  assert.equal(env.call('sendAppAnnouncement', { token: admin }).ok, true);
+});
+
+test('at most eight changes, each kept short', () => {
+  const { env, admin } = setup();
+  const many = Array.from({ length: 12 }, (_, i) => 'Change ' + (i + 1) + ' ' + 'x'.repeat(300)).join('\n');
+  env.call('sendApkUpdateAnnouncement', { token: admin, testOnly: true, changes: many });
+  const lines = updates(env)[0].body.split('\n').filter((l) => /^- Change/.test(l));
+  assert.equal(lines.length, 8);
+  lines.forEach((l) => assert.ok(l.length <= 162));
+});

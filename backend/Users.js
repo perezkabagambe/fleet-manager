@@ -118,22 +118,41 @@ function setUserRole_(p, ctx) {
 
 const ANNOUNCE_GAP_MS = 30 * 60 * 1000; // a second full send within this time is refused (a double tap)
 
+/** The people an announcement goes to: the admin alone for a test, otherwise every approved user. */
+function announcementUsers_(test, ctx) {
+  return test ? [ctx.user] : Db.all('Users').filter(function (u) { return !isTrue_(u.deleted) && u.status === 'Approved' && u.email; });
+}
+
+/** Send one kind of announcement, one personal email each. `key` names its "last sent" marker. Refused if today's email allowance cannot cover everyone. */
+function sendAnnouncement_(test, key, ctx, what, send) {
+  const users = announcementUsers_(test, ctx);
+  if (!users.length) fail_('not_found');
+  if (!test) {
+    const last = Number(props_().getProperty(key) || 0);
+    if (last && Date.now() - last < ANNOUNCE_GAP_MS) fail_('announcement_recent');
+  }
+  if (MailApp.getRemainingDailyQuota() < users.length) fail_('mail_quota');
+  let sent = 0;
+  users.forEach(function (u) { if (send(u)) sent++; });
+  if (!test && sent) props_().setProperty(key, String(Date.now()));
+  audit_(ctx.user, test ? 'announce_test' : 'announce_all', 'User', '', what + (test ? ' test sent to the admin' : ' sent to ' + sent + ' of ' + users.length + ' users'));
+  return { sent: sent, total: users.length, test: test };
+}
+
 /**
  * Admin: email the Android app announcement. `testOnly` sends it to the admin alone; otherwise it goes to every approved user,
  * one personal email each (never a visible list of everyone). Refused if there is not enough of today's email allowance left.
  */
 function sendAppAnnouncement_(p, ctx) {
   const test = p.testOnly === true || p.testOnly === 'true';
-  const users = test ? [ctx.user] : Db.all('Users').filter(function (u) { return !isTrue_(u.deleted) && u.status === 'Approved' && u.email; });
-  if (!users.length) fail_('not_found');
-  if (!test) {
-    const last = Number(props_().getProperty('ANNOUNCE_LAST') || 0);
-    if (last && Date.now() - last < ANNOUNCE_GAP_MS) fail_('announcement_recent');
-  }
-  if (MailApp.getRemainingDailyQuota() < users.length) fail_('mail_quota');
-  let sent = 0;
-  users.forEach(function (u) { if (sendAndroidAnnouncementEmail_(u)) sent++; });
-  if (!test && sent) props_().setProperty('ANNOUNCE_LAST', String(Date.now()));
-  audit_(ctx.user, test ? 'announce_test' : 'announce_all', 'User', '', 'Android app announcement ' + (test ? 'test sent to the admin' : 'sent to ' + sent + ' of ' + users.length + ' users'));
-  return { sent: sent, total: users.length, test: test };
+  return sendAnnouncement_(test, 'ANNOUNCE_LAST', ctx, 'Android app announcement', sendAndroidAnnouncementEmail_);
+}
+
+/** Admin: email "an Android app update is available", with what it adds (one change per line, up to 8). Test to the admin alone, or everyone. */
+function sendApkUpdateAnnouncement_(p, ctx) {
+  const test = p.testOnly === true || p.testOnly === 'true';
+  const changes = String(p.changes === undefined || p.changes === null ? '' : p.changes).split(/\r?\n/)
+    .map(function (l) { return cleanStr_(l.replace(/^\s*[-*\u2022]\s*/, ''), 160); }).filter(Boolean).slice(0, 8);
+  if (!changes.length) fail_('changes_required');
+  return sendAnnouncement_(test, 'ANNOUNCE_APK_LAST', ctx, 'Android app update announcement', function (u) { return sendApkUpdateEmail_(u, changes); });
 }

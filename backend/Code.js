@@ -32,6 +32,7 @@ function actions_() {
     setUserStatus: { auth: 'admin', lock: true, fn: setUserStatus_ },
     signOutAll: { auth: 'admin', lock: true, fn: signOutAll_ },
     sendAppAnnouncement: { auth: 'admin', fn: sendAppAnnouncement_ }, // no script lock: sending many emails takes a while
+    sendApkUpdateAnnouncement: { auth: 'admin', fn: sendApkUpdateAnnouncement_ },
     inviteUser: { auth: 'admin', lock: true, fn: inviteUser_ },
     setUserRole: { auth: 'admin', lock: true, fn: setUserRole_ },
     updateMyName: { auth: 'user', lock: true, fn: updateMyName_ },

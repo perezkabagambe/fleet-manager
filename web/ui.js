@@ -139,6 +139,7 @@
     invalid_document_type: 'Please choose what kind of document this is.',
     invalid_market: 'Please choose a market from the list.',
     mail_quota: 'There is not enough of today\'s email allowance left to send to everyone. Try again tomorrow.',
+    changes_required: 'Write what the update adds (one change per line).',
     announcement_recent: 'The announcement was already sent a few minutes ago.',
     invalid_transmission: 'Please choose manual, automatic or CVT.',
     invalid_fuel_type: 'Please choose a fuel type from the list.',

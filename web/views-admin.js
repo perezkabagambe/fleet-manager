@@ -50,12 +50,37 @@
       announceMsg,
       el('div', { class: 'btn-row' }, [testBtn, allBtn]),
     ]);
+    // Tell everyone an Android app update is available, and what it adds (one change per line)
+    var updMsg = el('div');
+    var changes = el('textarea', { name: 'apkChanges', rows: '4', maxlength: '1200', 'aria-label': 'What the update adds, one change per line' });
+    changes.value = 'Share a PDF or photo from another app (Drive, Gmail, Files, Photos) straight into the AI Inbox, where it is read and ready to draft as an entry';
+    var updTest = el('button', { type: 'button', class: 'btn small secondary', text: 'Send me a test' });
+    var updAll = el('button', { type: 'button', class: 'btn small', text: 'Email everyone' });
+    function sendUpdate(testOnly, btn) {
+      updMsg.replaceChildren();
+      UI.busy(btn, 'Sending…', FleetApi.call('sendApkUpdateAnnouncement', { testOnly: testOnly, changes: changes.value }, { timeoutMs: 170000 })).then(function (r) {
+        var d = r.data;
+        updMsg.replaceChildren(UI.notice(d.sent === d.total ? 'ok' : 'error', testOnly ? 'A test was sent to you. Check your inbox, and your spam folder.'
+          : 'Sent to ' + d.sent + ' of ' + d.total + ' users.' + (d.sent < d.total ? ' The rest could not be sent.' : '')));
+      }).catch(function (e) { updMsg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+    }
+    updTest.addEventListener('click', function () { sendUpdate(true, updTest); });
+    updAll.addEventListener('click', function () {
+      UI.confirm('Email every approved user that an Android app update is available? Make sure the new file is published first.', { okLabel: 'Email everyone' }).then(function (yes) { if (yes) sendUpdate(false, updAll); });
+    });
+    var updateBox = el('div', { class: 'form-section finish-zone' }, [
+      el('h2', { text: 'Android app update' }),
+      el('p', { class: 'section-note', text: 'Tells everyone an update is available. Only Android app users need to act; everyone else keeps getting web updates automatically.' }),
+      UI.field('This update adds (one change per line)', changes),
+      updMsg,
+      el('div', { class: 'btn-row' }, [updTest, updAll]),
+    ]);
     var signOutBox = el('div', { class: 'form-section finish-zone' }, [
       el('h2', { text: 'Sign everyone out' }),
       el('p', { class: 'section-note', text: 'Everyone, including you, is sent back to the sign-in page.' }),
       signOutBtn,
     ]);
-    root.replaceChildren(el('section', { class: 'card' }, [el('h1', { text: 'Users' }), msg, inviteBox, listBox, announceBox, signOutBox]));
+    root.replaceChildren(el('section', { class: 'card' }, [el('h1', { text: 'Users' }), msg, inviteBox, listBox, announceBox, updateBox, signOutBox]));
 
     // Invite someone by email: they get a link that signs them straight in.
     function inviteForm() {
