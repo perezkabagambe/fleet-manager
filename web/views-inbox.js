@@ -249,7 +249,6 @@
       var itemsNote = !itemList.length ? 'No individual items were found.'
         : complete ? 'Items add up to ' + money(Math.round(sum * 100) / 100) + (r.total !== null ? (Math.abs(sum - r.total) > 0.011 ? ', but the total reads ' + money(r.total) + ' (a difference of ' + money(Math.round(Math.abs(sum - r.total) * 100) / 100) + ').' : ', which matches the total.') : '.')
         : 'Some items have no price, so they cannot be added up.';
-      var raw = el('details', { class: 'copy-section' }, [el('summary', { text: 'Show the raw data the AI returned' }), el('pre', { class: 'diag-pre', text: JSON.stringify(d, null, 2) })]);
 
       var carSelect = el('select', { name: 'carId' }, [el('option', { value: '', text: 'Choose a vehicle…' })].concat(
         cars.map(function (c) { return el('option', { value: c.id, text: c.registration + ' · ' + c.make + ' ' + c.model, selected: c.id === r.carId }); })));
@@ -305,7 +304,6 @@
         r.status === 'New' ? null : el('h3', { class: 'readout-items', text: 'Items' }),
         r.status === 'New' ? null : table,
         r.status === 'New' ? null : el('p', { class: 'muted small-text', text: itemsNote }),
-        r.status === 'New' ? null : raw,
         d.kind || r.status === 'Pending' ? el('p', { class: 'section-note', text: 'The AI can get things wrong. You will check every box on the next screen before anything is saved.' }) : null,
         done,
         open ? el('div', { class: 'stack' }, [

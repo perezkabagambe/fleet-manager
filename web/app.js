@@ -498,8 +498,27 @@
             (r.status === 'Queued' ? ' (tries again ' + (Date.parse(r.retryAfter) > Date.parse(h.now) ? 'in ' + Math.max(1, Math.round((Date.parse(r.retryAfter) - Date.parse(h.now)) / 60000)) + ' min' : 'at the next timer run') + (r.attempts ? ', ' + r.attempts + ' busy answers so far' : '') + ')' : '') }),
           r.note ? el('div', { class: 'muted small-text', text: r.note }) : null,
           el('a', { class: 'small-text', href: '#/inbox/' + r.id, text: 'Open' }),
+          rawData(r.id),
         ]);
       }) : [el('p', { class: 'muted', text: 'No receipts yet.' })]);
+    }
+
+    // The raw answer the AI gave for a receipt, loaded when opened (the page redraws every 30 seconds, so what was opened is remembered)
+    var rawOpen = {};
+    var rawText = {};
+    function rawData(id) {
+      var pre = el('pre', { class: 'diag-pre', text: rawText[id] || 'Loading…' });
+      var box = el('details', { class: 'copy-section', open: !!rawOpen[id] || undefined }, [el('summary', { text: 'Raw data the AI returned' }), pre]);
+      function loadRaw() {
+        if (rawText[id]) { pre.textContent = rawText[id]; return; }
+        FleetApi.call('getInboxItem', { id: id }).then(function (x) {
+          rawText[id] = JSON.stringify(x.data.receipt.data || {}, null, 2);
+          pre.textContent = rawText[id];
+        }).catch(function (e) { pre.textContent = UI.errorText(e); });
+      }
+      if (rawOpen[id]) loadRaw();
+      box.addEventListener('toggle', function () { rawOpen[id] = box.open; if (box.open) loadRaw(); });
+      return box;
     }
 
     function load() {
