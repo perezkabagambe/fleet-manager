@@ -129,6 +129,20 @@
     notFound: notFound, currencyOptions: CURRENCY_OPTIONS,
   };
 
+  // Tries to open the phone's "Open by default" page for this app (Android 12 and newer). Chrome only allows web pages to open
+  // screens that are marked safe for browsers, and this one may not be, so the person is told what to do by hand if it did not open.
+  // `done(opened)` is called a moment later: opened is true if the page was left (the Settings screen came up).
+  Views.openLinksSetting = function (done) {
+    var left = false;
+    function onHide() { if (document.visibilityState === 'hidden') left = true; }
+    document.addEventListener('visibilitychange', onHide);
+    try {
+      window.location.href = 'intent:' + cfg.androidPackage + '#Intent;scheme=package;action=android.settings.APP_OPEN_BY_DEFAULT_SETTINGS;end';
+    } catch (e) { /* the phone refused: handled below */ }
+    setTimeout(function () { document.removeEventListener('visibilitychange', onHide); done(left); }, 1800);
+  };
+  Views.linksSettingText = 'Settings → Apps → Fleet Manager → Open by default → turn on Open supported links.';
+
   // ---------- fleet ----------
   Views.fleet = function (ctx, root) {
     var msg = el('div');
@@ -145,10 +159,21 @@
       try { seen = localStorage.getItem('fm-links-tip') === '1'; } catch (e) { seen = false; }
       if (!android || !installed || seen) return null;
       var done = el('button', { type: 'button', class: 'btn small', text: 'Got it' });
+      var tryBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'Open the setting' });
+      var result = el('p', { class: 'small-text', hidden: true });
+      tryBtn.addEventListener('click', function () {
+        result.hidden = true;
+        Views.openLinksSetting(function (opened) {
+          if (opened) return;
+          result.hidden = false;
+          result.textContent = 'Your phone did not open it from here. Please go to ' + Views.linksSettingText;
+        });
+      });
       var box = el('div', { class: 'tip-card', role: 'note' }, [
         el('strong', { text: 'Open Fleet Manager links in this app' }),
         el('p', { class: 'small-text', text: 'So that links to a car, or the sign-in link in your email, open straight here and not in your browser: go to Settings → Apps → Fleet Manager → Open by default, and turn on Open supported links.' }),
-        done,
+        el('div', { class: 'btn-row' }, [tryBtn, done]),
+        result,
       ]);
       done.addEventListener('click', function () {
         try { localStorage.setItem('fm-links-tip', '1'); } catch (e) { /* ignore */ }
