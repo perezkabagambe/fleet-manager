@@ -108,13 +108,13 @@
     ]), 
     section('1. What Fleet Manager does', [
       p([document.createTextNode('Keep every vehicle\'s details, issues, maintenance, parts and costs in one place, on your phone or laptop. Only people an administrator has approved can sign in and see anything.')]),
-      p([b('The easy way to log work is to email it.'), document.createTextNode(' Every car has its own email address.')]),
+      p([b('The easy way to log work is to email it.'), document.createTextNode(' Every car has two addresses: a '), b('simple'), document.createTextNode(' one, made from its registration, for your own email, and a '), b('public'), document.createTextNode(' one that works for anyone, so you can share it with a garage.')]),
       el('ol', {}, [
-        el('li', {}, [document.createTextNode('Open the demo car\'s '), link('log', 'Maintenance & Issues Log'), document.createTextNode('. The purple note shows this car\'s email address.')]),
-        el('li', {}, [document.createTextNode('Email a parts receipt or garage invoice (PDF or photo) to it. A garage can send its invoice straight there.')]),
+        el('li', {}, [document.createTextNode('Open the demo car\'s '), link('log', 'Maintenance & Issues Log'), document.createTextNode('. The purple note shows both addresses.')]),
+        el('li', {}, [document.createTextNode('Email a parts receipt or garage invoice (PDF or photo) to either one. A garage can send its invoice straight to the public address.')]),
         el('li', {}, [document.createTextNode('AI reads it and puts it in the '), page('/inbox', 'AI Inbox'), document.createTextNode('. Check what it read, tap '), b('Draft an entry from this receipt'), document.createTextNode(', review, and save.')]),
       ]),
-      shot('guide-email', 'The car\'s email address in the log note'),
+      shot('guide-email', 'The car\'s email addresses in the log note'),
       shot('guide-inbox', 'What AI read from a receipt'),
       p([document.createTextNode('No email handy? Tap '), b('Upload a receipt'), document.createTextNode(' in the same note, or share a PDF or photo to the Android app.')]),
     ], true),
@@ -144,7 +144,7 @@
     section('4. More features', [
       el('ul', {}, [
         el('li', {}, [b('Photos and documents.'), document.createTextNode(' Attach photos and PDFs to any entry (Photos and documents, in '), link('addmaint', 'Add maintenance'), document.createTextNode('), and keep the car\'s papers under '), link('docs', 'Documents'), document.createTextNode('.')]),
-        el('li', {}, [b('QR code and guest mode.'), document.createTextNode(' Every car has a '), link('qr', 'QR label'), document.createTextNode('; '), link('label', 'print it'), document.createTextNode(' for the windscreen. Scanning it opens the car for signed-in people; anyone else can add an entry as a named guest, to that one car only.')]),
+        el('li', {}, [b('QR code and guest mode.'), document.createTextNode(' Every car has a '), link('qr', 'QR label'), document.createTextNode('; '), link('label', 'print it'), document.createTextNode(' for the windscreen. Scanning it opens the car for signed-in people; anyone else can add an entry as a named guest, to that one car only. This is useful if you want your garage to log what they have done for you (as well as emailing the car\'s public address, which you can give them).')]),
         el('li', {}, [b('Export.'), document.createTextNode(' '), link('export', 'Export all vehicle data'), document.createTextNode(' saves a PDF of everything, plus every photo and file, in one zip.')]),
         el('li', {}, [b('Your data is private.'), document.createTextNode(' Everyone signs in with an emailed link, only approved users can see anything, and guests see one car only.')]),
       ]),

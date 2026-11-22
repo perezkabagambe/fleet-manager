@@ -16,7 +16,7 @@ const W = 360;
 const H = 780;
 
 const SHOTS = {
-  'guide-email': [{ hash: '#/demo/log', wait: 4500 }, { scroll: { sel: '.receipt-hint', offset: -150 } }, { hl: { sel: '.receipt-hint-link', label: 'This car\'s own email address', pad: 3, pos: 'tr' } }],
+  'guide-email': [{ hash: '#/demo/log', wait: 4500 }, { scroll: { sel: '.receipt-hint', offset: -150 } }, { hl: { sel: '.receipt-hint p', pad: 6 } }],
   'guide-inbox': [{ hash: '#/inbox', wait: 3500 }, { click: { sel: 'a.inbox-row' }, after: 3000 }, { scroll: { sel: 'h2', text: 'What AI read from it', offset: -70 } }, { hl: { sel: '.facts', label: 'What AI read from the receipt', pad: 3, pos: 'tr' } }],
   'guide-addcar': [{ hash: '#/car/new', wait: 3500 }, { hl: { sel: '.choice', text: '1. Upload', label: '1. Log book', pad: 2, pos: 'tr' } }, { hl: { sel: '.choice', text: '2. Add it yourself', label: '2. Manual', pad: 2, pos: 'tr' } }],
   'guide-fluids': [{ hash: '#/demo/fluids', wait: 4500 }, { scroll: { sel: 'summary h2', text: 'Fluids | Bulbs | Parts', offset: -60 } }, { hl: { sel: '.section-note', text: 'Some entries below', label: 'AI suggestions to check', pad: 3, pos: 'tr' } }],

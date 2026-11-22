@@ -197,11 +197,11 @@
     return card;
   }
 
-  // The car's easy receipt address (asked for once per car, then remembered)
+  // The car's receipt addresses: simple (from the registration) and public (a short reference, for anyone). Asked for once per car, then remembered
   var receiptEmails = {};
   function receiptEmailFor(car) {
     var key = car.id + '|' + car.registration;
-    if (!receiptEmails[key]) receiptEmails[key] = FleetApi.call('getReceiptEmail', { carId: car.id }).then(function (r) { return r.data.address; }).catch(function (e) { delete receiptEmails[key]; throw e; });
+    if (!receiptEmails[key]) receiptEmails[key] = FleetApi.call('getReceiptAddress', { carId: car.id }).then(function (r) { return { address: r.data.address, publicAddress: r.data.privateAddress }; }).catch(function (e) { delete receiptEmails[key]; throw e; });
     return receiptEmails[key];
   }
 
@@ -453,13 +453,24 @@
     var aiPart = el('div', { hidden: true });
     receiptHint.append(emailPart, aiPart);
     function showHint() { receiptHint.hidden = emailPart.hidden && aiPart.hidden; }
-    receiptEmailFor(car).then(function (address) {
-      if (!address) return;
-      emailPart.replaceChildren(
-        document.createTextNode('Part purchase receipts or garage invoices can be emailed directly to this car\'s address for automatic processing: '),
-        el('a', { class: 'receipt-hint-link', href: 'mailto:' + address, text: address }),
-        document.createTextNode('.')
-      );
+    receiptEmailFor(car).then(function (a) {
+      if (!a.address && !a.publicAddress) return;
+      var kids = [document.createTextNode('Email part receipts or garage invoices for automatic processing. ')];
+      if (a.address) {
+        kids.push(
+          document.createTextNode('Simple address (from your own email): '),
+          el('a', { class: 'receipt-hint-link', href: 'mailto:' + a.address, text: a.address }),
+          document.createTextNode('. ')
+        );
+      }
+      if (a.publicAddress) {
+        kids.push(
+          document.createTextNode('Public address (works for anyone, so share it with your garage): '),
+          el('a', { class: 'receipt-hint-link', href: 'mailto:' + a.publicAddress, text: a.publicAddress }),
+          document.createTextNode('.')
+        );
+      }
+      emailPart.replaceChildren.apply(emailPart, kids);
       emailPart.hidden = false;
       showHint();
     }).catch(function () { /* no email part: the log works without it */ });

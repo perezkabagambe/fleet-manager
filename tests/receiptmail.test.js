@@ -45,7 +45,7 @@ test('each car has a private plus-address of the app mailbox; it is stable, and 
   const { env, admin, sam, car, address } = setup();
   assert.equal(env.call('getReceiptAddress', { carId: car.id }).error, 'unauthorized');
   const a = address();
-  assert.match(a, /^potentiafleetmanager\+[a-f0-9]{12}@gmail\.com$/);
+  assert.match(a, /^potentiafleetmanager\+[a-f0-9]{8}@gmail\.com$/);
   assert.equal(env.call('getReceiptAddress', { token: sam, carId: car.id }).data.address, 'potentiafleetmanager+ab12cde@gmail.com'); // the easy one: the registration without spaces
   assert.equal(address(), a);
   assert.equal(env.call('replaceReceiptSecret', { token: sam, carId: car.id }).error, 'forbidden');
@@ -53,7 +53,7 @@ test('each car has a private plus-address of the app mailbox; it is stable, and 
   assert.notEqual(b, a);
   assert.equal(address(), b);
   env.props.RECEIPT_MAILBOX = 'Fleets@Example.org';
-  assert.match(address(), /^fleets\+[a-f0-9]{12}@example\.org$/);
+  assert.match(address(), /^fleets\+[a-f0-9]{8}@example\.org$/);
   assert.equal(env.call('getReceiptAddress', { token: sam, carId: car.id }).data.address, 'fleets+ab12cde@example.org');
   assert.equal(env.call('getReceiptAddress', { token: sam, carId: 'nope' }).error, 'not_found');
 });
@@ -141,6 +141,17 @@ test('an old secret stops working once it has been replaced', () => {
   env.state.gmail = [thread([mail({ to: old })])];
   run();
   assert.equal(inbox().length, 0);
+});
+
+test('an older 12-character public address keeps working, and shows as its first 8 characters', () => {
+  const { env, sam, car, run, inbox } = setup();
+  env.call('getReceiptAddress', { token: sam, carId: car.id }); // makes the car's reference
+  vm.runInContext('Db.update("Cars", Db.all("Cars")[0]._row, { receipt_secret: "k3f9a2c71b04" })', env.ctx);
+  env.invalidate();
+  assert.equal(env.call('getReceiptAddress', { token: sam, carId: car.id }).data.privateAddress, 'potentiafleetmanager+k3f9a2c7@gmail.com');
+  env.state.gmail = [thread([mail({ to: 'potentiafleetmanager+k3f9a2c71b04@gmail.com', id: 'long-1' })]), thread([mail({ to: 'potentiafleetmanager+k3f9a2c7@gmail.com', id: 'short-1' })])];
+  run();
+  assert.equal(inbox().length, 2);
 });
 
 test('the same email is never added twice, and each run reads at most five', () => {
@@ -411,7 +422,7 @@ test('listReceiptAddresses (admin) gives every car both addresses, making any mi
   assert.deepEqual(a.cars.map((c) => c.registration), ['AB12 CDE', 'ZZ99 ZZZ']);
   a.cars.forEach((c) => {
     assert.match(c.address, /^potentiafleetmanager\+[a-z0-9]{2,}@gmail\.com$/);
-    assert.match(c.privateAddress, /^potentiafleetmanager\+[a-f0-9]{12}@gmail\.com$/);
+    assert.match(c.privateAddress, /^potentiafleetmanager\+[a-f0-9]{8}@gmail\.com$/);
   });
   assert.equal(a.cars[0].address, 'potentiafleetmanager+ab12cde@gmail.com');
   const b = env.call('listReceiptAddresses', { token: admin }).data;

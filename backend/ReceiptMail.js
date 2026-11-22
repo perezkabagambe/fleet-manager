@@ -1,7 +1,7 @@
 /**
  * Receipts that arrive by email.
  *
- * Every car has its own private receipt address: the app's Gmail address with "+" and a secret added, for example
+ * Every car has its own receipt addresses: the app's Gmail address with "+" and a secret added, for example
  * potentiafleetmanager+k3f9a2c71b04@gmail.com. Gmail delivers it to the normal inbox, with the secret visible in the
  * To line. A timer (processReceiptEmails, every 5 minutes) reads new mail, and anything sent to a car's address (or
  * sent by an approved user, to the plain address) is stored in the Inbox exactly like an uploaded receipt: read by
@@ -30,7 +30,37 @@ function receiptMailbox_() {
   return normEmail_(set) || appEmail_();
 }
 
-function newReceiptSecret_() { return randomToken_().slice(0, 12); }
+const RECEIPT_SECRET_LENGTH = 8; // the public address's reference (it used to be 12; those addresses keep working)
+
+/** The tags a stored secret answers to: the whole of it, and its first 8 characters (the short form shown today). */
+function receiptSecretKeys_(secret) {
+  const s = String(secret || '').toLowerCase();
+  return s ? (s.length > RECEIPT_SECRET_LENGTH ? [s, s.slice(0, RECEIPT_SECRET_LENGTH)] : [s]) : [];
+}
+
+/** Every car by the tags that reach it: its public reference(s), and its registration (a registration two cars share points to neither). */
+function receiptCarMaps_() {
+  const carsBySecret = {};
+  const carsByReg = {};
+  Db.all('Cars').forEach(function (c) {
+    if (isTrue_(c.deleted)) return;
+    receiptSecretKeys_(c.receipt_secret).forEach(function (k) { if (!carsBySecret[k]) carsBySecret[k] = c; });
+    const t = regTag_(c.registration);
+    if (t.length >= 2) carsByReg[t] = Object.prototype.hasOwnProperty.call(carsByReg, t) ? null : c;
+  });
+  return { carsBySecret: carsBySecret, carsByReg: carsByReg };
+}
+
+/** A new public reference: random, and not one that already reaches a car (by reference or by registration). */
+function newReceiptSecret_() {
+  const m = receiptCarMaps_();
+  let s = '';
+  for (let i = 0; i < 20; i++) {
+    s = randomToken_().slice(0, RECEIPT_SECRET_LENGTH);
+    if (!m.carsBySecret[s] && !Object.prototype.hasOwnProperty.call(m.carsByReg, s)) break;
+  }
+  return s;
+}
 
 function receiptAddress_(tag) {
   const parts = receiptMailbox_().split('@');
@@ -44,15 +74,15 @@ function regTag_(registration) {
 
 /**
  * A car has two addresses. The easy one is made from its registration number: it only works for mail sent by an approved
- * user (a number plate is public, so anyone could guess it). The private one has a secret in it and works for anyone,
+ * user (a number plate is public, so anyone could guess it). The public one has a secret in it and works for anyone,
  * so it suits shops and automatic forwarding rules.
  */
 function receiptAddresses_(car, secret) {
   const tag = regTag_(car.registration);
-  return { address: tag.length >= 2 ? receiptAddress_(tag) : '', privateAddress: receiptAddress_(secret), emailOn: receiptMailOn_() };
+  return { address: tag.length >= 2 ? receiptAddress_(tag) : '', privateAddress: receiptAddress_(String(secret).slice(0, RECEIPT_SECRET_LENGTH)), emailOn: receiptMailOn_() };
 }
 
-/** The car's receipt addresses. The private one is made on first use (so this action holds the script lock). */
+/** The car's receipt addresses. The public one is made on first use (so this action holds the script lock). */
 function getReceiptAddress_(p, ctx) {
   const car = findCar_(cleanStr_(p.carId, 64), false);
   if (!car) fail_('not_found');
@@ -72,7 +102,7 @@ function getReceiptEmail_(p, ctx) {
   return { address: tag.length >= 2 ? receiptAddress_(tag) : '' };
 }
 
-/** Admin only: every car's easy and private receipt addresses (a missing private address is made). */
+/** Admin only: every car's simple and public receipt addresses (a missing public address is made). */
 function listReceiptAddresses_(p, ctx) {
   const cars = Db.all('Cars').filter(function (c) { return !isTrue_(c.deleted); }).sort(function (a, b) { return String(a.registration).localeCompare(String(b.registration)); });
   return {
@@ -89,7 +119,7 @@ function listReceiptAddresses_(p, ctx) {
   };
 }
 
-/** Admin only: a new private address for the car. The old one stops working at once (use it if the address has been shared too widely). */
+/** Admin only: a new public address for the car. The old one stops working at once (use it if the address has been shared too widely). */
 function replaceReceiptSecret_(p, ctx) {
   const car = findCar_(cleanStr_(p.carId, 64), false);
   if (!car) fail_('not_found');
@@ -222,7 +252,7 @@ function receiptClassify_(message, carsBySecret, carsByReg, usersByEmail) {
   if (/^forwarding-noreply@google\.com$/.test(from)) return { skip: 'Gmail forwarding set-up message' };
   const tag = receiptTagOf_(message);
   const user = usersByEmail[from] || null;
-  // the private address works for anyone; the registration address only for an approved user's mail
+  // the public address works for anyone; the registration address only for an approved user's mail
   const car = carsBySecret[tag] || (user ? carsByReg[tag] : null) || null;
   if (!car && !user) {
     return { skip: tag ? (carsByReg[tag] !== undefined ? 'sent to the registration address by someone who is not an approved user (' + from + ')' : 'the address tag "' + tag + '" matches no car') : 'not sent to a receipt address, and the sender (' + from + ') is not an approved user' };
@@ -253,7 +283,7 @@ function handleReceiptMessage_(message, carsBySecret, carsByReg, usersByEmail) {
   return 'read';
 }
 
-/** Tell an approved user who emailed a receipt that it arrived and is waiting for review. (Strangers who use the private address get no reply.) */
+/** Tell an approved user who emailed a receipt that it arrived and is waiting for review. (Strangers who use the public address get no reply.) */
 function notifyReceiptSender_(row, user) {
   if (!dailyCap_('rc_ack', RECEIPT_MAIL_DAILY)) return;
   const read = row.status === 'Pending';
@@ -301,14 +331,9 @@ function runReceiptMail_() {
   const threads = GmailApp.search(RECEIPT_MAIL_QUERY, 0, RECEIPT_MAIL_THREADS);
   if (!threads.length) return { read: 0, retried: retried, looked: 0 };
   Db.resetRequest();
-  const carsBySecret = {};
-  const carsByReg = {}; // a registration shared by two cars is ambiguous, so it points to neither
-  Db.all('Cars').forEach(function (c) {
-    if (isTrue_(c.deleted)) return;
-    if (c.receipt_secret) carsBySecret[String(c.receipt_secret).toLowerCase()] = c;
-    const t = regTag_(c.registration);
-    if (t.length >= 2) carsByReg[t] = Object.prototype.hasOwnProperty.call(carsByReg, t) ? null : c;
-  });
+  const maps = receiptCarMaps_();
+  const carsBySecret = maps.carsBySecret;
+  const carsByReg = maps.carsByReg;
   const usersByEmail = {};
   Db.all('Users').forEach(function (u) { if (!isTrue_(u.deleted) && u.status === 'Approved') usersByEmail[String(u.email).toLowerCase()] = u; });
   const label = receiptLabel_();
@@ -349,14 +374,9 @@ function receiptMailReport_() {
   out.push('Timer last ran: ' + (props_().getProperty('RECEIPT_MAIL_LAST') || 'never'));
   out.push('Gemini key set: ' + (geminiKey_() ? 'yes' : 'NO'));
   out.push('App mailbox: ' + receiptMailbox_());
-  const carsBySecret = {};
-  const carsByReg = {};
-  Db.all('Cars').forEach(function (c) {
-    if (isTrue_(c.deleted)) return;
-    if (c.receipt_secret) carsBySecret[String(c.receipt_secret).toLowerCase()] = c;
-    const t = regTag_(c.registration);
-    if (t.length >= 2) carsByReg[t] = Object.prototype.hasOwnProperty.call(carsByReg, t) ? null : c;
-  });
+  const maps2 = receiptCarMaps_();
+  const carsBySecret = maps2.carsBySecret;
+  const carsByReg = maps2.carsByReg;
   const usersByEmail = {};
   Db.all('Users').forEach(function (u) { if (!isTrue_(u.deleted) && u.status === 'Approved') usersByEmail[String(u.email).toLowerCase()] = u; });
   const threads = GmailApp.search('in:inbox newer_than:7d', 0, 10);
