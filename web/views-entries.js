@@ -206,7 +206,7 @@
   }
 
   function historyCard(car, preloaded) {
-    var chips = el('div', { class: 'filters', role: 'group', 'aria-label': 'Filter the history' });
+    var chips = el('div', { class: 'filter-box', role: 'group', 'aria-label': 'Filter the history' });
     var list = el('div', { class: 'history' }, [fmt.loading()]);
     var filter = 'All';
     var data = [];
@@ -377,12 +377,19 @@
       var counts = {};
       data.forEach(function (e) { counts[e.type] = (counts[e.type] || 0) + 1; });
       if (Object.keys(counts).length > 1) {
-        ['All'].concat(Object.keys(PLURAL).filter(function (t) { return counts[t]; })).forEach(function (t) {
-          var b = el('button', { type: 'button', class: 'filter-chip' + (t === filter ? ' on' : ''), 'aria-pressed': t === filter ? 'true' : 'false',
-            text: (t === 'All' ? 'All' : PLURAL[t]) + ' (' + (t === 'All' ? data.length : counts[t]) + ')' });
+        // Tiles in the same soft colours as the pictures shown for entries without a photo; the chosen one is solid.
+        var types = ['All'].concat(Object.keys(PLURAL).filter(function (t) { return counts[t]; }));
+        var tiles = el('div', { class: 'filter-tiles' + (counts.Compliance ? ' has-compliance' : '') });
+        tiles.style.gridTemplateColumns = 'repeat(' + types.length + ', minmax(0, 1fr))'; // set here, not as an attribute (the page's security policy blocks inline style attributes)
+        types.forEach(function (t) {
+          var b = el('button', { type: 'button', class: 'filter-tile ft-' + t.toLowerCase() + (t === filter ? ' on' : ''), 'aria-pressed': t === filter ? 'true' : 'false' }, [
+            el('span', { class: 'ft-name', text: t === 'All' ? 'All' : PLURAL[t] }),
+            el('b', { class: 'ft-count', text: String(t === 'All' ? data.length : counts[t]) }),
+          ]);
           b.addEventListener('click', function () { filter = t; render(); });
-          chips.append(b);
+          tiles.append(b);
         });
+        chips.append(el('p', { class: 'filter-note', text: 'You can filter the displayed list of log entries by selecting one of the options below.' }), tiles);
       }
       var shown = data.filter(function (e) { return filter === 'All' || e.type === filter; });
       if (selecting) updateSelectUi();
