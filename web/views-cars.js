@@ -122,37 +122,31 @@
   // ---------- fleet ----------
   Views.fleet = function (ctx, root) {
     var msg = el('div');
-    var grid = el('div', { class: 'car-grid' });
+    var grid = el('div', { class: 'car-list' });
     var deletedBox = el('div');
-    root.replaceChildren(el('section', { class: 'card' }, [
-      el('div', { class: 'page-head' }, [
-        el('h1', { text: 'Fleet' }),
-        el('a', { class: 'btn small', href: '#/car/new', text: 'Add car' }),
-      ]),
-      msg, grid, deletedBox,
-    ]));
+    FleetApp.setBanner({ title: 'Fleet', icon: 'car', action: { href: '#/car/new', label: 'Add a car', icon: 'plus' } });
+    root.replaceChildren(el('section', { class: 'card fleet-card' }, [msg, grid, deletedBox]));
 
     function card(c, mine) {
-      var link = el('a', { class: 'car-card', href: '#/car/' + c.id }, [
-        photo(c),
-        el('div', { class: 'car-card-body' }, [
+      // a row: the photo on the left, the plate and model in the middle, the mileage and an arrow on the right
+      var link = el('a', { class: 'car-row', href: '#/car/' + c.id }, [
+        photo(c, 'row-photo'),
+        el('div', { class: 'car-row-body' }, [
           el('div', { class: 'reg', text: c.registration }),
-          el('div', { class: 'muted small-text', text: carTitle(c) }),
-          el('div', { class: 'car-card-foot' }, [
-            chip(c.status),
-            el('span', { class: 'muted small-text', text: c.odometer === null ? '' : num(c.odometer) + ' mi' }),
-          ]),
-          mine && mine.owner ? el('div', { class: 'mine' }, [el('span', { class: 'chip sold', text: 'Yours' })]) : null,
+          el('div', { class: 'muted small-text car-row-title', text: carTitle(c) }),
+          el('div', { class: 'car-row-tags' }, [chip(c.status), mine && mine.owner ? el('span', { class: 'chip sold', text: 'Yours' }) : null]),
+        ]),
+        el('div', { class: 'car-row-side' }, [
+          el('span', { class: 'muted small-text', text: c.odometer === null ? '' : num(c.odometer) + ' mi' }),
+          el('span', { class: 'menu-chev', 'aria-hidden': 'true', text: '›' }),
         ]),
       ]);
-      // the share symbol sits on the car's picture (beside the link, not inside it, so tapping it never opens the car)
-      return el('div', { class: 'car-card-wrap' }, [
-        link,
-        UI.shareButton(carUrl(c.id), { title: c.registration + ' · ' + carTitle(c), aria: 'Share ' + c.registration }),
-      ]);
+      return link;
     }
 
     function render(data) {
+      var active = data.cars.filter(function (c) { return c.status === 'Active'; }).length;
+      FleetApp.setBanner({ subtitle: data.cars.length + (data.cars.length === 1 ? ' vehicle' : ' vehicles') + (data.cars.length ? ' · ' + active + ' active' : '') });
       grid.replaceChildren.apply(grid, data.cars.length
         ? data.cars.map(function (c) { return card(c, (data.mine || {})[c.id]); })
         : [el('div', { class: 'empty' }, [
@@ -317,17 +311,12 @@
       var exportBtn = el('button', { type: 'button', class: 'btn block secondary', text: 'Export all vehicle data' });
       exportBtn.addEventListener('click', function () { ExportAll.run(car); });
 
+      // the banner names the car and carries its share symbol
+      FleetApp.setBanner({ title: car.registration, subtitle: carTitle(car), back: '#/', icon: '', share: { url: carUrl(car.id), title: car.registration + ' · ' + carTitle(car), aria: 'Share ' + car.registration } });
+
       root.replaceChildren(
         el('section', { class: 'card' }, [
-          backLink('#/', 'Fleet'),
-          el('div', { class: 'page-head' }, [
-            el('div', {}, [
-              el('h1', { text: car.registration }),
-              el('div', { class: 'muted', text: carTitle(car) }),
-            ]),
-            // the share symbol sits under the status badge
-            el('div', { class: 'head-status' }, [chip(car.status), UI.shareButton(carUrl(car.id), { title: car.registration + ' · ' + carTitle(car), aria: 'Share ' + car.registration })]),
-          ]),
+          el('div', { class: 'page-head' }, [chip(car.status)]),
           msg,
           el('div', { class: 'section-head' }, [
             el('h2', { text: 'Vehicle details' }),

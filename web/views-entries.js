@@ -483,10 +483,12 @@
       }
       refreshTopThumb();
 
-      var cards = [el('div', { class: 'copy-row' }, [el('div', { class: 'share-stack' }, [UI.shareButton(fmt.entryUrl(carId, e.id), { title: e.title + ' · ' + d.car.registration, aria: 'Share this entry' }), e.ref ? refTiny(e.ref) : null])]),
+      // the banner names the entry and carries its share symbol, with the ID in tiny text under it
+      FleetApp.setBanner({ title: e.title, subtitle: car.registration + ' · ' + BY_TYPE[e.type].label, back: '#/car/' + carId, icon: '', ref: e.ref || '', share: { url: fmt.entryUrl(carId, e.id), title: e.title + ' · ' + d.car.registration, aria: 'Share this entry' } });
+      var cards = [
         el('section', { class: 'card' }, [
         // the entry's type tag lives in the top right corner, whatever the type
-        el('div', { class: 'entry-top' }, [fmt.backLink('#/car/' + carId, car.registration), el('div', { class: 'entry-tags head-tags' }, [typeChip(e.type), e.guestName ? GuestUI.chip(e) : null])]),
+        el('div', { class: 'entry-top' }, [el('div', { class: 'entry-tags head-tags' }, [typeChip(e.type), e.guestName ? GuestUI.chip(e) : null])]),
         el('div', { class: 'entry-head' }, [
           el('h1', { text: e.title }),
           el('div', { class: 'muted entry-sub', text: meta.join(' · ') }), // the date, mileage and the garage (left out if blank)
@@ -652,6 +654,7 @@
     });
 
     function build(car, lists, existingData, tasks, draft) {
+      FleetApp.setBanner(Object.assign({ subtitle: car.registration + ' · ' + car.make + ' ' + car.model }, existingData ? { title: 'Edit ' + BY_TYPE[existingData.entry.type].label.toLowerCase() } : {})); // the banner says which car this is for
       var existing = existingData ? existingData.entry : null;
       var type = existing ? existing.type : TYPES[typeKey].type;
       var meta = BY_TYPE[type];

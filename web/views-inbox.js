@@ -79,6 +79,7 @@
 
     var cars = [];
     var reading = true;
+    FleetApp.setBanner({ title: 'Receipt Inbox', icon: 'inbox', action: null });
 
     function addBlock() {
       var carSelect = el('select', { name: 'carId' }, [el('option', { value: '', text: 'Not sure yet (the AI will try to tell)' })].concat(
@@ -137,6 +138,7 @@
       cars = res[1].data.cars || [];
       reading = data.reading;
       setCount(data.open.length);
+      FleetApp.setBanner({ subtitle: data.open.length ? data.open.length + (data.open.length === 1 ? ' receipt waiting to be checked' : ' receipts waiting to be checked') : 'Nothing waiting' });
       fileBox.replaceChildren(addBlock());
       listBox.replaceChildren.apply(listBox, data.open.length ? data.open.map(row) : [el('p', { class: 'muted', text: 'Nothing is waiting. Add a receipt above' + (data.reading ? '' : ', or email one once that is switched on') + '.' })]);
       if (data.recent.length) {

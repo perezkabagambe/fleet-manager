@@ -106,6 +106,9 @@
       }
     }
     shownPath = r.path;
+    currentPath = r.path;
+    if (!r.keepOpen) { banner = Object.assign({ title: 'Fleet Manager', subtitle: '', back: '', icon: '', share: null, ref: '', action: null }, defaultBanner(r.path)); }
+    refreshNav();
     var view;
     var m;
     r.params = {};
@@ -151,27 +154,134 @@
     else if (!r.query.focus && !r.keepOpen) window.scrollTo(0, 0);
   }
 
-  // ---------- navigation ----------
-  function refreshNav() {
-    var nav = document.getElementById('topnav');
-    var user = FleetAuth.getUser();
-    var links = [];
-    if (FleetAuth.hasSession()) links.push(el('a', { href: '#/', text: 'Fleet' }));
-    if (FleetAuth.hasSession() && window.InboxUI) {
-      var n = InboxUI.getCount();
-      links.push(el('a', { href: '#/inbox', text: n > 0 ? 'Inbox (' + n + ')' : 'Inbox' }));
-    }
-    if (FleetAuth.isAdmin()) links.push(el('a', { href: '#/admin/users', text: 'Users' }));
-    if (user) links.push(el('a', { href: '#/profile', text: user.name.split(' ')[0] }));
-    if (FleetAuth.hasSession()) {
-      if (user && window.FleetSync) links.push(el('button', { type: 'button', class: 'navbtn', id: 'refresh-all', text: 'Refresh all app data', onclick: function () { FleetSync.refreshAll(); } }));
-      links.push(el('button', { type: 'button', class: 'navbtn', text: 'Sign out', onclick: signOut }));
-    } else {
-      links.push(el('a', { href: '#/login', text: 'Sign in' }));
-    }
-    nav.replaceChildren.apply(nav, links);
-    nav.setAttribute('aria-label', user ? 'Main menu for ' + user.name : 'Main menu');
+  // ---------- the banner and the tab bar ----------
+  // The banner at the top always names the page you are on. On a page you opened from another it has a back arrow; on the
+  // main pages it has the page's icon. It can also carry the page's main action (Add car, Share). The bar at the bottom
+  // moves between the main places: Fleet, Inbox, Users (admins) and Me.
+  var ICONS = {
+    back: '<path d="M15 6l-6 6l6 6"/>',
+    plus: '<path d="M12 5l0 14"/><path d="M5 12l14 0"/>',
+    car: '<path d="M5 17a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M15 17a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"/>',
+    inbox: '<path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"/><path d="M4 13h3l3 3h4l3 -3h3"/>',
+    users: '<path d="M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/>',
+    user: '<path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0"/><path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/>',
+  };
+  function icon(name, size) {
+    var span = el('span', { class: 'ico', 'aria-hidden': 'true' });
+    span.innerHTML = '<svg viewBox="0 0 24 24" width="' + (size || 24) + '" height="' + (size || 24) + '" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[name] || '') + '</svg>'; // fixed drawings
+    return span;
   }
+
+  var banner = { title: 'Fleet Manager', subtitle: '', back: '', icon: '', share: null, ref: '', action: null };
+  var currentPath = '/';
+
+  /** What the banner says before the page has loaded its data (the page then adds details with FleetApp.setBanner). */
+  function defaultBanner(path) {
+    var m;
+    if (path === '/') return { title: 'Fleet', icon: 'car' };
+    if (path === '/inbox') return { title: 'Receipt Inbox', icon: 'inbox' };
+    if (/^\/inbox\/[0-9a-f-]+$/.test(path)) return { title: 'Receipt', back: '#/inbox' };
+    if (path === '/admin/users') return { title: 'Users', icon: 'users' };
+    if ((m = /^\/admin\/users\/([0-9a-f-]+)\/cars$/.exec(path))) return { title: 'Their cars', back: '#/admin/users' };
+    if (path === '/profile') return { title: 'Me', icon: 'user' };
+    if (path === '/profile/cars') return { title: 'Choose my cars', back: '#/profile' };
+    if (path === '/diag') return { title: 'Diagnostics', back: FleetAuth.hasSession() ? '#/profile' : '#/login' };
+    if (path === '/feedback') return { title: 'Report a bug or request a feature', back: FleetAuth.hasSession() ? '#/profile' : '#/login' };
+    if (path === '/car/new') return { title: 'Add a car', back: '#/' };
+    if ((m = /^\/car\/([0-9a-f-]{8,40})$/.exec(path))) return { title: 'Car', back: '#/' };
+    if ((m = /^\/car\/([0-9a-f-]{8,40})\/(edit|fluids|people|label)$/.exec(path))) return { title: { edit: 'Edit car', fluids: 'Edit specs', people: 'Owners', label: 'QR label' }[m[2]], back: '#/car/' + m[1] };
+    if ((m = /^\/car\/([0-9a-f-]{8,40})\/add$/.exec(path))) return { title: 'Add an entry', back: '#/car/' + m[1] };
+    if ((m = /^\/car\/([0-9a-f-]{8,40})\/add\/(\w+)$/.exec(path))) return { title: 'Add ' + ({ issue: 'an issue', maintenance: 'maintenance', repair: 'maintenance', purchase: 'a purchased item', compliance: 'a renewal' }[m[2]] || 'an entry'), back: '#/car/' + m[1] + '/add' };
+    if ((m = /^\/car\/([0-9a-f-]{8,40})\/entry\/([0-9a-f-]{8,40})\/edit$/.exec(path))) return { title: 'Edit entry', back: '#/car/' + m[1] + '/entry/' + m[2] };
+    if ((m = /^\/car\/([0-9a-f-]{8,40})\/entry\/([0-9a-f-]{8,40})$/.exec(path))) return { title: 'Entry', back: '#/car/' + m[1] };
+    if ((m = /^\/car\/([0-9a-f-]{8,40})\/reminder\/(new|[0-9a-f-]{8,40})$/.exec(path))) return { title: m[2] === 'new' ? 'New reminder' : 'Edit reminder', back: '#/car/' + m[1] };
+    return { title: 'Fleet Manager' };
+  }
+
+  function drawBanner() {
+    var signedIn = FleetAuth.hasSession() && !!FleetAuth.getUser();
+    var back = document.getElementById('bar-back');
+    var logo = document.getElementById('bar-logo');
+    var title = document.getElementById('bar-title');
+    var sub = document.getElementById('bar-sub');
+    var actions = document.getElementById('bar-actions');
+    if (!back) return;
+    back.hidden = !banner.back;
+    if (banner.back) { back.setAttribute('href', banner.back); back.replaceChildren(icon('back', 26)); }
+    logo.hidden = !!banner.back || signedIn; // the logo is for the sign-in pages; signed in, the page's own icon leads
+    var lead = document.getElementById('bar-icon');
+    if (lead) lead.remove();
+    if (!banner.back && signedIn && banner.icon) { lead = icon(banner.icon, 24); lead.id = 'bar-icon'; lead.classList.add('bar-icon'); title.parentNode.parentNode.insertBefore(lead, title.parentNode); }
+    title.textContent = banner.title;
+    sub.textContent = banner.subtitle || '';
+    sub.hidden = !banner.subtitle;
+    var kids = [];
+    if (banner.action) {
+      var a = el('a', { class: 'bar-action', href: banner.action.href, 'aria-label': banner.action.label }, [icon(banner.action.icon || 'plus', 24)]);
+      kids.push(a);
+    }
+    if (banner.share) {
+      kids.push(el('div', { class: 'bar-share' }, [
+        UI.shareButton(banner.share.url, { title: banner.share.title, aria: banner.share.aria || 'Share' }),
+        banner.ref ? el('span', { class: 'ref-tiny' , text: banner.ref }) : null,
+      ]));
+    }
+    actions.replaceChildren.apply(actions, kids);
+    document.title = (banner.title && banner.title !== 'Fleet Manager' ? banner.title + ' · ' : '') + 'Fleet Manager';
+  }
+
+  function setBanner(o) {
+    Object.keys(o || {}).forEach(function (k) { banner[k] = o[k]; });
+    drawBanner();
+  }
+
+  /** Pages that did not name their banner still get a back arrow if they have a "back" link, and no title is shown twice. */
+  function tidyPage() {
+    if (!banner.back) {
+      var a = appEl.querySelector('a.back');
+      if (a && a.getAttribute('href')) { banner.back = a.getAttribute('href'); drawBanner(); }
+    }
+    var shown = (banner.title || '').trim().toLowerCase();
+    Array.prototype.forEach.call(appEl.querySelectorAll('h1'), function (h) {
+      h.classList.toggle('dup-title', !!shown && h.textContent.trim().toLowerCase() === shown);
+    });
+  }
+  var tidyQueued = false;
+  new MutationObserver(function () {
+    if (tidyQueued) return;
+    tidyQueued = true;
+    window.requestAnimationFrame(function () { tidyQueued = false; tidyPage(); });
+  }).observe(appEl, { childList: true, subtree: true });
+
+  function currentTab(path) {
+    if (path === '/' || /^\/car\//.test(path)) return 'fleet';
+    if (/^\/inbox/.test(path)) return 'inbox';
+    if (/^\/admin\//.test(path)) return 'users';
+    if (/^\/(profile|diag|feedback)/.test(path)) return 'me';
+    return '';
+  }
+
+  function drawTabs() {
+    var bar = document.getElementById('tabbar');
+    var signedIn = FleetAuth.hasSession() && !!FleetAuth.getUser();
+    var onGuestPage = GUEST_PATH.test(currentPath) || (!FleetAuth.hasSession());
+    bar.hidden = !signedIn || onGuestPage;
+    document.body.classList.toggle('has-tabs', !bar.hidden);
+    if (bar.hidden) { bar.replaceChildren(); return; }
+    var here = currentTab(currentPath);
+    var n = window.InboxUI ? InboxUI.getCount() : 0;
+    var tabs = [{ id: 'fleet', label: 'Fleet', icon: 'car', href: '#/' }, { id: 'inbox', label: 'Inbox', icon: 'inbox', href: '#/inbox', badge: n }];
+    if (FleetAuth.isAdmin()) tabs.push({ id: 'users', label: 'Users', icon: 'users', href: '#/admin/users' });
+    tabs.push({ id: 'me', label: 'Me', icon: 'user', href: '#/profile' });
+    bar.replaceChildren.apply(bar, tabs.map(function (t) {
+      return el('a', { class: 'tab' + (t.id === here ? ' on' : ''), href: t.href, 'aria-current': t.id === here ? 'page' : null }, [
+        icon(t.icon, 24), el('span', { class: 'tab-label', text: t.label }),
+        t.badge ? el('span', { class: 'tab-badge', text: t.badge > 99 ? '99+' : String(t.badge) }) : null,
+      ]);
+    }));
+  }
+
+  function refreshNav() { drawTabs(); drawBanner(); }
 
   function signOut() {
     var done = function () {
@@ -502,6 +612,8 @@
   window.FleetApp = {
     go: go,
     refreshNav: refreshNav,
+    setBanner: setBanner,
+    signOut: function () { signOut(); },
     previousPage: function () { return lastPage; },
     setFlash: function (kind, text) { flash = { kind: kind, text: text }; },
     takeFlash: function () { var f = flash; flash = null; if (f) shownFlash = f; return f; },

@@ -198,11 +198,29 @@
     }).catch(function (e) {
       if (e.code !== 'unauthorized') mine.replaceChildren(UI.notice('error', UI.errorText(e)));
     });
+    // the things that used to sit in the menu across the top
+    function menuRow(label, opts) {
+      var tag = opts.href ? 'a' : 'button';
+      var row = el(tag, Object.assign({ class: 'menu-row' + (opts.danger ? ' danger' : '') }, opts.href ? { href: opts.href } : { type: 'button' }), [
+        el('span', { class: 'menu-label', text: label }), el('span', { class: 'menu-chev', 'aria-hidden': 'true', text: '›' }),
+      ]);
+      if (opts.onClick) row.addEventListener('click', opts.onClick);
+      return row;
+    }
+    var initials = user.name.split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w.charAt(0).toUpperCase(); }).join('') || '?';
+    var refreshRow = menuRow('Refresh all app data', { onClick: function () { if (window.FleetSync) FleetSync.refreshAll(); } });
     root.replaceChildren(el('section', { class: 'card narrow' }, [
-      el('h1', { text: 'Your profile' }),
-      el('p', { class: 'muted', text: user.email + (user.role === 'admin' ? ' · Administrator' : '') }),
-      msg, form,
-      el('hr', { class: 'rule' }),
+      el('div', { class: 'me-head' }, [
+        el('div', { class: 'me-avatar', 'aria-hidden': 'true', text: initials }),
+        el('div', {}, [el('div', { class: 'me-name', text: user.name }), el('div', { class: 'muted small-text', text: user.email + (user.role === 'admin' ? ' · Administrator' : '') })]),
+      ]),
+      el('div', { class: 'menu-list' }, [
+        refreshRow,
+        menuRow('Diagnostics', { href: '#/diag' }),
+        menuRow('Report a bug or request a feature', { href: '#/feedback' }),
+        menuRow('Sign out', { danger: true, onClick: function () { FleetApp.signOut(); } }),
+      ]),
+      el('details', { class: 'copy-section' }, [el('summary', { text: 'Edit my name' }), msg, form]),
       el('h2', { text: 'My cars' }),
       el('p', { class: 'muted', text: 'The cars you own or look after.' }),
       mine,

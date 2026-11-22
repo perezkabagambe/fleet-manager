@@ -17,12 +17,12 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="#/">Fleet Manager</a>
-    <div class="topright">
-      <nav class="topnav" id="topnav" aria-label="Main menu"></nav>
-      <a class="logo-link" href="#/" aria-label="Fleet Manager home"><img class="logo" src="icons/logo.jpg" width="44" height="44" alt="Potentia Motus Ventures: Fleet Manager"></a>
-    </div>
+  <!-- The banner names the page you are on (and has the way back and the page's main action). -->
+  <header class="topbar" id="topbar">
+    <a class="bar-back" id="bar-back" href="#/" aria-label="Back" hidden></a>
+    <a class="bar-logo" id="bar-logo" href="#/" aria-label="Fleet Manager home" hidden><img class="logo" src="icons/logo.jpg" width="40" height="40" alt="Potentia Motus Ventures: Fleet Manager"></a>
+    <div class="bar-text"><h1 class="bar-title" id="bar-title">Fleet Manager</h1><div class="bar-sub" id="bar-sub"></div></div>
+    <div class="bar-actions" id="bar-actions"></div>
   </header>
 
   <div id="update-banner" class="banner" hidden>
@@ -31,6 +31,8 @@
   </div>
 
   <main id="app" tabindex="-1" aria-live="polite"></main>
+
+  <nav class="tabbar" id="tabbar" aria-label="Main menu" hidden></nav>
 
   <footer class="footer">
     <span id="rev-front">rev …</span>
