@@ -774,3 +774,9 @@ details.collapsible:has(.bin-card) { border-style: dashed; background: var(--bg)
 .entry-actions { display: flex; gap: 10px; margin: 12px 0; }
 .entry-actions .btn { flex: 1 1 0; text-align: center; justify-content: center; }
 .btn.danger-outline { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
+
+.receipt-hint { margin: 8px 0 0; font-size: 0.78rem; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
+.receipt-hint-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; font-weight: 600; }
+.addr-row { border-bottom: 1px solid var(--border); padding: 8px 0; }
+.addr-row:last-child { border-bottom: 0; }
+.addr-row code { overflow-wrap: anywhere; font-size: 0.8rem; }

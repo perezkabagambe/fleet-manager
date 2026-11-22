@@ -395,6 +395,33 @@
       });
     }
 
+    // each car's easy and private receipt addresses, with a way to replace a private one
+    var addrBody = el('div', { class: 'stack' });
+    var addrLoaded = false;
+    function loadAddresses() {
+      addrBody.replaceChildren(el('p', { class: 'muted', text: 'Loading…' }));
+      FleetApi.call('listReceiptAddresses', {}, { timeoutMs: 60000 }).then(function (r) {
+        addrBody.replaceChildren.apply(addrBody, [el('p', { class: 'muted small-text', text: 'The registration address only works for mail from an approved user\'s own email address. The private address works for anyone who has it (shops, automatic forwarding): share it carefully.' })].concat(r.data.cars.map(function (c) {
+          var again = el('button', { type: 'button', class: 'btn small secondary', text: 'Make a new private address' });
+          again.addEventListener('click', function () {
+            UI.confirm('Make a new private address for ' + c.registration + '? The old private address stops working straight away (the registration address is not affected).', { okLabel: 'Make a new one', danger: true }).then(function (yes) {
+              if (!yes) return;
+              UI.busy(again, 'Working…', FleetApi.call('replaceReceiptSecret', { carId: c.carId })).then(loadAddresses)
+                .catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+            });
+          });
+          return el('div', { class: 'addr-row' }, [
+            el('strong', { text: c.registration }),
+            el('div', { class: 'small-text' }, [el('span', { class: 'muted', text: 'Registration address: ' }), el('code', { text: c.address || 'none (the registration is too short)' })]),
+            el('div', { class: 'small-text' }, [el('span', { class: 'muted', text: 'Private address: ' }), el('code', { text: c.privateAddress }), UI.copyValueButton(c.privateAddress, 'Copy the private address for ' + c.registration)]),
+            again,
+          ]);
+        })));
+      }).catch(function (e) { addrLoaded = false; addrBody.replaceChildren(UI.notice('error', UI.errorText(e))); });
+    }
+    var addrBox = el('details', { class: 'copy-section' }, [el('summary', { text: 'Receipt email addresses for each car' }), addrBody]);
+    addrBox.addEventListener('toggle', function () { if (addrBox.open && !addrLoaded) { addrLoaded = true; loadAddresses(); } });
+
     var refresh = el('button', { type: 'button', class: 'btn small secondary', text: 'Refresh' });
     refresh.addEventListener('click', function () { UI.busy(refresh, 'Refreshing…', load()); });
     var now = el('button', { type: 'button', class: 'btn small', text: 'Check the mail now' });
@@ -432,6 +459,7 @@
       msg, list,
       el('div', { class: 'btn-row' }, [now, inspect, reset, refresh]),
       report,
+      addrBox,
       el('h3', { text: 'Latest receipts' }), recent,
     ]);
   }

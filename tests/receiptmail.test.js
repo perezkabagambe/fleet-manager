@@ -390,3 +390,33 @@ test('an admin can re-create the receipt timer; it ends up as exactly one, and D
   assert.notEqual(h.mail.timerMade, '');
   assert.equal(h.mail.timerOn, true);
 });
+
+test('getReceiptEmail gives any signed-in user the car\'s easy address without changing anything', () => {
+  const { env, sam, car } = setup();
+  assert.equal(env.call('getReceiptEmail', { carId: car.id }).error, 'unauthorized');
+  assert.equal(env.call('getReceiptEmail', { token: sam, carId: 'nope' }).error, 'not_found');
+  const before = vm.runInContext('Db.all("Cars")[0].receipt_secret', env.ctx);
+  const r = env.call('getReceiptEmail', { token: sam, carId: car.id });
+  assert.equal(r.data.address, 'potentiafleetmanager+ab12cde@gmail.com');
+  assert.equal(vm.runInContext('Db.all("Cars")[0].receipt_secret', env.ctx), before); // nothing was written
+  env.props.RECEIPT_MAILBOX = 'fleets@example.org';
+  assert.equal(env.call('getReceiptEmail', { token: sam, carId: car.id }).data.address, 'fleets+ab12cde@example.org');
+});
+
+test('listReceiptAddresses (admin) gives every car both addresses, making any missing private one, and keeps them stable', () => {
+  const { env, admin, sam } = setup();
+  env.call('saveCar', { token: sam, fields: Object.assign({}, CAR, { registration: 'ZZ99 ZZZ' }) });
+  assert.equal(env.call('listReceiptAddresses', { token: sam }).error, 'forbidden');
+  const a = env.call('listReceiptAddresses', { token: admin }).data;
+  assert.deepEqual(a.cars.map((c) => c.registration), ['AB12 CDE', 'ZZ99 ZZZ']);
+  a.cars.forEach((c) => {
+    assert.match(c.address, /^potentiafleetmanager\+[a-z0-9]{2,}@gmail\.com$/);
+    assert.match(c.privateAddress, /^potentiafleetmanager\+[a-f0-9]{12}@gmail\.com$/);
+  });
+  assert.equal(a.cars[0].address, 'potentiafleetmanager+ab12cde@gmail.com');
+  const b = env.call('listReceiptAddresses', { token: admin }).data;
+  assert.deepEqual(b.cars.map((c) => c.privateAddress), a.cars.map((c) => c.privateAddress));
+  const changed = env.call('replaceReceiptSecret', { token: admin, carId: a.cars[0].carId }).data.privateAddress;
+  assert.notEqual(changed, a.cars[0].privateAddress);
+  assert.equal(env.call('listReceiptAddresses', { token: admin }).data.cars[0].privateAddress, changed);
+});

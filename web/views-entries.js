@@ -252,6 +252,14 @@
     return card;
   }
 
+  // The car's easy receipt address (asked for once per car, then remembered)
+  var receiptEmails = {};
+  function receiptEmailFor(car) {
+    var key = car.id + '|' + car.registration;
+    if (!receiptEmails[key]) receiptEmails[key] = FleetApi.call('getReceiptEmail', { carId: car.id }).then(function (r) { return r.data.address; }).catch(function (e) { delete receiptEmails[key]; throw e; });
+    return receiptEmails[key];
+  }
+
   function historyCard(car, preloaded) {
     var chips = el('div', { class: 'filters', role: 'group', 'aria-label': 'Filter the history' });
     var list = el('div', { class: 'history' }, [fmt.loading()]);
@@ -334,9 +342,21 @@
       });
     }
 
+    // A short note under the button: where receipts and invoices can be emailed (filled in once the address is known)
+    var receiptHint = el('p', { class: 'receipt-hint', hidden: true });
+    receiptEmailFor(car).then(function (address) {
+      if (!address) return;
+      receiptHint.replaceChildren(
+        document.createTextNode('Purchase receipts or garage invoices can be emailed directly to '),
+        el('a', { class: 'receipt-hint-link', href: 'mailto:' + address, text: address }),
+        document.createTextNode(' for automatic processing.')
+      );
+      receiptHint.hidden = false;
+    }).catch(function () { /* no note: the log works without it */ });
     return el('section', { class: 'card' }, [
       el('h2', { text: 'Maintenance & Issues Log' }),
       el('a', { class: 'btn block big', href: '#/car/' + car.id + '/add', text: 'Add entry' }),
+      receiptHint,
       chips, list,
     ]);
   }

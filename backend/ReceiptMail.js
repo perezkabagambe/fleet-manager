@@ -64,6 +64,31 @@ function getReceiptAddress_(p, ctx) {
   return receiptAddresses_(car, secret);
 }
 
+/** The car's easy address (made from its registration number). Changes nothing, so any signed-in user can ask. */
+function getReceiptEmail_(p, ctx) {
+  const car = findCar_(cleanStr_(p.carId, 64), false);
+  if (!car) fail_('not_found');
+  const tag = regTag_(car.registration);
+  return { address: tag.length >= 2 ? receiptAddress_(tag) : '' };
+}
+
+/** Admin only: every car's easy and private receipt addresses (a missing private address is made). */
+function listReceiptAddresses_(p, ctx) {
+  const cars = Db.all('Cars').filter(function (c) { return !isTrue_(c.deleted); }).sort(function (a, b) { return String(a.registration).localeCompare(String(b.registration)); });
+  return {
+    emailOn: receiptMailOn_(),
+    cars: cars.map(function (c) {
+      let secret = c.receipt_secret;
+      if (!secret) {
+        secret = newReceiptSecret_();
+        Db.update('Cars', c._row, touch_(c, ctx, { receipt_secret: secret }));
+      }
+      const a = receiptAddresses_(c, secret);
+      return { carId: c.id, registration: c.registration, address: a.address, privateAddress: a.privateAddress };
+    }),
+  };
+}
+
 /** Admin only: a new private address for the car. The old one stops working at once (use it if the address has been shared too widely). */
 function replaceReceiptSecret_(p, ctx) {
   const car = findCar_(cleanStr_(p.carId, 64), false);

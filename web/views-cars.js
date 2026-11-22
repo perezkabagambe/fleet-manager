@@ -317,41 +317,6 @@
       var exportBtn = el('button', { type: 'button', class: 'btn block secondary', text: 'Export all vehicle data' });
       exportBtn.addEventListener('click', function () { ExportAll.run(car); });
 
-      // Receipts for this car: its private email address (made the first time it is opened) and a link to add a photo.
-      var receiptBody = el('div', { class: 'stack' });
-      var receiptLoaded = false;
-      function showReceiptAddress(r) {
-        var again = null;
-        if (FleetAuth.isAdmin()) {
-          again = el('button', { type: 'button', class: 'btn small secondary', text: 'Make a new private address' });
-          again.addEventListener('click', function () {
-            UI.confirm('Make a new private address for this car? The old private address stops working straight away (the registration one is not affected).', { okLabel: 'Make a new one', danger: true }).then(function (yes) {
-              if (!yes) return;
-              UI.busy(again, 'Working…', FleetApi.call('replaceReceiptSecret', { carId: car.id })).then(function (x) { showReceiptAddress(x.data); })
-                .catch(function (e) { receiptBody.prepend(UI.notice('error', UI.errorText(e))); });
-            });
-          });
-        }
-        receiptBody.replaceChildren(
-          el('p', { class: 'muted small-text', text: 'Email or forward a receipt or garage invoice to this address and it appears in the Inbox for you to check. It only works for mail sent from an approved user\'s own email address.' }),
-          r.address ? el('div', { class: 'receipt-address' }, [el('code', { text: r.address }), UI.copyValueButton(r.address, 'Copy the receipt address')]) : null,
-          el('p', { class: 'muted small-text', text: 'Private address, for shops that email receipts and for automatic forwarding. Anyone who has it can send to this car, so share it carefully.' }),
-          el('div', { class: 'receipt-address' }, [el('code', { text: r.privateAddress }), UI.copyValueButton(r.privateAddress, 'Copy the private receipt address')]),
-          r.emailOn ? null : UI.notice('info', 'Emailed receipts are not switched on yet. An administrator turns them on once; until then, add receipts as photos or PDFs.'),
-          el('div', { class: 'btn-row' }, [el('a', { class: 'btn small secondary', href: '#/inbox?car=' + car.id, text: 'Add a photo or PDF instead' }), again])
-        );
-      }
-      var receiptBox = el('details', { class: 'copy-section' }, [el('summary', { text: 'Email receipts for this car' }), receiptBody]);
-      receiptBox.addEventListener('toggle', function () {
-        if (!receiptBox.open || receiptLoaded) return;
-        receiptLoaded = true;
-        receiptBody.replaceChildren(el('p', { class: 'muted', text: 'Loading…' }));
-        FleetApi.call('getReceiptAddress', { carId: car.id }).then(function (r) { showReceiptAddress(r.data); }).catch(function (e) {
-          receiptLoaded = false;
-          receiptBody.replaceChildren(UI.notice('error', UI.errorText(e)));
-        });
-      });
-
       root.replaceChildren(
         el('section', { class: 'card' }, [
           backLink('#/', 'Fleet'),
@@ -403,7 +368,6 @@
         ])),
         FleetAuth.isAdmin() ? collapsible('Recycle bin', EntryUI.binCard(car)) : null, // the last section, for admins only
         el('div', { class: 'export-row' }, [
-          receiptBox,
           exportBtn,
           el('p', { class: 'muted small-text', text: 'Downloads one zip: a PDF of everything on this page, plus a folder for every photo, file and document, named by its unique ID.' }),
         ]),
