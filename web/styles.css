@@ -769,3 +769,8 @@ details.collapsible:has(.bin-card) { border-style: dashed; background: var(--bg)
 .entry-garage-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.72rem; line-height: 1.35; }
 .entry-garage-line .pin { display: inline-block; vertical-align: -1px; margin-right: 3px; line-height: 0; }
 .entry-line .entry-ref-line { font-size: 0.72rem; }
+
+/* the entry page: Edit and Delete side by side at the top */
+.entry-actions { display: flex; gap: 10px; margin: 12px 0; }
+.entry-actions .btn { flex: 1 1 0; text-align: center; justify-content: center; }
+.btn.danger-outline { background: transparent; color: var(--bad); border: 1px solid var(--bad); }

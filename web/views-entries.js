@@ -257,28 +257,6 @@
     var list = el('div', { class: 'history' }, [fmt.loading()]);
     var filter = 'All';
     var data = [];
-    var editing = false; // the section's Edit button shows an Edit button on every row
-
-    var notes = el('div'); // a message about a delete or a restore that did not work
-
-    function afterChange(text) { dataChanged(car.id, text); }
-
-    /** Admins only: Delete sits under Edit. The entry goes to the recycle bin and can be restored for 30 days. */
-    function deleteButton(e) {
-      if (!FleetAuth.isAdmin()) return null;
-      var b = el('button', { type: 'button', class: 'btn small danger', text: 'Delete', 'aria-label': 'Delete ' + e.title });
-      b.addEventListener('click', function () {
-        UI.confirm('Delete "' + e.title + '"? It moves to the recycle bin and can be restored for 30 days. Any parts it used go back to stock while it is deleted.', { okLabel: 'Delete', danger: true }).then(function (yes) {
-          if (!yes) return;
-          notes.replaceChildren();
-          UI.busy(b, 'Deleting…', FleetApi.call('deleteEntry', { id: e.id })).then(function () {
-            afterChange('Deleted "' + e.title + '". It is in the recycle bin for 30 days.');
-          }).catch(function (err) { notes.replaceChildren(UI.notice('error', UI.errorText(err))); });
-        });
-      });
-      return b;
-    }
-
     // A small location pin before the garage's name.
     function pinIcon() {
       var span = el('span', { class: 'pin', 'aria-hidden': 'true' });
@@ -300,10 +278,10 @@
       if (e.guestName) tags.push(GuestUI.chip(e));
       var cost = costText(e);
       var link = el('a', { class: 'entry-row', href: '#/car/' + car.id + '/entry/' + e.id }, [
-        // the picture, with the type tag beneath it (while editing there is no room: the tag joins the others below)
+        // the picture, with the type tag beneath it
         el('div', { class: 'entry-lead' }, [
           e.thumbAttachmentId ? Photos.thumbBox(e.thumbAttachmentId, 'row-thumb') : typeThumb(e.type),
-          editing ? null : typeChip(e.type, true),
+          typeChip(e.type, true),
         ]),
         // the title, one line of details, then the status tags: each on a single line
         el('div', { class: 'entry-main' }, [
@@ -312,18 +290,14 @@
           showGarage ? el('div', { class: 'muted small-text entry-garage-line' }, [pinIcon(), document.createTextNode(e.vendor)]) : null,
           // the status tags on the left, and the price in the bottom right corner
           el('div', { class: 'entry-foot' }, [
-            el('div', { class: 'entry-foot-tags' }, (editing ? [typeChip(e.type, true)] : []).concat(tags)),
+            el('div', { class: 'entry-foot-tags' }, tags),
             cost ? el('strong', { class: 'entry-cost', text: cost }) : null,
           ]),
         ]),
       ]);
       // On the right: the share symbol with the ID under it (and, in the link, the price in the bottom right corner).
-      return el('div', { class: 'entry-line' + (editing ? ' is-editing' : '') }, [
+      return el('div', { class: 'entry-line' }, [
         link,
-        editing ? el('div', { class: 'row-actions' }, [
-          el('a', { class: 'btn small secondary', href: '#/car/' + car.id + '/entry/' + e.id + '/edit', text: 'Edit', 'aria-label': 'Edit ' + e.title }),
-          deleteButton(e),
-        ]) : null,
         el('div', { class: 'share-stack' }, [
           UI.shareButton(fmt.entryUrl(car.id, e.id), { title: e.title + ' · ' + car.registration, aria: 'Share ' + e.title }),
           e.ref ? refTiny(e.ref) : null,
@@ -360,12 +334,10 @@
       });
     }
 
-    var editBtn = UI.editToggle(function (on) { editing = on; render(); });
     return el('section', { class: 'card' }, [
       el('h2', { text: 'Maintenance & Issues Log' }),
-      el('div', { class: 'section-tools' }, [editBtn]),
       el('a', { class: 'btn block big', href: '#/car/' + car.id + '/add', text: 'Add entry' }),
-      notes, chips, list,
+      chips, list,
     ]);
   }
 
@@ -455,12 +427,12 @@
       if (e.vendor) meta.push(e.vendor);
       var deleteBtn = null;
       if (FleetAuth.isAdmin()) {
-        deleteBtn = el('button', { type: 'button', class: 'btn small danger', text: 'Delete' });
+        deleteBtn = el('button', { type: 'button', class: 'btn big danger-outline', text: 'Delete' });
         deleteBtn.addEventListener('click', function () {
           UI.confirm('Delete this ' + e.type.toLowerCase() + '? It moves to the recycle bin and can be restored for 30 days. Any parts it used go back to stock while it is deleted.', { okLabel: 'Delete', danger: true }).then(function (yes) {
             if (!yes) return;
             UI.busy(deleteBtn, 'Deleting…', FleetApi.call('deleteEntry', { id: e.id }))
-              .then(function () { Views.invalidateCars(); FleetApp.setFlash('ok', 'Deleted "' + e.title + '". It is in the recycle bin for 30 days (open the Maintenance & Issues Log and its Recycle bin to restore it).'); FleetApp.go('/car/' + carId); })
+              .then(function () { Views.invalidateCars(); FleetApp.setFlash('ok', 'Deleted "' + e.title + '". It is in the Recycle bin (under the log) for 30 days.'); FleetApp.go('/car/' + carId); })
               .catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
           });
         });
@@ -509,7 +481,11 @@
         ]),
         msg, statusArea,
         d.reminder ? el('p', { class: 'muted small-text' }, [el('span', { text: 'Reminder: ' }), el('a', { href: '#/car/' + carId + '/reminder/' + d.reminder.id, text: d.reminder.name })]) : null,
-        el('a', { class: 'btn block big edit-top', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit ' + BY_TYPE[e.type].label.toLowerCase() }),
+        // Edit and Delete (admins) next to each other at the top of the entry
+        el('div', { class: 'entry-actions' }, [
+          el('a', { class: 'btn big', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit' }),
+          deleteBtn,
+        ]),
       ])];
 
       // type-specific details
@@ -639,7 +615,6 @@
       ]));
 
       cards.push(el('a', { class: 'btn block big edit-bottom', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit ' + BY_TYPE[e.type].label.toLowerCase() }));
-      if (deleteBtn) cards.push(el('div', { class: 'entry-delete' }, [deleteBtn])); // quiet, at the very bottom
       root.replaceChildren.apply(root, cards);
     }
   };
