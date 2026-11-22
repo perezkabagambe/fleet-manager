@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment_retry.outputs.page_url || steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,5 +36,19 @@ jobs:
         with:
           path: web
 
+      # GitHub's artifact lookup sometimes finds nothing for a moment after the upload ("No artifacts named github-pages").
+      # Wait a little, and if the first try still fails, try once more, so a blip does not fail the run (and email the owner).
+      - name: Give GitHub a moment to register the upload
+        run: sleep 8
+
       - id: deployment
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Wait before trying again
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 25
+
+      - id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4
