@@ -3,6 +3,12 @@
   'use strict';
 
   var el = UI.el;
+
+  /** Which of the three ways of asking answered: 1 the latest model with search, 2 an older model with search, 3 the latest model without search. */
+  function methodText(m) {
+    var what = m.step === 1 ? 'the latest model, with Google Search' : m.step === 2 ? 'an older model, with Google Search' : 'the latest model, without web search (search was not available)';
+    return 'Method ' + m.step + ' of 3 was used: ' + what + ' (' + m.model + ').';
+  }
   var MARKETS = ['European', 'UK', 'Japanese (JDM)', 'North American', 'Middle East (GCC)', 'Australian', 'African', 'Asian', 'Other'];
   var Views = (window.Views = window.Views || {});
   var cfg = window.FLEET_CONFIG;
@@ -738,7 +744,8 @@
           kids.push(UI.notice(parts.length ? 'ok' : 'error', parts.length
             ? 'AI filled in ' + parts.join(' and ') + ' (' + d.confidence + ' confidence). ' + (d.summary || '')
             : 'AI had nothing new to add. ' + (d.summary || '')));
-          kids.push(el('p', { class: 'ai-warning', text: 'AI answers are not perfect, and it is up to you to check every entry before you save. The fluids and bulbs it added are marked as AI suggestions; open each section to review them.' }));
+          kids.push(el('p', { class: 'ai-warning', text: 'AI answers are not perfect, and it is up to you to check every entry before you save, including the fluids and bulbs it added.' }));
+          if (d.method) kids.push(el('div', { class: 'small-text muted ai-method', text: methodText(d.method) }));
           if (d.sources && d.sources.length) {
             kids.push(el('div', { class: 'small-text muted' }, [el('span', { text: 'Sources: ' })].concat(d.sources.map(function (s, i) {
               return el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer', text: (i ? ', ' : '') + (s.title || 'link') });
@@ -993,6 +1000,7 @@
           cancel.addEventListener('click', function () { panel.replaceChildren(); status.replaceChildren(); });
           panel.replaceChildren.apply(panel, [
             el('p', { class: 'small-text' }, [el('strong', { text: 'AI suggests these' }), el('span', { class: 'muted', text: ' (' + d.confidence + ' confidence). ' + (d.summary || '') })]),
+            d.method ? el('p', { class: 'small-text muted ai-method', text: methodText(d.method) }) : null,
             checks.length ? null : el('p', { class: 'muted', text: 'Nothing differs from what you already have.' }),
           ].concat(rowsEl, [
             d.sources && d.sources.length ? el('div', { class: 'small-text muted' }, [el('span', { text: 'Sources: ' })].concat(d.sources.map(function (s, i) {

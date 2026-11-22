@@ -174,7 +174,7 @@ test('step 2: if the latest model cannot search, an older 2.5 model is asked, st
   const sent = env.state.geminiRequests;
   assert.deepEqual(sent.map(modelOf), ['gemini-3.5-flash-lite', 'gemini-2.5-flash']);
   assert.deepEqual(sent.map((q) => !!q.body.tools), [true, true]);
-  assert.match(r.data.fluids[0].source, /with Google Search/);
+  assert.deepEqual(r.data.method, { step: 2, model: 'gemini-2.5-flash', searched: true });
   assert.match(env.props.GEMINI_LAST_ERROR, /HTTP 429 RESOURCE_EXHAUSTED · gemini-3\.5-flash-lite with Google Search: Quota exceeded for grounding requests/);
   assert.equal(env.props.GEMINI_LAST_ERROR.includes(KEY), false);
 });
@@ -195,7 +195,8 @@ test('step 3: if searching fails completely, the latest model answers without se
   const sent = env.state.geminiRequests;
   assert.deepEqual(sent.map(modelOf), ['gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.5-flash-lite']);
   assert.deepEqual(sent.map((q) => !!q.body.tools), [true, true, false]);
-  [].concat(r.data.fluids, r.data.bulbs).forEach((row) => assert.match(row.source, /no web search/));
+  assert.deepEqual(r.data.method, { step: 3, model: 'gemini-3.5-flash-lite', searched: false });
+  [].concat(r.data.fluids, r.data.bulbs).forEach((row) => assert.equal(row.source, 'AI suggestion (Gemini with Google Search), not verified', 'rows carry the same hidden marker whichever step answered'));
   env.state.geminiRequests.length = 0;
   env.state.gemini = () => ({ code: 400, body: { error: { message: 'bad' } } });
   assert.equal(fill().error, 'ai_unavailable');
