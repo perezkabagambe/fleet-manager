@@ -952,3 +952,9 @@ body.has-tabs { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
 /* a banner action with a visible label (Add car on the Fleet page) */
 .topbar .bar-action.labelled { gap: 6px; padding: 0 12px 0 10px; border: 1px solid rgba(255, 255, 255, 0.55); font-weight: 600; font-size: 0.9rem; }
 .topbar .bar-action-text { white-space: nowrap; }
+
+/* the whole log row opens the entry, including the empty space between its lines: a transparent layer over the row belongs to the link,
+   and the share button and the ID sit above it */
+.entry-line:not(.is-editing) { position: relative; }
+.entry-line:not(.is-editing) .entry-row::after { content: ''; position: absolute; inset: 0; }
+.entry-line:not(.is-editing) .share-stack { position: relative; z-index: 2; }
