@@ -433,7 +433,7 @@
         return input;
       }
       var nameIn = inp('fluid', { list: bulb ? 'bulb-names' : 'fluid-names', maxlength: '40' });
-      var specIn = inp('specification', { maxlength: '250' });
+      var specIn = inp('specification', { maxlength: '300' });
       var capIn = inp('capacity', { maxlength: '40' });
       // The examples follow the name, so a differential oil never suggests an engine oil grade.
       function showHints() {

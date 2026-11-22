@@ -83,6 +83,8 @@ test('a VIN is used first: the request carries it, everything typed, and a warni
   assert.match(prompt, /engine code D4HB/);
   assert.match(prompt, /colour Black/);
   assert.match(prompt, /trust the VIN/);
+  assert.match(prompt, /ALWAYS look up what each one is equivalent to and give the ACEA class/);
+  assert.match(prompt, /Si-OAT.*long life.*typical colour/s);
   assert.match(q.body.systemInstruction.parts[0].text, /VIN, when given, decodes to the exact vehicle, so it comes before everything else/);
   assert.ok(!JSON.stringify(q.body).includes(KEY), 'the key is never put in the question');
 
@@ -254,7 +256,7 @@ test('only values the app can use get through', () => {
   assert.equal(d.details.fuelCapacity, undefined);
   assert.equal(d.details.gearboxCode, '5');
   assert.deepEqual(d.fluids.map((f) => [f.fluid, f.specification.slice(0, 3)]), [['Engine oil', 'a'], ['Brake fluid', 'SSS']]);
-  assert.equal(d.fluids[1].specification.length, 250);
+  assert.equal(d.fluids[1].specification.length, 300);
   assert.ok(d.fluids[1].notes.length <= 200);
   assert.deepEqual(d.bulbs.map((b) => [b.fluid, b.specification]), [['Front fog', 'Halogen H8 35 W']]);
   assert.equal(d.confidence, 'low', 'an unknown confidence is treated as low');

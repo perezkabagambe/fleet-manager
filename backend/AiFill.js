@@ -164,9 +164,14 @@ function aiFillPrompt_(known) {
     '  "summary": "one or two sentences: what vehicle this is and how sure you are",',
     '  "confidence": "high, medium or low"',
     '}',
-    'Engine oil and coolant are critical fluids, so give as much specification as you can find, separated by commas, and never just a viscosity. ' +
-    'Engine oil: viscosity grade, then every approval or standard the manufacturer requires, e.g. "5W-30, ACEA C3, API SN, VW 504 00 / 507 00" (ACEA class such as A3/B4 or C2/C3, API class, and manufacturer approvals such as MB 229.51, BMW Longlife-04, Ford WSS-M2C913-D, Toyota). ' +
-    'Coolant: the type and technology (e.g. OAT, HOAT, IAT), the colour, the manufacturer specification (e.g. VW TL 774-J G13, Toyota Super Long Life, Ford WSS-M97B44-D) and the mix ratio, e.g. "Pink OAT, VW TL 774-J (G13), 50/50 with distilled water". ' +
+    'Engine oil and coolant are critical fluids, so give as much specification as you can find, separated by commas, and never just a viscosity or just a manufacturer approval. ' +
+    'Engine oil: start with the viscosity grade. Then, for the manufacturer approval(s) this car needs (e.g. MB 229.3, VW 504 00 / 507 00, BMW Longlife-04, Ford WSS-M2C913-D, GM dexos2, Toyota, Renault RN0720), ' +
+    'ALWAYS look up what each one is equivalent to and give the ACEA class (A1/B1, A3/B3, A3/B4, A5/B5, C1, C2, C3, C4, C5, E4, E6 or E7) and the API service class (e.g. SN, SP, CK-4) it corresponds to. ' +
+    'Always try to find the equivalent ACEA class; only leave it out if there truly is none, and then say so. Keep the manufacturer approval too. ' +
+    'Example: "5W-40, ACEA A3/B4, API SN, MB 229.3". ' +
+    'Coolant: say the technology type (one of IAT, OAT, HOAT, P-OAT, Si-OAT, or the nearest match), whether it is long life (and roughly how many years or km), the typical colour (e.g. pink, blue, green, violet, orange, yellow), ' +
+    'the manufacturer specification or VW G-number (e.g. VW TL 774-J G13, G12evo, Toyota Super Long Life, Ford WSS-M97B44-D, MB 325.5) and the mix ratio. ' +
+    'Example: "Pink/violet long-life Si-OAT, VW TL 774-J (G13), 50/50 with distilled water". ' +
     'The same applies to other critical fluids (gearbox oil, brake fluid DOT grade): include the standard. Other strings can stay short. Put any doubt in "notes" (for example "xenon cars use D1S instead").'
   );
   return lines.join('\n');
@@ -287,7 +292,7 @@ function aiClean_(raw) {
   const seenFluid = {};
   (Array.isArray(raw && raw.fluids) ? raw.fluids : []).forEach(function (f) {
     const name = cleanStr_(f && f.fluid, 40);
-    const spec = cleanStr_(f && f.specification, 250);
+    const spec = cleanStr_(f && f.specification, 300);
     const cap = cleanStr_(f && f.capacity, 40);
     if (AI_FLUID_NAMES.indexOf(name) === -1 || seenFluid[name] || (!spec && !cap)) return;
     seenFluid[name] = true;
