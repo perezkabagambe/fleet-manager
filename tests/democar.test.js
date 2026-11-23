@@ -30,6 +30,17 @@ test('creating it again never makes a second one', () => {
   assert.equal(env.call('listCars', { token: admin }).data.cars.filter((c) => c.registration === 'DEMO 001').length, 1);
 });
 
+test('creating it again swaps in the current demo picture: still exactly one photo', () => {
+  const { env, admin, sam } = setup();
+  const id = env.call('createDemoCar', { token: admin }).data.id;
+  const first = env.call('getCarPage', { token: sam, id }).data.car.photos;
+  const again = env.call('createDemoCar', { token: admin }).data;
+  assert.equal(again.photo, true);
+  const after = env.call('getCarPage', { token: sam, id }).data.car.photos;
+  assert.equal(after.length, 1);
+  assert.notEqual(after[0].id, first[0].id);
+});
+
 test('the demo car is filled in as fully as possible: details, catalogues, fluids and bulbs, every kind of entry, reminders and a document', () => {
   const { env, admin, sam } = setup();
   const id = env.call('createDemoCar', { token: admin }).data.id;
