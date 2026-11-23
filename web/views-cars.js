@@ -875,7 +875,7 @@
       notes.setAttribute('aria-label', 'Notes');
       var notesField = el('div', { class: 'field' }, [notes]); // the section heading says what it is: no label above the box
 
-      // ---- "Use AI to fill in technical details" (a new car only): the first thing under the Technical details heading ----
+      // ---- "Use AI to fill in technical details": the first thing under the Technical details heading, when adding a car and when editing one. It only fills empty boxes. ----
       function aiAssist() {
         var box = el('div', { class: 'ai-box' });
         var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Use AI to fill in technical details' });
@@ -999,7 +999,7 @@
         });
         return box;
       }
-      if (!car && !(prefill && prefill.result.technical)) techFields.unshift(aiAssist()); // at the top of the technical details (not needed when the log book already filled them in)
+      if (!(prefill && prefill.result.technical)) techFields.unshift(aiAssist()); // at the top of the technical details, for a new car and when editing one (not needed when the log book already filled them in)
 
       // Owner/custodian: people who use this app are ticked; anyone else is written in.
       var ownerFields = [
