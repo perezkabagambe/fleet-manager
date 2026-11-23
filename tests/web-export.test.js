@@ -201,7 +201,7 @@ test('the export never includes who created the car or an entry', () => {
   const all = pdfText(ExportReport.build(s)).join(' ');
   assert.ok(!all.includes('Zebediah'), 'no creator name');
   assert.ok(!all.includes('user-id-123'), 'no creator id');
-  assert.ok(!/Created by/i.test(all), 'no created-by line');
+  assert.ok(!/(Created|Logged) by/i.test(all), 'no created-by or logged-by line');
 });
 
 test('a purchase with several items lists every item, its quantity, price and use', () => {
