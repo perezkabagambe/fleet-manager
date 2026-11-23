@@ -177,11 +177,20 @@ function jobCost_(e, usage, purchasesById) {
 
 // ---------- shaping rows for the app ----------
 
+/** The garage or person shown for an entry: for an issue identified by an app user, that user's current name. */
+function entryVendor_(e) {
+  if (e.identified_by) {
+    const u = usersById_()[e.identified_by];
+    return u ? u.name : '';
+  }
+  return e.vendor;
+}
+
 function summarizeEntry_(e, guestNames) {
   return {
     guestName: guestNames && String(e.created_by).indexOf('guest:') === 0 ? (guestNames[String(e.created_by).slice(6)] || 'Guest') : '',
     id: e.id, ref: e.ref || '', carId: e.car_id, type: e.type, title: e.title, notes: e.notes, date: e.date,
-    mileage: numOrNull_(e.mileage), mileageUnit: e.mileage === '' ? '' : 'mi', vendor: e.vendor, currency: e.currency || 'GBP',
+    mileage: numOrNull_(e.mileage), mileageUnit: e.mileage === '' ? '' : 'mi', vendor: entryVendor_(e), identifiedBy: e.identified_by || '', currency: e.currency || 'GBP',
     status: e.status, linkedIssueId: e.linked_issue_id, costMode: e.cost_mode || 'itemised',
     lumpSumCost: numOrNull_(e.lump_sum_cost), lumpCurrency: e.lump_currency || e.currency || 'GBP',
     labourCost: numOrNull_(e.labour_cost), labourCurrency: e.labour_currency || e.currency || 'GBP', labourNote: e.labour_note,
@@ -418,6 +427,14 @@ function parseEntryInput_(f, type, car, items) {
   if (type === 'Issue') {
     out.status = oneOf_(f.status, ISSUE_STATUSES, 'Not resolved', 'invalid_status');
     out.cost = parseMoney_(f.cost);
+    // Who identified the issue: a user of the app (kept as their id, so their name is always their current one), or free text
+    // in `vendor` for someone else or a garage outside the app. A request that does not say leaves it as it was.
+    if (f.identifiedBy !== undefined) {
+      const by = cleanStr_(f.identifiedBy, 64);
+      if (by && !usersById_()[by]) fail_('not_found');
+      out.identified_by = by;
+      if (by) out.vendor = '';
+    }
   } else if (type === 'Purchase') {
     // The items are saved in PurchaseItems. The purchase's own columns mirror them: exactly the item when there is one,
     // the total quantity when there are several (a price each means nothing then).
@@ -723,7 +740,7 @@ function listDeletedEntries_(p, ctx) {
     .sort(function (a, b) { return deletedAt_(b) - deletedAt_(a); })
     .map(function (e) {
       const at = deletedAt_(e);
-      return { id: e.id, ref: e.ref || '', type: e.type, title: e.title, date: e.date, vendor: e.vendor,
+      return { id: e.id, ref: e.ref || '', type: e.type, title: e.title, date: e.date, vendor: entryVendor_(e),
         deletedAt: new Date(at).toISOString(), deletedBy: String(e.updated_by).indexOf('guest:') === 0 ? 'a guest' : (names[e.updated_by] || ''),
         daysLeft: Math.max(0, Math.ceil((limit - (Date.now() - at)) / 86400000)) };
     });

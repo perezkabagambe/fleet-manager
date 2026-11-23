@@ -793,13 +793,18 @@
     if (eid) calls.push(FleetApi.call('getEntry', { id: eid }));
     else if (draftId) calls.push(FleetApi.call('getInboxItem', { id: draftId }));
     Promise.all(calls).then(function (res) {
-      build(res[0].data.car, res[1].data, eid && res[3] ? res[3].data : null, res[2].data.tasks, draftId && res[3] ? res[3].data.receipt : null);
+      var existingData = eid && res[3] ? res[3].data : null;
+      var isIssue = existingData ? existingData.entry.type === 'Issue' : typeKey === 'issue';
+      // an issue says who identified it, picked from the app's users
+      return (isIssue ? FleetApi.call('listApprovedUsers').then(function (u) { return u.data.users; }) : Promise.resolve([])).then(function (users) {
+        build(res[0].data.car, res[1].data, existingData, res[2].data.tasks, draftId && res[3] ? res[3].data.receipt : null, users);
+      });
     }).catch(function (e) {
       if (e.code === 'not_found') fmt.notFound(root);
       else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e))]));
     });
 
-    function build(car, lists, existingData, tasks, draft) {
+    function build(car, lists, existingData, tasks, draft, users) {
       FleetApp.setBanner(Object.assign({ subtitle: car.registration + ' · ' + car.make + ' ' + car.model }, existingData ? { title: 'Edit ' + BY_TYPE[existingData.entry.type].label.toLowerCase() } : {})); // the banner says which car this is for
       var existing = existingData ? existingData.entry : null;
       var type = existing ? existing.type : TYPES[typeKey].type;
@@ -909,10 +914,26 @@
       var body = [];
       var costTotal = null;
 
+      // Garage or who identified the issue: one of the app's users (the signed-in user to start with), or someone else / a garage typed in
+      var SOMEONE_ELSE = '__else__';
+      var identifiedSelect = null;
+      function identifiedByField() {
+        var me = (FleetAuth.getUser() || {}).id;
+        var chosen = existing ? (existing.identifiedBy || SOMEONE_ELSE) : (users.some(function (u) { return u.id === me; }) ? me : SOMEONE_ELSE);
+        identifiedSelect = el('select', { name: 'identifiedBy' }, users.map(function (u) { return el('option', { value: u.id, text: u.name + (u.id === me ? ' (me)' : ''), selected: u.id === chosen }); })
+          .concat([el('option', { value: SOMEONE_ELSE, text: 'Someone else or a garage…', selected: chosen === SOMEONE_ELSE })]));
+        var other = text('vendor', existing && !existing.identifiedBy ? v.vendor : '', { maxlength: '80', placeholder: 'Name of the person or garage', 'aria-label': 'Name of the person or garage' });
+        var otherField = el('div', { class: 'identified-other' }, [other]);
+        function sync() { otherField.hidden = identifiedSelect.value !== SOMEONE_ELSE; }
+        identifiedSelect.addEventListener('change', function () { sync(); if (!otherField.hidden) other.focus(); });
+        sync();
+        return UI.field('Garage or who identified the issue', el('div', { class: 'identified-pick' }, [identifiedSelect, otherField]), 'Optional.');
+      }
+
       if (type === 'Issue') {
         body = [
           UI.field('Status', select('status', ISSUE_STATUSES.map(function (s) { return [s, s]; }), v.status || 'Not resolved')),
-          UI.field('Garage or who identified the issue', text('vendor', v.vendor, { maxlength: '80' }), 'Optional.'),
+          identifiedByField(),
           amountRow('Inspection or diagnosis fee', text('cost', v.cost === null || v.cost === undefined ? '' : v.cost, { inputmode: 'decimal' }), 'Optional.', 'f-cost'),
         ];
       } else if (type === 'Purchase') {
@@ -1231,6 +1252,12 @@
           'labourCurrency', 'otherCurrency', 'lumpCurrency'].forEach(function (k) {
           if (f[k]) fields[k] = f[k].value;
         });
+        if (identifiedSelect) {
+          // an app user is kept as that user; anyone else is the typed name
+          var by = identifiedSelect.value;
+          fields.identifiedBy = by === SOMEONE_ELSE ? '' : by;
+          if (by !== SOMEONE_ELSE) fields.vendor = '';
+        }
         // the entry's main currency: for maintenance it follows the labour (or the invoice total)
         fields.currency = isJob ? (f.modeLump.checked ? f.lumpCurrency.value : f.labourCurrency.value) : currencySelect.value;
         if (isJob) fields.costMode = f.modeLump.checked ? 'lump' : 'itemised';

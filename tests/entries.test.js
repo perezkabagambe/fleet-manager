@@ -61,10 +61,30 @@ test('every entry type can be added, with the fields that belong to it', () => {
   assert.equal(add('Compliance', { title: 'MOT passed', date: D1 }).error, 'invalid_type', 'compliance is a reminder now, not an entry type');
 });
 
-test('an issue keeps who identified it (the garage field)', () => {
-  const { add, get } = setup();
-  const e = add('Issue', issue({ vendor: 'City Garage' })).data.entry;
-  assert.equal(get(e.id).data.entry.vendor, 'City Garage');
+test('an issue says who identified it: an app user (shown by their current name) or free text for someone else', () => {
+  const { env, sam, car, add, get } = setup();
+  const samId = env.ctx && require('vm').runInContext("Db.all('Users').filter((u) => u.email === 'sam@example.com')[0].id", env.ctx);
+  const save = (id, fields, version) => env.call('saveEntry', { token: sam, id, version, fields });
+
+  // free text: a garage outside the app
+  const a = add('Issue', issue({ vendor: 'City Garage' })).data.entry;
+  assert.deepEqual([get(a.id).data.entry.vendor, get(a.id).data.entry.identifiedBy], ['City Garage', '']);
+
+  // an app user: kept as the user, not as text
+  const b = add('Issue', issue({ identifiedBy: samId, vendor: 'ignored text' })).data.entry;
+  assert.deepEqual([b.vendor, b.identifiedBy], ['Sam', samId]);
+  assert.equal(env.call('updateMyName', { token: sam, name: 'Samuel' }).ok, true);
+  assert.equal(get(b.id).data.entry.vendor, 'Samuel', 'it follows the user\'s current name');
+
+  // an unknown user is refused
+  assert.equal(add('Issue', issue({ identifiedBy: 'nobody' })).error, 'not_found');
+
+  // an edit that does not mention it leaves it alone; one that clears it makes it free text again
+  const e1 = save(b.id, issue({ title: 'Renamed' }), b.version);
+  assert.equal(e1.data.entry.identifiedBy, samId);
+  const e2 = save(b.id, issue({ identifiedBy: '', vendor: 'Mum' }), e1.data.entry.version);
+  assert.deepEqual([e2.data.entry.vendor, e2.data.entry.identifiedBy], ['Mum', '']);
+  assert.ok(car);
 });
 
 test('required fields, formats and enumerations are enforced', () => {

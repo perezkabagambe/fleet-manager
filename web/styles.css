@@ -1060,3 +1060,5 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 .renew-box { margin: 14px 0 6px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .renew-box h2 { margin: 0 0 4px; }
 .renew-history { margin-top: 10px; }
+
+.identified-pick > * + * { margin-top: 8px; }
