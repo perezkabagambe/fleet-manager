@@ -933,8 +933,10 @@
       if (type === 'Issue') {
         body = [
           UI.field('Status', select('status', ISSUE_STATUSES.map(function (s) { return [s, s]; }), v.status || 'Not resolved')),
-          identifiedByField(),
-          amountRow('Inspection or diagnosis fee', text('cost', v.cost === null || v.cost === undefined ? '' : v.cost, { inputmode: 'decimal' }), 'Optional.', 'f-cost'),
+          el('div', { class: 'field-pair bottom-aligned' }, [
+            identifiedByField(),
+            amountRow('Inspection fee', text('cost', v.cost === null || v.cost === undefined ? '' : v.cost, { inputmode: 'decimal' }), 'Optional.', 'f-cost'),
+          ]),
         ];
       } else if (type === 'Purchase') {
         costTotal = el('div', { class: 'job-total' });

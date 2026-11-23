@@ -1062,3 +1062,4 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 .renew-history { margin-top: 10px; }
 
 .identified-pick > * + * { margin-top: 8px; }
+.field-pair.bottom-aligned { align-items: end; } /* the boxes line up even when one label wraps to more lines */
