@@ -145,6 +145,7 @@
     section('4. More features', [
       el('ul', {}, [
         el('li', {}, [b('Photos and documents.'), document.createTextNode(' Attach photos and PDFs to any entry (Photos and documents, in '), link('addmaint', 'Add maintenance'), document.createTextNode('), and keep the car\'s papers under '), link('docs', 'Documents'), document.createTextNode('.')]),
+        el('li', {}, [b('Search.'), document.createTextNode(' The box at the top of the Fleet page finds cars, log entries, files and reminders as you type, including by ID such as M-0042 or A-0005.')]),
         el('li', {}, [b('QR code and guest mode.'), document.createTextNode(' Every car has a '), link('qr', 'QR label'), document.createTextNode('; '), link('label', 'print it'), document.createTextNode(' for the windscreen. Scanning it opens the car for signed-in people; anyone else can add an entry as a named guest, to that one car only. This is useful if you want your garage to log what they have done for you (as well as emailing the car\'s public address, which you can give them).')]),
         el('li', {}, [b('Export.'), document.createTextNode(' '), link('export', 'Export all vehicle data'), document.createTextNode(' saves a PDF of everything, plus every photo and file, in one zip.')]),
         el('li', {}, [b('Your data is private.'), document.createTextNode(' Everyone signs in with an emailed link, only approved users can see anything, and guests see one car only.')]),

@@ -26,6 +26,7 @@ const SHELL = [
   'views-auth.js',
   'views-admin.js',
   'vendor/qrcode.js',
+  'search.js',
   'views-cars.js',
   'views-people.js',
   'views-entries.js',

@@ -177,7 +177,84 @@
       });
       return box;
     }
-    root.replaceChildren(el('section', { class: 'card fleet-card' }, [linksTip(), msg, grid, deletedBox]));
+    // ---- search: the box at the top, and its results in place of the fleet while there is something typed ----
+    var searchInput = el('input', { type: 'search', class: 'fleet-search-input', name: 'q', placeholder: 'Search cars, entries, files, reminders…', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Search the fleet' });
+    var searchClear = el('button', { type: 'button', class: 'fleet-search-clear', 'aria-label': 'Clear the search', text: '✕', hidden: true });
+    var searchBox = el('div', { class: 'fleet-search' }, [el('span', { class: 'fleet-search-icon', 'aria-hidden': 'true', text: '🔍' }), searchInput, searchClear]);
+    var results = el('div', { class: 'search-results', hidden: true, 'aria-live': 'polite' });
+    var searchData = null;
+    var expanded = {};
+    var GROUPS = [['cars', 'Cars'], ['entries', 'Log entries'], ['files', 'Files'], ['reminders', 'Reminders']];
+    var SHOW = 5;
+
+    function highlight(text, words) {
+      var parts = words.filter(function (w) { return w; }).map(function (w) { return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); });
+      if (!parts.length) return [document.createTextNode(text)];
+      var out = [];
+      var re = new RegExp('(' + parts.join('|') + ')', 'ig');
+      String(text).split(re).forEach(function (piece, i) { if (piece) out.push(i % 2 ? el('mark', { text: piece }) : document.createTextNode(piece)); });
+      return out;
+    }
+
+    function openFile(item) {
+      var action = item.kind === 'document' ? 'getCarDocument' : 'getAttachment';
+      var shown = Viewer.show({ mime: item.mime, filename: item.filename, load: function () { return FleetApi.call(action, { id: item.fileId }).then(function (r) { return r.data; }); } });
+      return shown;
+    }
+
+    function resultRow(item, words) {
+      var thumb = item.kind === 'entry' ? EntryUI.typeThumb(item.type) : el('div', { class: 'type-thumb tt-search tt-' + item.kind, 'aria-hidden': 'true', text: item.kind === 'car' ? '🚗' : item.kind === 'reminder' ? '⏰' : '📄' });
+      var kids = [
+        thumb,
+        el('div', { class: 'search-main' }, [el('div', { class: 'search-title' }, highlight(item.title, words)), el('div', { class: 'muted small-text search-sub', text: item.sub })]),
+        item.id ? el('span', { class: 'search-id' }, highlight(item.id, words)) : null,
+      ];
+      if (item.kind === 'attachment' || item.kind === 'document') {
+        var b = el('button', { type: 'button', class: 'search-row' }, kids);
+        b.addEventListener('click', function () { openFile(item).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); }); });
+        return b;
+      }
+      var href = item.kind === 'car' ? '#/car/' + item.carId
+        : item.kind === 'entry' ? '#/car/' + item.carId + '/entry/' + item.entryId
+        : '#/car/' + item.carId + '/reminder/' + item.taskId;
+      return el('a', { class: 'search-row', href: href }, kids);
+    }
+
+    function runSearch() {
+      var q = searchInput.value;
+      var active = q.trim().length >= 2;
+      searchClear.hidden = !q.length;
+      results.hidden = !active;
+      grid.hidden = active; deletedBox.hidden = active;
+      if (!active) return;
+      if (!searchData) searchData = FleetSearch.collect(FleetApi.peek);
+      var found = FleetSearch.find(searchData, q);
+      var words = q.trim().toLowerCase().split(/\s+/);
+      if (!found.total) {
+        results.replaceChildren(el('div', { class: 'empty search-none' }, [
+          el('p', { text: 'Nothing found for "' + q.trim() + '".' }),
+          el('p', { class: 'muted small-text', text: 'Try a registration, a part, a garage or an ID. Search looks at the data saved on this phone.' }),
+        ]));
+        return;
+      }
+      results.replaceChildren.apply(results, GROUPS.filter(function (g) { return found[g[0]].length; }).map(function (g) {
+        var hits = found[g[0]];
+        var all = !!expanded[g[0]];
+        var shown = all ? hits : hits.slice(0, SHOW);
+        var head = el('div', { class: 'search-group' }, [el('span', { text: g[1] + ' · ' + hits.length })]);
+        if (hits.length > SHOW) {
+          var more = el('button', { type: 'button', class: 'linklike', text: all ? 'Show fewer' : 'Show all' });
+          more.addEventListener('click', function () { expanded[g[0]] = !all; runSearch(); });
+          head.append(more);
+        }
+        return el('div', {}, [head, el('div', { class: 'search-list' }, shown.map(function (i) { return resultRow(i, words); }))]);
+      }));
+    }
+    searchInput.addEventListener('input', runSearch);
+    searchInput.addEventListener('focus', function () { searchData = null; }); // what is saved may have changed since: read it again
+    searchClear.addEventListener('click', function () { searchInput.value = ''; expanded = {}; runSearch(); searchInput.focus(); });
+
+    root.replaceChildren(el('section', { class: 'card fleet-card' }, [linksTip(), searchBox, results, msg, grid, deletedBox]));
 
     function card(c, mine) {
       // a row: the photo on the left; in the middle the plate with the mileage at its top right, the make and model on one line
