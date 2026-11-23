@@ -912,7 +912,7 @@
       if (type === 'Issue') {
         body = [
           UI.field('Status', select('status', ISSUE_STATUSES.map(function (s) { return [s, s]; }), v.status || 'Not resolved')),
-          UI.field('Garage or who confirmed the issue', text('vendor', v.vendor, { maxlength: '80' }), 'Optional.'),
+          UI.field('Garage or who identified the issue', text('vendor', v.vendor, { maxlength: '80' }), 'Optional.'),
           amountRow('Inspection or diagnosis fee', text('cost', v.cost === null || v.cost === undefined ? '' : v.cost, { inputmode: 'decimal' }), 'Optional.', 'f-cost'),
         ];
       } else if (type === 'Purchase') {
