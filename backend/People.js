@@ -16,7 +16,16 @@ function usersById_() {
   return map;
 }
 
-/** { owners: [{userId, name}] } for one car, sorted by name. Each user appears once. */
+/** Who created a row, for the line at the bottom of a car or entry: the user's current name, "Guest: <name>" for a guest, or '' if unknown. */
+function creatorName_(createdBy, guestName) {
+  const id = String(createdBy === null || createdBy === undefined ? '' : createdBy);
+  if (!id) return '';
+  if (id.indexOf('guest:') === 0) return guestName ? 'Guest: ' + guestName : 'A guest';
+  const u = usersById_()[id];
+  return u ? u.name : '';
+}
+
+/** { owners: [{userId, name}] for one car, sorted by name. Each user appears once. */
 function peopleForCar_(carId, rows, users) {
   const seen = {};
   const owners = [];

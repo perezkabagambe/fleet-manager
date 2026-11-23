@@ -87,6 +87,17 @@ test('an issue says who identified it: an app user (shown by their current name)
   assert.ok(car);
 });
 
+test('cars and entries say who created them, by that person\'s current name', () => {
+  const { env, sam, car, add, get } = setup();
+  const e = add('Issue', issue()).data.entry;
+  assert.equal(get(e.id).data.entry.createdByName, 'Sam');
+  assert.ok(get(e.id).data.entry.createdAt);
+  assert.equal(env.call('getCar', { token: sam, id: car.id }).data.car.createdByName, 'Sam');
+  assert.equal(env.call('listCars', { token: sam }).data.cars.find((c) => c.id === car.id).createdByName, 'Sam');
+  env.call('updateMyName', { token: sam, name: 'Samuel' });
+  assert.equal(get(e.id).data.entry.createdByName, 'Samuel');
+});
+
 test('required fields, formats and enumerations are enforced', () => {
   const { add, list } = setup();
   const bad = (type, fields, code, extra) => assert.equal(add(type, fields, extra).error, code, code + ' ' + JSON.stringify(fields).slice(0, 60));

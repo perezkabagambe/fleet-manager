@@ -199,7 +199,7 @@ function summarizeEntry_(e, guestNames) {
     partNumber: e.part_number, quantity: numOrNull_(e.quantity), unitCost: numOrNull_(e.unit_cost),
     shippingCost: numOrNull_(e.shipping_cost), productUrl: e.product_url,
     taskId: e.task_id || '',
-    version: Number(e.version || 1), createdBy: e.created_by, createdAt: e.created_at, updatedAt: e.updated_at,
+    version: Number(e.version || 1), createdBy: e.created_by, createdByName: creatorName_(e.created_by, guestNames && String(e.created_by).indexOf('guest:') === 0 ? (guestNames[String(e.created_by).slice(6)] || '') : ''), createdAt: e.created_at, updatedAt: e.updated_at,
   };
 }
 

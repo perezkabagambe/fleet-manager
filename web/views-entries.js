@@ -774,6 +774,7 @@
         el('a', { class: 'btn big', href: '#/car/' + carId + '/entry/' + e.id + '/edit', text: 'Edit' }),
         deleteBtn,
       ]));
+      if (e.createdByName) cards.push(el('p', { class: 'muted small-text center created-note', text: 'Created by ' + e.createdByName + (e.createdAt ? ' on ' + fmt.date(e.createdAt) : '') }));
       root.replaceChildren.apply(root, cards);
       if (Views.fitOneLine) Views.fitOneLine(root, '.one-line'); // a label that must stay on one line is made just small enough to fit
     }

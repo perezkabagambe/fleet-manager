@@ -193,6 +193,17 @@ test('the report opens with the short explanation, then every section in full', 
   assert.equal((raw.match(/\/Filter \/DCTDecode/g) || []).length, 2, 'the car photo and the one entry picture');
 });
 
+test('the export never includes who created the car or an entry', () => {
+  const s = sample();
+  s.car.createdByName = 'Zebediah Creator'; s.car.createdAt = '2026-01-05T09:00:00Z';
+  s.entries.forEach((e) => { e.createdByName = 'Zebediah Creator'; e.createdAt = '2026-01-06T09:00:00Z'; e.createdBy = 'user-id-123'; });
+  Object.values(s.details).forEach((d) => { d.entry.createdByName = 'Zebediah Creator'; d.entry.createdBy = 'user-id-123'; });
+  const all = pdfText(ExportReport.build(s)).join(' ');
+  assert.ok(!all.includes('Zebediah'), 'no creator name');
+  assert.ok(!all.includes('user-id-123'), 'no creator id');
+  assert.ok(!/Created by/i.test(all), 'no created-by line');
+});
+
 test('a purchase with several items lists every item, its quantity, price and use', () => {
   const s = sample();
   s.details.e3 = { entry: s.entries[2], car: { id: 'c1' }, attachments: [], items: [

@@ -472,6 +472,7 @@
           exportBtn,
           el('p', { class: 'section-note', text: 'Downloads one zip: a PDF of everything on this page, plus a folder for every photo, file and document, named by its unique ID.' }),
         ]),
+        car.createdByName ? el('p', { class: 'muted small-text center created-note', text: 'Created by ' + car.createdByName + (car.createdAt ? ' on ' + fmtDate(car.createdAt) : '') }) : null,
         el('p', { class: 'muted small-text center', text: 'Car details last changed ' + fmtDate(car.updatedAt) }),
       );
       fitOneLine(root, '.vin-line'); // the VIN is long: its text is made just small enough to stay on one line

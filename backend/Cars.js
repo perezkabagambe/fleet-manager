@@ -62,6 +62,8 @@ function summarizeCar_(c) {
     version: Number(c.version || 1),
     deleted: isTrue_(c.deleted),
     updatedAt: c.updated_at,
+    createdAt: c.created_at || '',
+    createdByName: creatorName_(c.created_by, ''),
   };
 }
 
