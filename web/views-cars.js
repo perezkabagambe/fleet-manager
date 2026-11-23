@@ -895,7 +895,7 @@
       // ---- "Use AI to fill in technical details": the first thing on the form, when adding a car and when editing one. It only fills empty boxes. ----
       function aiAssist() {
         var box = el('div', { class: 'ai-box' });
-        var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Use AI to fill in technical details' });
+        var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: car ? '✨ Use AI to edit technical details' : '✨ Use AI to fill in technical details' });
         var HINT = 'AI can look the car up from its VIN, or from the details you give it. It fills the empty boxes, but it can be wrong: check what it adds.';
         var hint = el('div', { class: 'hint', text: HINT });
         var picker = el('div', { class: 'ai-matches' });
@@ -1104,8 +1104,8 @@
           }
           vinIn.addEventListener('input', function () { f.vin.value = vinIn.value; f.vin.dispatchEvent(new Event('input', { bubbles: true })); update(); });
 
-          var overlay = el('div', { class: 'dialog-overlay' }, [el('div', { class: 'dialog ask-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Use AI to fill in technical details' }, [
-            el('h2', { text: 'Use AI to fill in technical details' }),
+          var overlay = el('div', { class: 'dialog-overlay' }, [el('div', { class: 'dialog ask-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': car ? 'Use AI to edit technical details' : 'Use AI to fill in technical details' }, [
+            el('h2', { text: car ? 'Use AI to edit technical details' : 'Use AI to fill in technical details' }),
             el('p', { class: 'ask-sub', text: 'What details do you have?' }),
             optVin, optDet,
             el('p', { class: 'ask-fine', text: (remainingText ? remainingText.trim() + ' ' : '') + 'AI can get things wrong: its answers are suggestions, so check every box it fills in. What you give here (registration, VIN, make, model, year and similar) is sent to Google\'s Gemini AI service, which may search the web and may use it to improve its products. No owner details, notes or costs are sent. It can take up to a minute.' }),
