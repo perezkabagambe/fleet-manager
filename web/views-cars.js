@@ -635,16 +635,17 @@
 
   // ---------- owner/custodian editor (one part of the car form) ----------
   // Admins tick any approved user. Everyone else can only tick or untick themselves.
-  function ownersEditor(people, users) {
+  // `tickMe`: a new car that is yours to start with (nothing is saved for it yet, so ticking counts as a change)
+  function ownersEditor(people, users, tickMe) {
     var me = FleetAuth.getUser();
     if (users) {
       var boxes = users.map(function (u) {
         var b = el('input', { type: 'checkbox' });
-        b.checked = people.owners.some(function (x) { return x.userId === u.id; });
+        b.checked = people.owners.some(function (x) { return x.userId === u.id; }) || (!!tickMe && u.id === me.id);
         return { user: u, box: b };
       });
       var ids = function () { return boxes.filter(function (x) { return x.box.checked; }).map(function (x) { return x.user.id; }).sort().join(','); };
-      var snap = ids();
+      var snap = people.owners.map(function (x) { return x.userId; }).sort().join(',');
       return {
         node: el('div', { class: 'stack' }, boxes.map(function (x) {
           return el('label', { class: 'check' }, [x.box, el('span', { text: x.user.name + ' (' + x.user.email + ')' })]);
@@ -659,7 +660,7 @@
     }
     var meBox = el('input', { type: 'checkbox' });
     var savedMe = people.owners.some(function (x) { return x.userId === me.id; });
-    meBox.checked = savedMe;
+    meBox.checked = savedMe || !!tickMe;
     var others = people.owners.filter(function (x) { return x.userId !== me.id; }).map(function (x) { return x.name; });
     return {
       node: el('div', {}, [
@@ -687,6 +688,12 @@
       if (e.code === 'not_found') notFound(root);
       else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e))]));
     });
+
+    // The people who can be ticked as owners: admins pick from every approved user; anyone else gets their own tick box
+    function loadUsers() {
+      if (!FleetAuth.isAdmin()) return Promise.resolve(null);
+      return FleetApi.call('listUsers').then(function (r) { return r.data.users.filter(function (u) { return u.status === 'Approved'; }); }).catch(function () { return null; });
+    }
 
     // Adding a car starts with a choice: read the log book with AI, or fill the form in yourself.
     function chooser() {
@@ -717,7 +724,7 @@
 
         // option 2: the form as it was
         var manual = el('button', { type: 'button', class: 'btn small secondary', text: 'Add it manually' });
-        manual.addEventListener('click', function () { build(null, [], { owners: [] }, null); });
+        manual.addEventListener('click', function () { loadUsers().then(function (users) { build(null, [], { owners: [] }, users); }); });
         kids.push(el('div', { class: 'choice' }, [
           el('h2', { text: '2. Add it yourself' }),
           el('p', { text: 'Manually with some optional AI assistance available for retrieving technical details like fluid specs.' }),
@@ -740,8 +747,10 @@
           return FleetApi.call('aiReadLogbook', { mime: att.mime, data: att.data }, { timeoutMs: 170000 }).then(function (r) { return { att: att, result: r.data }; });
         }).then(function (pre) {
           reading = false;
-          build(null, [], { owners: [] }, null, pre);
-          window.scrollTo(0, 0);
+          return loadUsers().then(function (users) {
+            build(null, [], { owners: [] }, users, pre);
+            window.scrollTo(0, 0);
+          });
         }).catch(function (e) {
           reading = false;
           return load(UI.notice('error', UI.errorText(e)));
@@ -895,8 +904,8 @@
         var bookBtn = null;
         var bookHint = null;
         var reading = false;
-        if (car) {
-          // editing a car: the log book can be read too, like when a car is added (it fills the empty boxes and is kept with the car's documents)
+        {
+          // the log book can be read from here when adding a car by hand and when editing one (it fills the empty boxes and is kept with the car's documents)
           bookHint = el('div', { class: 'hint', text: 'AI reads a clear PDF of the log book, fills the empty boxes and keeps the PDF with this car\'s documents. It may take up to a minute.' });
           bookBtn = Photos.fileButton('📄 Read the log book (PDF)', 'application/pdf', false, readBook);
           box.append(el('div', { class: 'ai-or', text: 'or' }), bookBtn, bookHint);
@@ -1025,7 +1034,7 @@
             editLogbook = got.att;
             setIfEmpty(f.vin, (got.result.details || {}).vin, 'VIN', []);
             apply(got.result);
-            status.append(el('div', { class: 'section-note', text: 'The log book PDF will be saved in this car\'s documents when you save your changes. Check every box AI filled in first.' }));
+            status.append(el('div', { class: 'section-note', text: 'The log book PDF will be saved in this car\'s documents when you ' + (car ? 'save your changes' : 'add the car') + '. Check every box AI filled in first.' }));
           }).catch(function (e) { status.replaceChildren(UI.notice('error', UI.errorText(e))); })
             .then(function () { reading = false; bookBtn.classList.remove('disabled'); refresh(); });
         }
@@ -1131,15 +1140,9 @@
       var ownerFields = [
         UI.field('Other owner/custodian', text('ownerOther', v.ownerOther, { maxlength: '80' }), 'Optional. If the owner/custodian is not a user of this app, e.g. a company or a relative.'),
       ];
-      var ownersEd = car ? ownersEditor(people, users) : null;
-      var iOwn = null; // a new car: say straight away if it is yours (ticked when you come from "Add a new car")
-      if (car) {
-        ownerFields.push(el('div', { class: 'field' }, [el('div', { class: 'field-label', text: 'Owners/Custodians using this app' }), ownersEd.node]));
-      } else {
-        iOwn = el('input', { type: 'checkbox' });
-        iOwn.checked = ctx.query.mine === '1';
-        ownerFields.push(el('label', { class: 'check' }, [iOwn, el('span', { text: 'I own or look after this car' })]));
-      }
+      // the same list when adding and when editing; a new car starts with you ticked if you came from "Add a new car"
+      var ownersEd = ownersEditor(people, users, !car && ctx.query.mine === '1');
+      ownerFields.push(el('div', { class: 'field' }, [el('div', { class: 'field-label', text: 'Owners/Custodians using this app' }), ownersEd.node]));
 
       var fluidsEd = fluidsEditor(fluids);
       if (prefill) fluidsEd.addSuggested((prefill.result.fluids || []).concat(prefill.result.bulbs || []));
@@ -1448,14 +1451,8 @@
         }).then(function (stop) {
           if (stop === 'stop') return 'stop';
           step = 'the owner/custodian';
-          if (car) {
-            if (!ownersEd.dirty()) return null;
-            return ownersEd.save(state.carId).then(function () { done.push('owner/custodian'); });
-          }
-          if (iOwn.checked && !state.markedMine) {
-            return FleetApi.call('setMyCarRole', { carId: state.carId, owner: true }).then(function () { state.markedMine = true; });
-          }
-          return null;
+          if (!ownersEd.dirty()) return null;
+          return ownersEd.save(state.carId).then(function () { done.push('owner/custodian'); });
         }).then(function (stop) {
           if (stop === 'stop') return 'stop';
           if (!photosChanged() || state.photoDone) return null;
@@ -1473,7 +1470,7 @@
           var book = prefill ? prefill.att : editLogbook;
           if (!book || state.logbookDone) return null;
           step = 'the log book';
-          return FleetApi.call('uploadCarDocument', { carId: state.carId, type: 'Logbook', note: prefill ? 'Read by AI when the vehicle was added' : 'Read by AI when the details were updated', mime: book.mime, data: book.data, filename: book.filename }, { timeoutMs: 240000 }).then(function () {
+          return FleetApi.call('uploadCarDocument', { carId: state.carId, type: 'Logbook', note: car ? 'Read by AI when the details were updated' : 'Read by AI when the vehicle was added', mime: book.mime, data: book.data, filename: book.filename }, { timeoutMs: 240000 }).then(function () {
             state.logbookDone = true;
             done.push('log book');
           }, function (e) {
