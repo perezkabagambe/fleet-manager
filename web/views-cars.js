@@ -799,7 +799,7 @@
       // Two short fields side by side, to save scrolling.
       function pair(a, b, cls) { return el('div', { class: 'field-pair' + (cls ? ' ' + cls : '') }, [a, b]); }
       // Vehicle details are three plain groups with simple headings (nothing collapses): key details, technical details, notes.
-      // The fields in three groups. Key details: what identifies the car (and what AI needs to look it up). Other details: the rest of its
+      // The fields in three groups. Key details: what identifies the car (and what AI needs to look it up). Technical details: the rest of its
       // technical details. Ownership & Other Details: where it is, its status and mileage, and how it was acquired.
       var keyFields = [
         pair(
@@ -883,11 +883,11 @@
 
       var editLogbook = null; // a log book PDF read while editing: it is attached to the car's documents when the changes are saved
 
-      // ---- "Use AI to fill in technical details": the first thing under the Other details heading, when adding a car and when editing one. It only fills empty boxes. ----
+      // ---- "Use AI to fill in technical details": the first thing under the Technical details heading, when adding a car and when editing one. It only fills empty boxes. ----
       function aiAssist() {
         var box = el('div', { class: 'ai-box' });
         var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Use AI to fill in technical details' });
-        var HINT = 'Enter the VIN, or fill in the make, model, year, transmission, drive side, fuel type and engine size. AI fills the empty boxes, but it can be wrong: check what it adds.';
+        var HINT = 'AI can look the car up from its VIN, or from the details you give it. It fills the empty boxes, but it can be wrong: check what it adds.';
         var hint = el('div', { class: 'hint', text: HINT });
         var picker = el('div', { class: 'ai-matches' });
         var status = el('div', { class: 'ai-status' });
@@ -905,23 +905,8 @@
         box.hidden = true; // shown only once we know AI is switched on
 
         function hasVin() { return f.vin.value.replace(/\s+/g, '').length >= 5; }
-        // A VIN is enough. Without one AI needs all of these first (an electric car has no engine size, so it is not asked for).
-        var NEEDED = [['make', 'make'], ['model', 'model'], ['year', 'year'], ['transmission', 'transmission'], ['driveSide', 'drive side'], ['fuelType', 'fuel type'], ['engineSize', 'engine size']];
-        function missing() {
-          if (hasVin()) return [];
-          var electric = f.fuelType.value === 'Fully electric';
-          return NEEDED.filter(function (n) { return !(n[0] === 'engineSize' && electric) && String(f[n[0]].value).trim() === ''; }).map(function (n) { return n[1]; });
-        }
-        function ready() { return missing().length === 0; }
         var remainingText = '';
-        function refresh() {
-          var m = missing();
-          btn.disabled = m.length > 0;
-          // while something is missing, say what: that is what stops the button working
-          hint.textContent = m.length ? 'To use AI without a VIN, first fill in the ' + m.join(', ') + '.' + remainingText : HINT + remainingText;
-        }
-        ['registration', 'vin', 'make', 'model', 'year', 'engineSize'].forEach(function (k) { f[k].addEventListener('input', refresh); });
-        ['transmission', 'driveSide', 'fuelType'].forEach(function (k) { f[k].addEventListener('change', refresh); });
+        function refresh() { hint.textContent = HINT + remainingText; }
         refresh();
         FleetApi.call('aiStatus', {}).then(function (r) {
           if (!r.data.available) return;
@@ -1045,12 +1030,99 @@
             .then(function () { reading = false; bookBtn.classList.remove('disabled'); refresh(); });
         }
 
-        function run() { return hasVin() ? fillFrom() : findFirst(); }
+        // ---- the dialog: what details do you have? A VIN, or the details AI needs when there is no VIN ----
+        // The boxes in the dialog are the form's own boxes, shown a second time: typing in one fills the other.
+        var NEEDED = [
+          ['make', 'Make', 'text'], ['model', 'Model', 'text'], ['year', 'Year', 'text'], ['fuelType', 'Fuel type', 'select'],
+          ['engineSize', 'Engine size (litres)', 'text'], ['transmission', 'Transmission', 'select'], ['driveSide', 'Drive side', 'select'],
+        ];
+        function neededNow(k) { return !(k === 'engineSize' && f.fuelType.value === 'Fully electric'); } // an electric car has no engine size
 
-        btn.addEventListener('click', function () {
-          UI.confirm('AI can get things wrong. Its answers are suggestions, not facts. It is up to you to check every entry it fills in before you save the car.\n\nTo look the car up, the details you have typed (registration, VIN, make, model, year and similar) are sent to Google\'s Gemini AI service, which may search the web. Google may use what is sent to improve its products. No owner details, notes or costs are sent. It can take up to a minute.', { okLabel: 'Ask AI' })
-            .then(function (yes) { if (yes) run(); });
-        });
+        function openAskDialog() {
+          var previous = document.activeElement;
+          var mode = 'vin';
+          var vinIn = el('input', { type: 'text', autocomplete: 'off', autocapitalize: 'characters', maxlength: '30', placeholder: 'e.g. KNAKU814SE5455201', 'aria-label': 'VIN number', value: f.vin.value });
+          var ask = el('button', { type: 'button', class: 'btn', text: 'Ask AI' });
+          var cancel = el('button', { type: 'button', class: 'btn secondary', text: 'Cancel' });
+          var summary = el('p', { class: 'note' });
+          var help = el('div', { class: 'ask-help', role: 'status' });
+
+          var rows = NEEDED.map(function (n) {
+            var real = f[n[0]];
+            var input = real.tagName === 'SELECT'
+              ? el('select', { 'aria-label': n[1] }, [].map.call(real.options, function (o) { return el('option', { value: o.value, text: o.value === '' ? 'Choose…' : o.text }); }))
+              : el('input', { type: 'text', autocomplete: 'off', inputmode: real.getAttribute('inputmode') || 'text', maxlength: real.getAttribute('maxlength') || '40', 'aria-label': n[1], placeholder: real.getAttribute('placeholder') || '' });
+            input.value = real.value;
+            var tick = el('span', { class: 'tick', 'aria-hidden': 'true' });
+            var label = el('label', { text: n[1] + ' *' });
+            input.addEventListener('input', function () { real.value = input.value; real.dispatchEvent(new Event('input', { bubbles: true })); update(); });
+            input.addEventListener('change', function () { real.value = input.value; real.dispatchEvent(new Event('change', { bubbles: true })); update(); });
+            var li = el('li', {}, [label, el('div', { class: 'ask-cell' }, [input, tick])]);
+            return { key: n[0], name: n[1].replace(/ \(litres\)/, '').toLowerCase(), input: input, tick: tick, li: li };
+          });
+          var list = el('ul', { class: 'ask-list' }, rows.map(function (r) { return r.li; }));
+
+          var optVin = el('div', { class: 'ask-opt' }, [
+            el('label', { class: 'ask-opt-head' }, [el('input', { type: 'radio', name: 'askmode', value: 'vin' }), el('span', {}, [el('span', { class: 'ask-name', text: 'VIN number' }), el('span', { class: 'ask-rec', text: 'Recommended' }), el('span', { class: 'ask-note', text: 'It identifies this exact car, so it is the most reliable.' })])]),
+            el('div', { class: 'ask-body' }, [vinIn]),
+          ]);
+          var optDet = el('div', { class: 'ask-opt' }, [
+            el('label', { class: 'ask-opt-head' }, [el('input', { type: 'radio', name: 'askmode', value: 'details' }), el('span', {}, [el('span', { class: 'ask-name', text: 'No VIN: give me the details' }), summary])]),
+            el('div', { class: 'ask-body' }, [list, help]),
+          ]);
+          // it opens on the VIN, unless there is none and the other details are all in already
+          if (!hasVin() && rows.every(function (r) { return !neededNow(r.key) || String(r.input.value).trim() !== ''; })) mode = 'details';
+          var radios = [].slice.call(optVin.querySelectorAll('input[type=radio]')).concat([].slice.call(optDet.querySelectorAll('input[type=radio]')));
+          radios.forEach(function (r) { r.checked = r.value === mode; r.addEventListener('change', function () { if (r.checked) { mode = r.value; update(); } }); });
+
+          function missingNow() { return rows.filter(function (r) { return neededNow(r.key) && String(r.input.value).trim() === ''; }); }
+          function update() {
+            optVin.classList.toggle('on', mode === 'vin');
+            optDet.classList.toggle('on', mode === 'details');
+            optVin.querySelector('.ask-body').hidden = mode !== 'vin';
+            optDet.querySelector('.ask-body').hidden = mode !== 'details';
+            var miss = missingNow();
+            rows.forEach(function (r) {
+              var applies = neededNow(r.key);
+              r.li.hidden = !applies;
+              var empty = String(r.input.value).trim() === '';
+              r.input.classList.toggle('miss', applies && empty);
+              r.tick.textContent = applies && !empty ? '✓' : '';
+            });
+            summary.textContent = miss.length ? 'You\'ll need to provide all of these * details.' : 'You\'ve provided all the details.';
+            help.textContent = miss.length ? miss.length + ' more needed: ' + miss.map(function (r) { return r.name; }).join(', ') + '.' : '';
+            ask.disabled = mode === 'vin' ? vinIn.value.replace(/\s+/g, '').length < 5 : miss.length > 0;
+          }
+          vinIn.addEventListener('input', function () { f.vin.value = vinIn.value; f.vin.dispatchEvent(new Event('input', { bubbles: true })); update(); });
+
+          var overlay = el('div', { class: 'dialog-overlay' }, [el('div', { class: 'dialog ask-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Use AI to fill in technical details' }, [
+            el('h2', { text: 'Use AI to fill in technical details' }),
+            el('p', { class: 'ask-sub', text: 'What details do you have?' }),
+            optVin, optDet,
+            el('p', { class: 'ask-fine', text: (remainingText ? remainingText.trim() + ' ' : '') + 'AI can get things wrong: its answers are suggestions, so check every box it fills in. What you give here (registration, VIN, make, model, year and similar) is sent to Google\'s Gemini AI service, which may search the web and may use it to improve its products. No owner details, notes or costs are sent. It can take up to a minute.' }),
+            el('div', { class: 'dialog-actions' }, [cancel, ask]),
+          ])]);
+          function close() {
+            document.removeEventListener('keydown', onKey, true);
+            overlay.remove();
+            if (previous && previous.focus) { try { previous.focus(); } catch (e) { /* ignore */ } }
+          }
+          function onKey(ev) { if (ev.key === 'Escape') { ev.preventDefault(); close(); } }
+          cancel.addEventListener('click', close);
+          overlay.addEventListener('click', function (ev) { if (ev.target === overlay) close(); });
+          ask.addEventListener('click', function () {
+            if (ask.disabled) return;
+            var chosen = mode;
+            close();
+            if (chosen === 'vin') fillFrom(); else findFirst(); // with the VIN: one lookup; without: AI first suggests which version this is
+          });
+          document.addEventListener('keydown', onKey, true);
+          document.body.append(overlay);
+          update();
+          (mode === 'vin' ? vinIn : (missingNow()[0] || rows[0]).input).focus();
+        }
+
+        btn.addEventListener('click', openAskDialog);
         return box;
       }
       if (!(prefill && prefill.result.technical)) techFields.unshift(aiAssist()); // at the top of the technical details, for a new car and when editing one (not needed when the log book already filled them in)
@@ -1199,7 +1271,7 @@
       function groupHeading(text) { return el('h2', { class: 'form-heading', text: text }); }
       var detailsSection = el('div', { class: 'form-groups' }, [
         groupHeading('Key details'), el('div', { class: 'stack' }, keyFields),
-        groupHeading('Other details'), el('div', { class: 'stack' }, techFields),
+        groupHeading('Technical details'), el('div', { class: 'stack' }, techFields),
         groupHeading('Ownership & Other Details'), el('div', { class: 'stack' }, ownershipFields),
         groupHeading('Notes'), notesField,
       ]);

@@ -1068,3 +1068,27 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 .ai-or { display: flex; align-items: center; gap: 10px; margin: 12px 0; color: var(--muted); font-size: 0.8rem; }
 .ai-or::before, .ai-or::after { content: ''; flex: 1; border-top: 1px solid var(--border); }
 .file-btn.disabled { opacity: 0.5; pointer-events: none; }
+
+/* "Use AI to fill in technical details": the dialog that asks what details you have */
+.ask-dialog { max-width: 420px; max-height: 92vh; overflow: auto; }
+.ask-dialog h2 { margin: 0 0 4px; font-size: 1.1rem; }
+.ask-sub { margin: 0 0 12px; color: var(--muted); }
+.ask-opt { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+.ask-opt.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.ask-opt-head { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; margin: 0; font-weight: 400; }
+.ask-opt-head input { margin-top: 4px; flex: none; }
+.ask-name { font-weight: 700; }
+.ask-rec { font-size: 0.72rem; font-weight: 700; color: #fff; background: var(--ok); border-radius: 999px; padding: 2px 8px; margin-left: 6px; vertical-align: middle; }
+.ask-note, .ask-opt .note { display: block; color: var(--muted); font-size: 0.85rem; margin: 2px 0 0; }
+.ask-body { margin-top: 8px; }
+.ask-body[hidden] { display: none; }
+.ask-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.ask-list li { display: grid; grid-template-columns: 1fr 1.25fr; gap: 8px; align-items: center; margin: 6px 0; font-size: 0.92rem; }
+.ask-list li[hidden] { display: none; }
+.ask-list label { margin: 0; }
+.ask-cell { display: flex; align-items: center; gap: 6px; }
+.ask-cell input, .ask-cell select { min-height: 38px; padding: 6px 10px; font-size: 0.92rem; flex: 1; min-width: 0; }
+.ask-cell .miss { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, var(--surface)); }
+.ask-cell .tick { color: var(--ok); font-weight: 700; width: 1em; text-align: center; }
+.ask-help { color: var(--bad); font-size: 0.82rem; margin-top: 8px; }
+.ask-fine { color: var(--muted); font-size: 0.78rem; margin: 10px 0 12px; }
