@@ -181,12 +181,8 @@
       }
 
       // who is told
-      var boxes = users.map(function (u) {
-        var b = el('input', { type: 'checkbox' });
-        b.checked = t.assignees.indexOf(u.id) !== -1;
-        return { user: u, box: b };
-      });
-      var who = el('div', { class: 'stack' }, boxes.map(function (x) { return el('label', { class: 'check' }, [x.box, el('span', { text: x.user.name })]); }));
+      // a searchable drop-down; the chosen people show as chips
+      var who = UI.searchMulti(users.map(function (u) { return { value: u.id, label: u.name }; }), { values: t.assignees, placeholder: 'Add a person…', ariaLabel: 'Add a person to remind', emptyText: 'No one chosen: it goes to the car\'s owners/custodians.' });
 
       var pause = el('input', { type: 'checkbox' });
       pause.checked = !t.active;
@@ -220,7 +216,7 @@
       fields.push(
         el('div', { class: 'form-section' }, [
           el('h2', { text: 'Who is reminded?' }),
-          el('p', { class: 'section-note', text: 'Tick the people who should get the email for this reminder. If you tick no one, it goes to this car\'s owners/custodians. If the car has none, it goes to the admins.' }),
+          el('p', { class: 'section-note', text: 'Choose the people who should get the email for this reminder. If you choose no one, it goes to this car\'s owners/custodians. If the car has none, it goes to the admins.' }),
           who,
         ]),
         el('div', { class: 'form-section' }, [
@@ -237,7 +233,7 @@
         var vals = {};
         ['name', 'intervalMonths', 'intervalDistance', 'leadDays', 'leadDistance', 'dueDate', 'dueDistance', 'lastDoneDate', 'lastDoneDistance', 'pausedReason'].forEach(function (k) { if (f[k]) vals[k] = f[k].value; });
         vals.kind = kindValue;
-        vals.assignees = boxes.filter(function (x) { return x.box.checked; }).map(function (x) { return x.user.id; });
+        vals.assignees = who.values();
         vals.active = !pause.checked;
         var payload = { carId: car.id, fields: vals };
         if (task) { payload.id = task.id; payload.version = task.version; }
