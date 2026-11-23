@@ -364,11 +364,10 @@ function runScenario(cache, seed, steps) {
       res = env.call('saveCar', { token: tok[who()], fields: { registration: 'CAR ' + i, make: 'Make', model: 'Model', year: '2015', odometer: String(1000 * i) } });
       if (res.ok && res.data.saved) cars.push(res.data.car.id);
     } else if (r < 0.34) {
-      const type = pick(['Maintenance', 'Maintenance', 'Issue', 'Purchase', 'Compliance']);
+      const type = pick(['Maintenance', 'Maintenance', 'Issue', 'Purchase']);
       const f = { title: type + ' ' + i, date: D(), mileage: String(500 * i), notes: 'n' + i };
       if (type === 'Maintenance') Object.assign(f, { labourCost: String(10 + i), costMode: pick(['itemised', 'lump']), lumpSumCost: '99' });
       if (type === 'Purchase') Object.assign(f, { quantity: '3', unitCost: '12' });
-      if (type === 'Compliance') Object.assign(f, { expiryDate: '2099-01-01', cost: '50' });
       const extra = {};
       if (type === 'Maintenance' && entries.length && rand() < 0.4) extra.parts = [{ name: 'Part ' + i, quantity: '1', unitCost: '5' }];
       res = env.call('saveEntry', Object.assign({ token: tok[who()], carId: pick(cars), type, fields: f }, extra));

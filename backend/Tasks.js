@@ -3,8 +3,8 @@
  *
  * A task is due by DATE, by DISTANCE, or both ("whichever comes first"). It starts showing in the weekly email
  * once it is inside its heads-up window (lead days / lead distance) and keeps showing every week until it is
- * logged. Logging a Maintenance entry against it (or a Compliance renewal with its new expiry date) moves the
- * due date/distance forward by the repeat interval and clears the reminder.
+ * logged. Logging a Maintenance entry against it moves the due date/distance forward by the repeat interval and
+ * clears the reminder; a compliance reminder (MOT, insurance, road tax) is marked renewed with its new expiry date.
  *
  * Distances are always in miles. Any approved user can add,
  * edit and pause reminders; only admins delete them.
@@ -280,7 +280,7 @@ function addStandardTasks_(p, ctx) {
 // ---------- completing a task from an entry ----------
 
 /**
- * Called when a Maintenance entry is logged for a reminder, or a Compliance renewal sets a new expiry date.
+ * Called when a Maintenance entry is logged for a reminder, or a compliance reminder is marked renewed with its new expiry date.
  * Moves the next due date / distance forward and clears the reminder. Returns the updated task row.
  */
 function completeTask_(task, car, done, ctx) {
@@ -306,17 +306,51 @@ function completeTask_(task, car, done, ctx) {
   return Object.assign({}, task, patch);
 }
 
-/** A compliance renewal with an expiry date keeps a reminder for it: reuse the one with that name, or create it. */
-function ensureComplianceTask_(entry, car, ctx, explicitTask) {
-  const done = { date: entry.date, mileage: entry.mileage, expiryDate: entry.expiry_date };
-  let task = explicitTask || liveTasks_(car.id).filter(function (t) { return t.kind === 'compliance' && sameName_(t.name, entry.title); })[0];
-  if (task) return completeTask_(task, car, done, ctx);
+// ---------- renewals of compliance reminders ----------
+
+/** A car's renewals (MOT passed, insurance renewed...), newest first. */
+function renewalsOfCar_(carId) {
+  return Db.all('TaskRenewals').filter(function (r) { return r.car_id === carId && !isTrue_(r.deleted); })
+    .sort(function (a, b) { return String(b.date).localeCompare(String(a.date)) || String(b.created_at).localeCompare(String(a.created_at)); });
+}
+
+function summarizeRenewal_(r) {
+  return {
+    id: r.id, carId: r.car_id, taskId: r.task_id, date: r.date, expiryDate: r.expiry_date,
+    cost: numOrNull_(r.cost), currency: r.currency || 'GBP', notes: r.notes || '',
+  };
+}
+
+/** Every renewal recorded for this car's reminders. */
+function listRenewals_(p, ctx) {
+  const car = findCar_(cleanStr_(p.carId, 64), ctx.user.role === 'admin');
+  if (!car) fail_('not_found');
+  return { renewals: renewalsOfCar_(car.id).map(summarizeRenewal_) };
+}
+
+/**
+ * Record that a compliance reminder was done (the MOT passed, the insurance renewed): when, the new expiry date, and optionally
+ * what it cost. The reminder moves on to the new expiry date and is quiet until it is due again.
+ */
+function renewTask_(p, ctx) {
+  const task = findTask_(cleanStr_(p.id, 64));
+  if (!task) fail_('not_found');
+  const car = findCar_(task.car_id, false);
+  if (!car) fail_('not_found');
+  if (task.kind !== 'compliance') fail_('invalid_kind'); // maintenance reminders are done by logging maintenance
+  const f = p.fields || {};
+  const date = parseFullDate_(f.date, true);
+  if (!date) fail_('date_required');
+  if (date > todayIso_()) fail_('invalid_date');
+  const expiry = parseFullDate_(f.expiryDate, true);
+  if (!expiry) fail_('expiry_required');
+  const cost = parseMoney_(f.cost);
+  const currency = oneOf_(f.currency, CURRENCIES, car.currency || (car.country === 'UG' ? 'UGX' : 'GBP'), 'invalid_currency');
   const row = Object.assign(baseColumns_(ctx), {
-    car_id: car.id, kind: 'compliance', name: cleanStr_(entry.title, 80), interval_months: '', interval_distance: '',
-    lead_days: '28', lead_distance: '300', due_date: entry.expiry_date, due_distance: '',
-    last_done_date: entry.date, last_done_distance: '', assignees: '', active: true, last_reminded_at: '',
+    car_id: car.id, task_id: task.id, date: date, expiry_date: expiry, cost: cost, currency: currency, notes: cleanStr_(f.notes, 200),
   });
-  Db.insert('Tasks', row);
-  audit_(ctx.user, 'task_created', 'Task', row.id, car.registration + ': reminder "' + row.name + '" added from the ' + entry.title + ' renewal');
-  return row;
+  Db.insert('TaskRenewals', row);
+  audit_(ctx.user, 'task_renewed', 'Task', task.id, car.registration + ': "' + task.name + '" renewed on ' + date + ', next expiry ' + expiry);
+  const updated = completeTask_(task, car, { date: date, mileage: '', expiryDate: expiry }, ctx);
+  return { renewal: summarizeRenewal_(row), task: summarizeTask_(updated, car, todayIso_()) };
 }

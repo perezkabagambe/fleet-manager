@@ -204,7 +204,6 @@ test('a guest sees maintenance history and their own entries, and never costs or
   staffAdd('Maintenance', { title: 'Big invoice', date: D, costMode: 'lump', lumpSumCost: '777', lumpCurrency: 'GBP' });
   staffAdd('Issue', { title: 'Parking sensor', date: D, cost: '25' });
   staffAdd('Purchase', { title: 'Secret purchase', date: D, quantity: '1', unitCost: '999' });
-  staffAdd('Compliance', { title: 'MOT passed', date: D, cost: '54.85', expiryDate: '2099-01-01' });
   const a = join('Alice').data.guestToken;
   const b = join('Bert').data.guestToken;
   as('guestSaveEntry', a, { type: 'Purchase', fields: { title: 'Alice wipers', date: D, quantity: '1', unitCost: '8' } });
@@ -212,7 +211,7 @@ test('a guest sees maintenance history and their own entries, and never costs or
 
   const seen = as('guestListEntries', b).data;
   const titles = seen.entries.map((e) => e.title).sort();
-  assert.deepEqual(titles, ['Alice service', 'Big invoice', 'Brake job'], 'maintenance only: no issues, purchases, compliance');
+  assert.deepEqual(titles, ['Alice service', 'Big invoice', 'Brake job'], 'maintenance only: no issues or purchases');
   const text = JSON.stringify(seen, (k, v) => (k === 'id' ? undefined : v)); // ids are random and could contain any digits
   ['999', '777', '54.85', 'Secret purchase', 'Alice wipers', 'Pads', 'Parking sensor', 'MOT passed'].forEach((w) => assert.ok(!text.includes(w), 'leaked: ' + w));
   ['"cost"', 'labour', 'unitCost', 'lumpSumCost', 'jobCost', 'totalCost'].forEach((w) => assert.ok(!text.includes(w), 'cost field leaked: ' + w));

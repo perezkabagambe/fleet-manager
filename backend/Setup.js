@@ -48,6 +48,8 @@ const SCHEMA = {
     cols: ['car_id', 'kind', 'name', 'interval_months', 'interval_distance', 'lead_days', 'lead_distance', 'due_date',
       'due_distance', 'assignees', 'last_done_date', 'last_done_distance', 'last_reminded_at', 'active', 'paused_reason'],
   },
+  // Each time a compliance reminder (MOT, insurance, road tax) was renewed: when, the new expiry date and what it cost.
+  TaskRenewals: { base: true, cols: ['car_id', 'task_id', 'date', 'expiry_date', 'cost', 'currency', 'notes'] },
   // Receipts waiting for review (photos, PDFs and, later, emails): see Receipts.js.
   Inbox: {
     base: true,
@@ -61,7 +63,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 29; // 29: a car can have several parts catalogues (Cars.catalogues, JSON) (28: a car keeps its parts catalogue website's icon (Cars.catalogue_icon) (27: a car has a fuel type (Cars.fuel_type) (26: a car has a transmission type (Cars.transmission) (25: a car can have up to 15 photos (CarPhotos tab) (24: deleted entries keep when they were deleted (recycle bin, Entries.deleted_at) (23: receipts can wait for the daily reading allowance (Inbox queue columns) (22: receipts can arrive by email (Cars.receipt_secret, Inbox.email_id) (21: receipts waiting for review (Inbox tab) (20: a purchase can hold several items (PurchaseItems tab) (19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 30; // 30: Compliance entries are gone; compliance reminders are renewed on their own (TaskRenewals tab) (29: a car can have several parts catalogues (Cars.catalogues, JSON) (28: a car keeps its parts catalogue website's icon (Cars.catalogue_icon) (27: a car has a fuel type (Cars.fuel_type) (26: a car has a transmission type (Cars.transmission) (25: a car can have up to 15 photos (CarPhotos tab) (24: deleted entries keep when they were deleted (recycle bin, Entries.deleted_at) (23: receipts can wait for the daily reading allowance (Inbox queue columns) (22: receipts can arrive by email (Cars.receipt_secret, Inbox.email_id) (21: receipts waiting for review (Inbox tab) (20: a purchase can hold several items (PurchaseItems tab) (19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
@@ -85,6 +87,7 @@ function migrateIfNeeded_() {
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 18) markBulbRows_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 19) numberExistingFiles_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 25) listExistingCarPhotos_();
+    if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 30) eraseComplianceEntries_();
     Db.invalidateAll(); // the sheets were changed directly: nothing remembered about them can be trusted
     props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   } finally {
@@ -218,6 +221,26 @@ function mergeRepairIntoMaintenance_() {
     if (e.type === 'Repair') { Db.update('Entries', e._row, { type: 'Maintenance' }); n++; }
   });
   if (n) audit_(null, 'entry_types_merged', 'Entries', '', n + ' Repair entr' + (n === 1 ? 'y' : 'ies') + ' changed to Maintenance');
+}
+
+/**
+ * One-off (version 30): there are no Compliance entries any more (a compliance reminder is marked renewed instead). Any that exist are
+ * erased for good, with their files and anything that pointed at them. Their reference numbers are never used again.
+ */
+function eraseComplianceEntries_() {
+  const gone = {};
+  Db.all('Entries').forEach(function (e) { if (e.type === 'Compliance') gone[e.id] = e; });
+  const ids = Object.keys(gone);
+  if (!ids.length) return;
+  const files = Db.all('Attachments').filter(function (a) { return gone[a.entry_id]; });
+  trashFiles_([].concat.apply([], files.map(function (a) { return [a.drive_file_id, a.thumb_file_id]; })));
+  Db.eraseRows('Attachments', function (a) { return !!gone[a.entry_id]; });
+  Db.eraseRows('Entries', function (e) { return !!gone[e.id]; });
+  // keep the reference counter ahead of the erased numbers, so a number is never handed out again
+  let top = Number(props_().getProperty('REF_C') || 0);
+  ids.forEach(function (id) { top = Math.max(top, refNumber_(gone[id].ref, 'C')); });
+  props_().setProperty('REF_C', String(top));
+  audit_(null, 'compliance_entries_erased', 'Entries', '', ids.length + ' Compliance entr' + (ids.length === 1 ? 'y' : 'ies') + ' erased (compliance is now handled by reminders)');
 }
 
 /** One-off (version 11): guest access starts ON for every car. Admins can switch any car off afterwards, and that choice is kept. */

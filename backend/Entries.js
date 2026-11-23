@@ -13,13 +13,14 @@
  * Any approved user can add and edit entries. Only admins delete (soft delete; stock is returned).
  */
 
-const ENTRY_TYPES = ['Issue', 'Maintenance', 'Compliance', 'Purchase'];
+const ENTRY_TYPES = ['Issue', 'Maintenance', 'Purchase'];
 
 // ---------- reference numbers ----------
 // Every entry has a short reference that is unique across the whole app: a letter for its type and a running
-// number for that type, like M-0042 (Maintenance), I-0017 (Issue), P-0123 (Purchase), C-0008 (Compliance).
+// number for that type, like M-0042 (Maintenance), I-0017 (Issue), P-0123 (Purchase).
+// (There used to be Compliance entries, C-0008. They were replaced by compliance reminders; their numbers are never used again.)
 // A reference never changes and is never reused, even after the entry is deleted.
-const REF_LETTERS = { Maintenance: 'M', Issue: 'I', Purchase: 'P', Compliance: 'C' };
+const REF_LETTERS = { Maintenance: 'M', Issue: 'I', Purchase: 'P' };
 
 function refNumber_(ref, letter) {
   const m = /^([MIPCA])-(\d+)$/.exec(String(ref || ''));
@@ -185,7 +186,7 @@ function summarizeEntry_(e, guestNames) {
     lumpSumCost: numOrNull_(e.lump_sum_cost), lumpCurrency: e.lump_currency || e.currency || 'GBP',
     labourCost: numOrNull_(e.labour_cost), labourCurrency: e.labour_currency || e.currency || 'GBP', labourNote: e.labour_note,
     labourHours: numOrNull_(e.labour_hours), otherCost: numOrNull_(e.other_cost), otherCurrency: e.other_currency || e.currency || 'GBP', otherNote: e.other_note,
-    cost: numOrNull_(e.cost), expiryDate: e.expiry_date || '',
+    cost: numOrNull_(e.cost),
     partNumber: e.part_number, quantity: numOrNull_(e.quantity), unitCost: numOrNull_(e.unit_cost),
     shippingCost: numOrNull_(e.shipping_cost), productUrl: e.product_url,
     taskId: e.task_id || '',
@@ -417,9 +418,6 @@ function parseEntryInput_(f, type, car, items) {
   if (type === 'Issue') {
     out.status = oneOf_(f.status, ISSUE_STATUSES, 'Not resolved', 'invalid_status');
     out.cost = parseMoney_(f.cost);
-  } else if (type === 'Compliance') {
-    out.cost = parseMoney_(f.cost);
-    out.expiry_date = parseFullDate_(f.expiryDate, true);
   } else if (type === 'Purchase') {
     // The items are saved in PurchaseItems. The purchase's own columns mirror them: exactly the item when there is one,
     // the total quantity when there are several (a price each means nothing then).
@@ -523,10 +521,10 @@ function saveEntry_(p, ctx) {
   }
   const plan = isJob ? planParts_(p.parts || [], car, input.date, input.currency, existing ? existing.id : '', c) : null;
 
-  // A maintenance entry can be logged against a reminder; a compliance renewal keeps one for its expiry date.
+  // A maintenance entry can be logged against a reminder.
   let linkedTask = null;
   const taskId = cleanStr_(p.taskId, 64);
-  if (taskId && (type === 'Maintenance' || type === 'Compliance')) {
+  if (taskId && type === 'Maintenance') {
     linkedTask = findTask_(taskId);
     if (!linkedTask || linkedTask.car_id !== car.id) fail_('not_found');
   }
@@ -586,8 +584,6 @@ function saveEntry_(p, ctx) {
   let updatedTask = null;
   if (type === 'Maintenance' && linkedTask && !existing) {
     updatedTask = completeTask_(linkedTask, car, { date: input.date, mileage: input.mileage }, ctx);
-  } else if (type === 'Compliance' && input.expiry_date) {
-    updatedTask = ensureComplianceTask_(row, car, ctx, linkedTask);
   }
   if (updatedTask) {
     const stored = Db.all('Entries').filter(function (e) { return e.id === row.id; })[0];
@@ -763,7 +759,7 @@ function restoreEntry_(p, ctx) {
 
 /**
  * What a car has cost, per currency, counting every cost once. Purchases count on their purchase date;
- * labour, other costs and invoice totals on the maintenance date; issue and compliance costs on their own dates.
+ * labour, other costs and invoice totals on the maintenance date; issue costs and renewals of compliance reminders on their own dates.
  */
 function getCarCosts_(p, ctx) {
   const car = findCar_(cleanStr_(p.carId, 64), ctx.user.role === 'admin');
@@ -783,13 +779,14 @@ function getCarCosts_(p, ctx) {
   c.entries.forEach(function (e) {
     if (e.type === 'Purchase') add(e.currency, e.date, 'parts', purchaseSummary_(e, c).total);
     else if (e.type === 'Issue') add(e.currency, e.date, 'issues', numOr0_(e.cost));
-    else if (e.type === 'Compliance') add(e.currency, e.date, 'compliance', numOr0_(e.cost));
     else if (e.cost_mode === 'lump') add(e.lump_currency || e.currency, e.date, 'invoices', numOr0_(e.lump_sum_cost));
     else {
       add(e.labour_currency || e.currency, e.date, 'labour', numOr0_(e.labour_cost));
       add(e.other_currency || e.currency, e.date, 'other', numOr0_(e.other_cost));
     }
   });
+  // renewals of compliance reminders (MOT, insurance, road tax) count as 'compliance'
+  renewalsOfCar_(car.id).forEach(function (r) { add(r.currency, r.date, 'compliance', numOr0_(r.cost)); });
   const list = Object.keys(buckets).sort().map(function (cur) {
     const b = buckets[cur];
     return {

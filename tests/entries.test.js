@@ -54,11 +54,11 @@ test('every entry type can be added, with the fields that belong to it', () => {
   assert.equal(add('Issue', issue({ cost: '25', currency: 'GBP' })).ok, true);
   assert.equal(add('Maintenance', repair()).ok, true);
   assert.equal(add('Maintenance', repair({ title: 'Oil and filter change' })).ok, true);
-  assert.equal(add('Compliance', { title: 'MOT passed', date: D1, cost: '54.85', expiryDate: '2099-03-01' }).ok, true);
   assert.equal(add('Purchase', purchase()).ok, true);
   const types = list().map((e) => e.type).sort();
-  assert.deepEqual(types, ['Compliance', 'Issue', 'Maintenance', 'Maintenance', 'Purchase']);
-  assert.equal(env.call('listEntries', { token: sam, carId: car.id }).data.entries.length, 5);
+  assert.deepEqual(types, ['Issue', 'Maintenance', 'Maintenance', 'Purchase']);
+  assert.equal(env.call('listEntries', { token: sam, carId: car.id }).data.entries.length, 4);
+  assert.equal(add('Compliance', { title: 'MOT passed', date: D1 }).error, 'invalid_type', 'compliance is a reminder now, not an entry type');
 });
 
 test('required fields, formats and enumerations are enforced', () => {
@@ -74,7 +74,7 @@ test('required fields, formats and enumerations are enforced', () => {
   bad('Issue', issue({ status: 'Done' }), 'invalid_status');
   bad('Issue', issue({ cost: 'lots' }), 'invalid_cost');
   bad('Bogus', issue(), 'invalid_type');
-  bad('Compliance', { title: 'MOT', date: D1, expiryDate: '2099' }, 'invalid_date');
+  bad('Compliance', { title: 'MOT', date: D1 }, 'invalid_type');
   bad('Purchase', purchase({ quantity: '0' }), 'invalid_quantity');
   bad('Purchase', purchase({ quantity: '-2' }), 'invalid_quantity');
   bad('Purchase', purchase({ quantity: 'two' }), 'invalid_quantity');
@@ -392,7 +392,8 @@ test('car costs split by currency, year and category', () => {
   const { env, sam, car, add } = setup();
   add('Purchase', purchase({ date: '2024-05-01', quantity: '2', unitCost: '10' }));                              // GBP 20 parts, 2024
   add('Issue', issue({ date: '2025-01-02', cost: '25' }));                                                      // GBP 25 issues, 2025
-  add('Compliance', { title: 'MOT', date: '2025-02-02', cost: '54.85' });                                       // GBP compliance, 2025
+  const mot = env.call('saveTask', { token: sam, carId: car.id, fields: { name: 'MOT', kind: 'compliance', dueDate: '2025-02-10' } }).data.task;
+  assert.equal(env.call('renewTask', { token: sam, id: mot.id, fields: { date: '2025-02-02', expiryDate: '2026-02-01', cost: '54.85' } }).ok, true); // GBP compliance, 2025
   add('Maintenance', repair({ date: '2025-03-03', costMode: 'lump', lumpSumCost: '300', currency: 'UGX' }));         // UGX invoice, 2025
   add('Maintenance', repair({ title: 'Service', date: '2025-04-04', labourCost: '80', otherCost: '15' }));      // GBP labour 80 + other 15, 2025
   const costs = env.call('getCarCosts', { token: sam, carId: car.id }).data.currencies;
@@ -502,10 +503,9 @@ test('every entry gets a reference: a letter for its type and a running number f
   const i1 = add('Issue', issue()).data.entry;
   const m1 = add('Maintenance', repair()).data.entry;
   const p1 = add('Purchase', purchase()).data.entry;
-  const c1 = add('Compliance', { title: 'MOT passed', date: D1, expiryDate: '2099-03-01' }).data.entry;
   const i2 = add('Issue', issue({ title: 'Second issue' })).data.entry;
   const m2 = add('Maintenance', repair({ title: 'Second job' })).data.entry;
-  assert.deepEqual([i1.ref, m1.ref, p1.ref, c1.ref, i2.ref, m2.ref], ['I-0001', 'M-0001', 'P-0001', 'C-0001', 'I-0002', 'M-0002']);
+  assert.deepEqual([i1.ref, m1.ref, p1.ref, i2.ref, m2.ref], ['I-0001', 'M-0001', 'P-0001', 'I-0002', 'M-0002']);
   assert.equal(get(m2.id).data.entry.ref, 'M-0002', 'the detail carries it');
   assert.equal(list().find((e) => e.id === m1.id).ref, 'M-0001', 'and so does the list');
 });

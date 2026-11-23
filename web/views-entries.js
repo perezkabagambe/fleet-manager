@@ -1,5 +1,5 @@
 // A car's history: the History and Costs cards, the "what do you want to add?" chooser,
-// the entry page, and the form for issues, maintenance, purchases and compliance.
+// the entry page, and the form for issues, maintenance and purchases.
 (function () {
   'use strict';
 
@@ -17,12 +17,10 @@
       examples: 'Oil and filter change · Replaced front brake pads · Fixed exhaust leak', placeholder: 'e.g. Oil and filter change' },
     purchase: { type: 'Purchase', label: 'Purchased item', blurb: 'Parts or items you bought for this car.',
       examples: 'Front brake pads (set) · 2 × oil filter · 5 L 5W-30 engine oil', placeholder: 'e.g. Front brake pads (set)' },
-    compliance: { type: 'Compliance', label: 'Compliance', blurb: 'Renewals and tests that must be kept up to date.',
-      examples: 'MOT passed · Insurance renewed · Road tax renewed', placeholder: 'e.g. MOT passed' },
   };
   var BY_TYPE = {};
   Object.keys(TYPES).forEach(function (k) { BY_TYPE[TYPES[k].type] = Object.assign({ key: k }, TYPES[k]); });
-  var PLURAL = { Issue: 'Issues', Maintenance: 'Maintenance', Purchase: 'Purchases', Compliance: 'Compliance' };
+  var PLURAL = { Issue: 'Issues', Maintenance: 'Maintenance', Purchase: 'Purchases' };
 
   var CATEGORY_LABELS = {
     parts: 'Parts', labour: 'Labour', other: 'Other costs', invoices: 'Invoice totals',
@@ -140,7 +138,7 @@
   function costText(e) {
     if (e.type === 'Maintenance') return moneyMap(e.jobCost);
     if (e.type === 'Purchase') return fmt.money(e.total, e.currency);
-    if ((e.type === 'Issue' || e.type === 'Compliance') && e.cost !== null && e.cost !== undefined) return fmt.money(e.cost, e.currency);
+    if (e.type === 'Issue' && e.cost !== null && e.cost !== undefined) return fmt.money(e.cost, e.currency);
     return '';
   }
 
@@ -410,8 +408,8 @@
       if (Object.keys(counts).length > 1) {
         // Tiles in the same soft colours as the pictures shown for entries without a photo; the chosen one is solid.
         var types = ['All'].concat(Object.keys(PLURAL).filter(function (t) { return counts[t]; }));
-        var tiles = el('div', { class: 'filter-tiles' + (counts.Compliance ? ' has-compliance' : '') });
-        // each tile is as wide as its name needs (short ones narrower), so all five fit on a phone when there is a Compliance entry too;
+        var tiles = el('div', { class: 'filter-tiles' });
+        // each tile is as wide as its name needs (short ones narrower);
         // set here, not as an attribute (the page's security policy blocks inline style attributes)
         tiles.style.gridTemplateColumns = types.map(function (t) { return 'minmax(0, ' + ((t === 'All' ? 3 : PLURAL[t].length) + 3) + 'fr)'; }).join(' ');
         types.forEach(function (t) {
@@ -565,7 +563,7 @@
     root.replaceChildren(el('section', { class: 'card' }, [fmt.loading()]));
     FleetApi.call('getCar', { id: carId }).then(function (r) {
       var car = r.data.car;
-      var cards = ['issue', 'maintenance', 'purchase', 'compliance'].map(function (k) {
+      var cards = ['issue', 'maintenance', 'purchase'].map(function (k) {
         var t = TYPES[k];
         return el('a', { class: 'type-card', href: '#/car/' + carId + '/add/' + k }, [
           el('div', { class: 'type-name', text: t.label }),
@@ -710,9 +708,6 @@
             })))
             : el('p', { class: 'muted', text: 'No maintenance linked to this issue yet.' }),
         ]));
-      } else if (e.type === 'Compliance') {
-        cards.push(el('section', { class: 'card' }, [el('h2', { text: 'Details' }), el('dl', { class: 'details' }, [].concat(
-          line('Cost', e.cost === null ? '' : fmt.money(e.cost, e.currency)), line('Valid until', dateText(e.expiryDate))))]));
       } else if (e.type === 'Purchase') {
         var s = d.stock;
         var itemList = (d.items || []).map(function (i) {
@@ -847,22 +842,21 @@
 
       // ----- common fields -----
       var sections = [];
-      // A maintenance entry can be logged against a reminder (from the email link, or picked here); a renewal can name the one it renews.
+      // A maintenance entry can be logged against a reminder (from the email link, or picked here).
       var taskSelect = null;
       var preTask = null;
-      if (type === 'Maintenance' || type === 'Compliance') {
-        var wanted = type === 'Maintenance' ? 'maintenance' : 'compliance';
-        var choices = tasks.filter(function (t) { return t.kind === wanted; });
+      if (type === 'Maintenance') {
+        var choices = tasks.filter(function (t) { return t.kind === 'maintenance'; });
         var chosenId = existing ? existing.taskId : (ctx.query.task || '');
         preTask = choices.filter(function (t) { return t.id === chosenId; })[0] || null;
-        taskSelect = el('select', { name: 'taskId' }, [el('option', { value: '', text: type === 'Maintenance' ? 'Not linked to a reminder' : 'None of these' })].concat(
+        taskSelect = el('select', { name: 'taskId' }, [el('option', { value: '', text: 'Not linked to a reminder' })].concat(
           choices.map(function (t) { return el('option', { value: t.id, text: t.name + ' (' + t.text + ')', selected: preTask && t.id === preTask.id }); })));
         // a finished maintenance entry has already moved its reminder on; it is not moved again by editing
-        if (existing && type === 'Maintenance') taskSelect.disabled = true;
+        if (existing) taskSelect.disabled = true;
         f.taskId = taskSelect;
       }
       // A purchase is a list of items, then date, currency, supplier and link for the whole purchase (see below).
-      var dateField = type === 'Purchase' ? null : UI.field(type === 'Compliance' ? 'Date done or paid *' : 'Date *', text('date', v.date || isoToday(), { type: 'date', max: isoToday(), required: true }));
+      var dateField = type === 'Purchase' ? null : UI.field('Date *', text('date', v.date || isoToday(), { type: 'date', max: isoToday(), required: true }));
       var top = type === 'Purchase' ? [] : [
         UI.field('Title *', text('title', v.title || (preTask ? preTask.name : ''), { maxlength: '120', placeholder: meta.placeholder, required: true })),
         dateField,
@@ -904,9 +898,7 @@
       }
 
       if (taskSelect) {
-        top.push(UI.field('Reminder', taskSelect, type === 'Maintenance'
-          ? 'Optional. Logging this moves that reminder on: its next due date and distance are worked out from this entry.'
-          : 'Optional. Pick the reminder this renews. If you set a new expiry date below, a reminder is kept for it automatically.'));
+        top.push(UI.field('Reminder', taskSelect, 'Optional. Logging this moves that reminder on: its next due date and distance are worked out from this entry.'));
         taskSelect.addEventListener('change', function () {
           var t = tasks.filter(function (x) { return x.id === taskSelect.value; })[0];
           if (t && !f.title.value.trim()) f.title.value = t.name;
@@ -920,12 +912,6 @@
         body = [
           UI.field('Status', select('status', ISSUE_STATUSES.map(function (s) { return [s, s]; }), v.status || 'Not resolved')),
           amountRow('Inspection or diagnosis fee', text('cost', v.cost === null || v.cost === undefined ? '' : v.cost, { inputmode: 'decimal' }), 'Optional.', 'f-cost'),
-        ];
-      } else if (type === 'Compliance') {
-        body = [
-          UI.field('Provider', text('vendor', v.vendor, { maxlength: '80' }), 'Optional, e.g. the testing station or insurer.'),
-          amountRow('Cost', text('cost', v.cost === null || v.cost === undefined ? '' : v.cost, { inputmode: 'decimal' }), 'Optional.', 'f-cost'),
-          UI.field('New expiry date', text('expiryDate', v.expiryDate, { type: 'date' }), 'Optional. When this runs out next. You\'ll receive email reminders for this.'),
         ];
       } else if (type === 'Purchase') {
         costTotal = el('div', { class: 'job-total' });
@@ -1238,7 +1224,7 @@
 
       function collect() {
         var fields = {};
-        ['title', 'date', 'mileage', 'vendor', 'notes', 'status', 'cost', 'expiryDate', 'partNumber', 'quantity', 'unitCost',
+        ['title', 'date', 'mileage', 'vendor', 'notes', 'status', 'cost', 'partNumber', 'quantity', 'unitCost',
           'productUrl', 'lumpSumCost', 'labourCost', 'labourNote', 'labourHours', 'otherCost', 'otherNote', 'linkedIssueId',
           'labourCurrency', 'otherCurrency', 'lumpCurrency'].forEach(function (k) {
           if (f[k]) fields[k] = f[k].value;

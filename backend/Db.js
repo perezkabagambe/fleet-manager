@@ -17,7 +17,7 @@ const Db = (function () {
   //  - callers always get their own copies of the rows, so changing one never changes what the next caller sees;
   //  - tabs holding security records (sessions, login codes) and the audit log are never cached;
   //  - the whole thing can be switched off by setting the script property DB_CACHE to "off".
-  const CACHED = { Cars: 1, Entries: 1, Users: 1, CarPeople: 1, FluidSpecs: 1, PartUsage: 1, PurchaseItems: 1, Attachments: 1, CarDocuments: 1, Tasks: 1, Guests: 1, CarPhotos: 1 };
+  const CACHED = { Cars: 1, Entries: 1, Users: 1, CarPeople: 1, FluidSpecs: 1, PartUsage: 1, PurchaseItems: 1, Attachments: 1, CarDocuments: 1, Tasks: 1, TaskRenewals: 1, Guests: 1, CarPhotos: 1 };
   const CACHE_TTL = 600;
   // The script cache holds at most 100 KB (bytes, not characters) per value. A character can take up to 3 bytes
   // (£, accented letters, Luganda names), so a piece is at most 30,000 characters.
@@ -252,7 +252,19 @@ const Db = (function () {
     delete memo[name];
   }
 
-  return { all: all, insert: insert, update: update, prune: prune, invalidateAll: invalidateAll, resetRequest: resetRequest };
+  /** Delete rows matching `predicate` from any tab (bottom-up so row numbers stay valid), and forget what was remembered about it. */
+  function eraseRows(name, predicate) {
+    const sh = sheet_(name);
+    all(name)
+      .filter(predicate)
+      .map(function (r) { return r._row; })
+      .sort(function (a, b) { return b - a; })
+      .forEach(function (n) { sh.deleteRow(n); });
+    delete memo[name];
+    changed_(name);
+  }
+
+  return { all: all, insert: insert, update: update, prune: prune, eraseRows: eraseRows, invalidateAll: invalidateAll, resetRequest: resetRequest };
 })();
 
 function isTrue_(v) {

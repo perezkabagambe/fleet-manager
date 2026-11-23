@@ -124,6 +124,22 @@ function demoReceiptPdf_(o) {
   return demoPdf_(steps);
 }
 
+/**
+ * The demo car's MOT: a compliance reminder with one renewal recorded (safe to repeat; an older demo car's "MOT test" reminder is renamed).
+ * Like every demo reminder it is paused, so it never emails anyone. True if a renewal was added.
+ */
+function ensureDemoRenewal_(carId, ctx) {
+  let task = liveTasks_(carId).filter(function (t) { return t.kind === 'compliance'; })[0];
+  if (!task) task = findTask_(saveTask_({ carId: carId, fields: { name: 'MOT', kind: 'compliance', dueDate: demoDay_(-165) } }, ctx).task.id);
+  let added = false;
+  if (!renewalsOfCar_(carId).some(function (r) { return r.task_id === task.id; })) {
+    renewTask_({ id: task.id, fields: { date: demoDay_(200), expiryDate: demoDay_(-165), cost: '54.85', currency: 'GBP', notes: 'Passed with no advisories.' } }, ctx);
+    added = true;
+  }
+  Db.update('Tasks', findTask_(task.id)._row, { name: 'MOT', active: false, paused_reason: 'Demo car: reminders are off' });
+  return added;
+}
+
 /** Give some of the demo car's entries a made-up receipt or invoice, if they do not have a file yet (safe to repeat). */
 function ensureDemoReceipts_(carId, ctx) {
   const entries = Db.all('Entries').filter(function (e) { return e.car_id === carId && !isTrue_(e.deleted); });
@@ -165,7 +181,7 @@ function replaceDemoPhoto_(carId, ctx) {
 /** Admin: create the demo car if it does not exist yet (safe to repeat: it never makes a second one, and it refreshes the demo picture). */
 function createDemoCar_(p, ctx) {
   const existing = findDemoCar_();
-  if (existing) return { id: existing.id, created: false, photo: replaceDemoPhoto_(existing.id, ctx), receipts: ensureDemoReceipts_(existing.id, ctx) };
+  if (existing) return { id: existing.id, created: false, photo: replaceDemoPhoto_(existing.id, ctx), receipts: ensureDemoReceipts_(existing.id, ctx), renewal: ensureDemoRenewal_(existing.id, ctx) };
 
   const saved = saveCar_({
     fields: {
@@ -213,10 +229,9 @@ function createDemoCar_(p, ctx) {
     fields: { title: 'Full service (invoice)', date: demoDay_(118), mileage: '41200', vendor: 'Example Garage', currency: 'GBP', costMode: 'lump', lumpSumCost: '185', lumpCurrency: 'GBP', notes: 'Oil, oil filter, air filter and a general check.' },
   }, ctx);
 
-  // a renewal (an MOT) that keeps a reminder for its expiry date
-  saveEntry_({ carId: carId, type: 'Compliance', fields: { title: 'MOT test', date: demoDay_(200), mileage: '43500', vendor: 'Example Garage', currency: 'GBP', cost: '54.85', expiryDate: demoDay_(-165), notes: 'Passed with no advisories.' } }, ctx);
 
   addStandardTasks_({ carId: carId }, ctx);
+  ensureDemoRenewal_(carId, ctx);
   // the demo car's reminders are paused, so it never sends reminder emails to anyone
   Db.all('Tasks').filter(function (t) { return t.car_id === carId && !isTrue_(t.deleted); }).forEach(function (t) {
     Db.update('Tasks', t._row, { active: false, paused_reason: 'Demo car: reminders are off' });

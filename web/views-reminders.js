@@ -31,7 +31,7 @@
       var link = el('a', { class: 'entry-row', href: '#/car/' + car.id + '/reminder/' + t.id }, [
         el('div', { class: 'entry-lead' }, [
           EntryUI.typeThumb(renewal ? 'Compliance' : 'Maintenance'),
-          el('span', { class: 'chip ' + (renewal ? 't-compliance' : 't-maintenance'), text: renewal ? 'Renewal' : 'Maintenance' }),
+          el('span', { class: 'chip ' + (renewal ? 't-compliance' : 't-maintenance'), text: renewal ? 'Compliance' : 'Maintenance' }),
         ]),
         el('div', { class: 'entry-main' }, [
           el('div', { class: 'entry-title', text: t.name }),
@@ -84,6 +84,12 @@
   }
   window.RemindersUI = { card: card };
 
+  // An older email linked to #/car/<id>/add/compliance?task=<id>: send it to that reminder, where renewing is done now.
+  Views.oldRenewalLink = function (ctx, root) {
+    var task = ctx.query && ctx.query.task;
+    location.replace('#/car/' + ctx.params.id + (task ? '/reminder/' + task : ''));
+  };
+
   // ---------- add / edit a reminder ----------
   Views.reminderForm = function (ctx, root) {
     var carId = ctx.params.id;
@@ -91,16 +97,17 @@
     root.replaceChildren(el('section', { class: 'card' }, [fmt.loading()]));
 
     var calls = [FleetApi.call('getCar', { id: carId }), FleetApi.call('listApprovedUsers'), FleetApi.call('listTasks', { carId: carId })];
+    if (tid) calls.push(FleetApi.call('listRenewals', { carId: carId }));
     Promise.all(calls).then(function (res) {
       var task = tid ? res[2].data.tasks.filter(function (t) { return t.id === tid; })[0] : null;
       if (tid && !task) { fmt.notFound(root); return; }
-      build(res[0].data.car, res[1].data.users, task);
+      build(res[0].data.car, res[1].data.users, task, res[3] ? res[3].data.renewals.filter(function (r) { return r.taskId === tid; }) : []);
     }).catch(function (e) {
       if (e.code === 'not_found') fmt.notFound(root);
       else if (e.code !== 'unauthorized') root.replaceChildren(el('section', { class: 'card' }, [UI.notice('error', UI.errorText(e))]));
     });
 
-    function build(car, users, task) {
+    function build(car, users, task, renewals) {
       var unit = 'miles';
       var t = task || { kind: 'maintenance', assignees: [], active: true };
       var f = {};
@@ -111,10 +118,67 @@
       }
       function num(name, value, label, hint) { return UI.field(label, text(name, value, { inputmode: 'numeric' }), hint); }
 
-      var kind = el('select', { name: 'kind' }, [['maintenance', 'Maintenance (servicing, checks)'], ['compliance', 'Renewal (MOT, insurance, road tax)']].map(function (o) {
-        return el('option', { value: o[0], text: o[1], selected: o[0] === t.kind });
-      }));
-      f.kind = kind;
+      // the two kinds of reminder, each with a note saying what it is for
+      var KINDS = [
+        { value: 'maintenance', label: 'Regular maintenance', note: 'Servicing and checks that come round again, by date or distance. For example engine oil and filter, tyre check, brake fluid, spark plugs.' },
+        { value: 'compliance', label: 'Compliance', note: 'Legal renewals that run out on a date. For example MOT, insurance, road tax.' },
+      ];
+      var kindValue = t.kind;
+      var kindBox = el('div', { class: 'kind-picker', role: 'radiogroup', 'aria-label': 'Type of reminder' });
+      KINDS.forEach(function (k) {
+        var radio = el('input', { type: 'radio', name: 'kind', value: k.value });
+        radio.checked = k.value === kindValue;
+        radio.addEventListener('change', function () { if (radio.checked) kindValue = k.value; });
+        kindBox.append(el('label', { class: 'kind-option' }, [radio, el('span', {}, [el('span', { class: 'kind-name', text: k.label }), el('span', { class: 'kind-note', text: k.note })])]));
+      });
+      // ----- Mark renewed (compliance reminders only): what was done, the new expiry date, and optionally the cost and a certificate -----
+      function renewBox() {
+        var today = new Date().toISOString().slice(0, 10);
+        var rmsg = el('div');
+        var doneIn = el('input', { type: 'date', name: 'renewDate', value: today, max: today, required: true });
+        var expiryIn = el('input', { type: 'date', name: 'renewExpiry', required: true });
+        var costIn = el('input', { type: 'text', name: 'renewCost', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Cost' });
+        var curIn = el('select', { 'aria-label': 'Currency' }, fmt.currencyOptions.map(function (o) { return el('option', { value: o[0], text: o[1], selected: o[0] === (car.currency || 'GBP') }); }));
+        var noteIn = el('input', { type: 'text', name: 'renewNotes', maxlength: '200', autocomplete: 'off', placeholder: 'e.g. Passed with no advisories' });
+        var fileIn = el('input', { type: 'file', name: 'renewFile', accept: 'image/*,application/pdf' });
+        var go = el('button', { type: 'submit', class: 'btn block', text: 'Mark renewed' });
+        var box = el('form', { class: 'renew-box', novalidate: true }, [
+          el('h2', { text: 'Mark renewed' }),
+          el('p', { class: 'section-note', text: 'Done it? Record when, and the new expiry date. The reminder then waits until it is due again.' }),
+          rmsg,
+          UI.field('Date done *', doneIn),
+          UI.field('New expiry date *', expiryIn, 'When it runs out next.'),
+          el('div', { class: 'field' }, [el('label', { text: 'Cost (optional)' }), el('div', { class: 'odo-row' }, [costIn, curIn])]),
+          UI.field('Note (optional)', noteIn),
+          UI.field('Certificate or receipt (optional)', fileIn, 'Kept with this car\'s documents.'),
+          go,
+        ]);
+        box.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          rmsg.replaceChildren();
+          var file = fileIn.files && fileIn.files[0];
+          var fields = { date: doneIn.value, expiryDate: expiryIn.value, cost: costIn.value, currency: curIn.value, notes: noteIn.value };
+          UI.busy(go, 'Saving…', FleetApi.call('renewTask', { id: task.id, fields: fields }).then(function (r) {
+            var next = r.data.task;
+            var done = 'Renewed. ' + next.name + ' is ' + next.text + '.';
+            if (!file) return done;
+            return Photos.prepareAttachment(file).then(function (a) {
+              return FleetApi.call('uploadCarDocument', { carId: car.id, type: 'Other', note: task.name + ' renewed ' + fields.date, mime: a.mime, data: a.data, filename: a.filename }, { timeoutMs: 240000 });
+            }).then(function () { return done; }, function (e) { return done + ' The file could not be saved: ' + UI.errorText(e); });
+          })).then(function (text) {
+            FleetApp.setFlash('ok', text);
+            FleetApp.go('/car/' + car.id);
+          }).catch(function (e) { rmsg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+        });
+        var past = renewals.length ? el('div', { class: 'renew-history' }, [
+          el('div', { class: 'field-label one-line', text: 'Past renewals' }),
+          el('ul', { class: 'plain-list' }, renewals.map(function (r) {
+            var day = function (iso) { return fmt.date(iso + 'T12:00:00Z'); };
+            return el('li', { text: day(r.date) + ' · until ' + day(r.expiryDate) + (r.cost === null ? '' : ' · ' + fmt.money(r.cost, r.currency)) });
+          })),
+        ]) : null;
+        return el('div', {}, [box, past]);
+      }
 
       // who is told
       var boxes = users.map(function (u) {
@@ -130,12 +194,12 @@
 
       var fields = [
         UI.field('What is it? *', text('name', t.name, { maxlength: '80', placeholder: 'e.g. Engine oil and filter', required: true })),
-        UI.field('Type', kind),
+        UI.field('Type', kindBox),
         el('div', { class: 'form-section' }, [
           el('h2', { text: 'How often' }),
           num('intervalMonths', t.intervalMonths, 'Repeats every (months)', 'Leave blank if it does not repeat by date.'),
           num('intervalDistance', t.intervalDistance, 'Or every (' + unit + ')', 'Leave blank if it does not repeat by distance. If you set both, whichever comes first.'),
-          num('leadDays', t.leadDays || '', 'Start reminding me this many days ahead', 'Default 14 (28 for renewals).'),
+          num('leadDays', t.leadDays || '', 'Start reminding me this many days ahead', 'Default 14 for regular maintenance, 28 for compliance.'),
           num('leadDistance', t.leadDistance || '', 'And this many ' + unit + ' ahead', 'Default 300.'),
         ]),
         el('div', { class: 'form-section' }, [
@@ -172,7 +236,7 @@
         msg.replaceChildren();
         var vals = {};
         ['name', 'intervalMonths', 'intervalDistance', 'leadDays', 'leadDistance', 'dueDate', 'dueDistance', 'lastDoneDate', 'lastDoneDistance', 'pausedReason'].forEach(function (k) { if (f[k]) vals[k] = f[k].value; });
-        vals.kind = kind.value;
+        vals.kind = kindValue;
         vals.assignees = boxes.filter(function (x) { return x.box.checked; }).map(function (x) { return x.user.id; });
         vals.active = !pause.checked;
         var payload = { carId: car.id, fields: vals };
@@ -199,7 +263,7 @@
         fmt.backLink('#/car/' + car.id, car.registration),
         el('h1', { text: task ? 'Edit reminder' : 'Add a reminder' }),
         task ? el('p', { class: 'muted', text: task.text }) : el('p', { class: 'muted', text: car.registration + ' · ' + car.make + ' ' + car.model }),
-        msg, form,
+        msg, task && task.kind === 'compliance' ? renewBox() : null, form,
         deleteBtn ? el('div', { class: 'entry-actions' }, [deleteBtn]) : null,
       ]));
     }

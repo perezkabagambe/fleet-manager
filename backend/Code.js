@@ -51,6 +51,8 @@ function actions_() {
     saveFluids: { auth: 'user', lock: true, fn: saveFluids_ },
     listTasks: { auth: 'user', fn: listTasks_ },
     saveTask: { auth: 'user', lock: true, fn: saveTask_ },
+    renewTask: { auth: 'user', lock: true, fn: renewTask_ },
+    listRenewals: { auth: 'user', fn: listRenewals_ },
     deleteTask: { auth: 'admin', lock: true, fn: deleteTask_ },
     addStandardTasks: { auth: 'user', lock: true, fn: addStandardTasks_ },
     listApprovedUsers: { auth: 'user', fn: listApprovedUsers_ },

@@ -90,7 +90,7 @@
     if (!tasks.length) doc.text('No reminders.', { size: 10, color: [0.35, 0.4, 0.45] });
     tasks.forEach(function (t) {
       doc.need(70);
-      doc.text(t.name + (t.kind === 'compliance' ? '  (renewal)' : ''), { bold: true, size: 10.5, after: 1 });
+      doc.text(t.name + (t.kind === 'compliance' ? '  (compliance)' : ''), { bold: true, size: 10.5, after: 1 });
       doc.kv('Status', t.active ? (t.text || t.status) : (t.pausedReason || 'Paused'), { indent: 8, labelWidth: 105 });
       if (t.repeatText) doc.kv('Repeats every', t.repeatText, { indent: 8, labelWidth: 105 });
       if (t.lastDoneDate) doc.kv('Last done', day(t.lastDoneDate) + (t.lastDoneDistance !== null && t.lastDoneDistance !== undefined ? ' at ' + num(t.lastDoneDistance) + ' mi' : ''), { indent: 8, labelWidth: 105 });
@@ -157,7 +157,6 @@
     Maintenance: { tint: [0.90, 0.96, 0.92], accent: [0.10, 0.50, 0.29] },
     Issue: { tint: [0.98, 0.91, 0.90], accent: [0.70, 0.15, 0.12] },
     Purchase: { tint: [1.00, 0.96, 0.84], accent: [0.52, 0.36, 0.00] },
-    Compliance: { tint: [0.90, 0.95, 0.98], accent: [0.11, 0.45, 0.72] },
   };
 
   function entryBlock(doc, summary, d, input) {
@@ -176,9 +175,6 @@
       kv('Status', e.status);
       kv('Cost', e.cost ? money(e.cost, e.currency) : '');
       if (d && d.fixedBy && d.fixedBy.length) kv('Fixed by', d.fixedBy.map(function (f) { return f.title + ' (' + day(f.date) + ')'; }).join('; '));
-    } else if (e.type === 'Compliance') {
-      kv('Cost', e.cost ? money(e.cost, e.currency) : '');
-      kv('Expires', day(e.expiryDate));
     } else if (e.type === 'Purchase') {
       if (d && d.items && d.items.length) {
         // every item of the purchase on its own line, with what has been used

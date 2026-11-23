@@ -188,7 +188,7 @@ test('the report opens with the short explanation, then every section in full', 
   assert.ok(all.includes('A-0003 quote.xlsx · File · 5 KB · NOT INCLUDED'));
   assert.ok(all.includes('A-0004 Logbook') && all.includes('Folder A-0004'));
   // fluids, reminders, costs
-  for (const bit of ['Engine oil', '0W-20', 'Dipped beam', 'D4S', 'MOT (renewal)', 'Repeats every 12 months', 'Spent in GBP: £159.00', 'Labour £90.00']) assert.ok(all.includes(bit), bit);
+  for (const bit of ['Engine oil', '0W-20', 'Dipped beam', 'D4S', 'MOT (compliance)', 'Repeats every 12 months', 'Spent in GBP: £159.00', 'Labour £90.00']) assert.ok(all.includes(bit), bit);
   const raw = Buffer.from(bytes).toString('latin1');
   assert.equal((raw.match(/\/Filter \/DCTDecode/g) || []).length, 2, 'the car photo and the one entry picture');
 });

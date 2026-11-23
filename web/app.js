@@ -140,7 +140,7 @@
       r.params.id = m[1]; r.params.tid = m[2] === 'new' ? '' : m[2]; view = Views.reminderForm;
     } else if ((m = /^\/car\/([0-9a-f-]{8,40})\/add$/.exec(r.path))) { r.params.id = m[1]; view = Views.chooseEntry; }
     else if ((m = /^\/car\/([0-9a-f-]{8,40})\/add\/(issue|repair|maintenance|purchase|compliance)$/.exec(r.path))) {
-      r.params.id = m[1]; r.params.type = m[2]; view = Views.entryForm;
+      r.params.id = m[1]; r.params.type = m[2]; view = m[2] === 'compliance' ? Views.oldRenewalLink : Views.entryForm;
     } else if ((m = /^\/car\/([0-9a-f-]{8,40})\/entry\/([0-9a-f-]{8,40})(\/edit)?$/.exec(r.path))) {
       r.params.id = m[1]; r.params.eid = m[2]; view = m[3] ? Views.entryForm : Views.entry;
     }
@@ -196,7 +196,7 @@
     if ((m = /^\/car\/([0-9a-f-]{8,40})$/.exec(path))) return { title: 'Car', back: '#/' };
     if ((m = /^\/car\/([0-9a-f-]{8,40})\/(edit|fluids|people|label)$/.exec(path))) return { title: { edit: 'Edit car', fluids: 'Edit specs', people: 'Owners', label: 'QR label' }[m[2]], back: '#/car/' + m[1] };
     if ((m = /^\/car\/([0-9a-f-]{8,40})\/add$/.exec(path))) return { title: 'Add an entry', back: '#/car/' + m[1] };
-    if ((m = /^\/car\/([0-9a-f-]{8,40})\/add\/(\w+)$/.exec(path))) return { title: 'Add ' + ({ issue: 'an issue', maintenance: 'maintenance', repair: 'maintenance', purchase: 'a purchased item', compliance: 'a renewal' }[m[2]] || 'an entry'), back: '#/car/' + m[1] + '/add' };
+    if ((m = /^\/car\/([0-9a-f-]{8,40})\/add\/(\w+)$/.exec(path))) return { title: 'Add ' + ({ issue: 'an issue', maintenance: 'maintenance', repair: 'maintenance', purchase: 'a purchased item' }[m[2]] || 'an entry'), back: '#/car/' + m[1] + '/add' };
     if ((m = /^\/car\/([0-9a-f-]{8,40})\/entry\/([0-9a-f-]{8,40})\/edit$/.exec(path))) return { title: 'Edit entry', back: '#/car/' + m[1] + '/entry/' + m[2] };
     if ((m = /^\/car\/([0-9a-f-]{8,40})\/entry\/([0-9a-f-]{8,40})$/.exec(path))) return { title: 'Entry', back: '#/car/' + m[1] };
     if ((m = /^\/car\/([0-9a-f-]{8,40})\/reminder\/(new|[0-9a-f-]{8,40})$/.exec(path))) return { title: m[2] === 'new' ? 'New reminder' : 'Edit reminder', back: '#/car/' + m[1] };

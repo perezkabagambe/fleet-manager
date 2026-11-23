@@ -83,10 +83,13 @@ test('the demo car is filled in as fully as possible: details, catalogues, fluid
   assert.deepEqual(byType('Issue').map((e) => e.status).sort(), ['Not resolved', 'Resolved']);
   assert.equal(byType('Maintenance').length, 2);
   assert.equal(byType('Purchase').length, 2);
-  assert.equal(byType('Compliance').length, 1);
+  assert.equal(byType('Compliance').length, 0, 'compliance is a reminder, not an entry');
+  const mot = page.tasks.find((t) => t.name === 'MOT');
+  assert.ok(mot && mot.kind === 'compliance' && mot.lastDoneDate, 'an MOT reminder that has been renewed once');
+  assert.equal(env.call('listRenewals', { token: sam, carId: id }).data.renewals.length, 1);
   assert.ok(byType('Purchase').some((e) => e.stockStatus === 'Fitted'), 'the brake parts were fitted');
   assert.ok(byType('Purchase').some((e) => e.stockStatus === 'In stock'), 'the oil kit is still in stock');
-  page.entries.forEach((e) => assert.match(e.ref, /^[MIPC]-\d{4}$/));
+  page.entries.forEach((e) => assert.match(e.ref, /^[MIP]-\d{4}$/));
   assert.ok(page.tasks.length >= 5, 'the standard reminders');
   assert.ok(page.tasks.every((t) => t.active === false && /Demo car/.test(t.pausedReason)), 'paused, so the demo car never emails anyone');
   assert.equal(page.documents.length, 1);

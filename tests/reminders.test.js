@@ -270,42 +270,51 @@ test('a reminder from another car cannot be used; editing the entry later does n
   assert.equal(tasks()[0].dueDate, due, 'an edit does not move the reminder again');
 });
 
-test('a compliance renewal with an expiry date keeps a reminder for it', () => {
-  const { env, task, entry, tasks } = setup();
-  const r = entry('Compliance', { title: 'MOT', date: '2025-11-01', cost: '54.85', expiryDate: '2026-11-01' });
-  assert.equal(r.data.reminder.name, 'MOT');
-  let list = tasks();
-  assert.equal(list.length, 1);
-  assert.equal(list[0].kind, 'compliance');
-  assert.equal(list[0].dueDate, '2026-11-01');
-  assert.equal(list[0].leadDays, 28);
-  assert.equal(r.data.entry.taskId, list[0].id);
+test('marking a compliance reminder renewed records it and moves the reminder to the new expiry date', () => {
+  const { env, sam, admin, task, tasks } = setup();
+  const mot = task({ name: 'MOT', kind: 'compliance', dueDate: '2025-11-05' }).data.task;
+  const renew = (fields, id, token) => env.call('renewTask', { token: token || sam, id: id || mot.id, fields });
+  const r = renew({ date: '2025-11-01', expiryDate: '2026-10-31', cost: '54.85', currency: 'GBP', notes: 'No advisories' });
+  assert.equal(r.ok, true);
+  assert.equal(r.data.task.dueDate, '2026-10-31');
+  assert.equal(r.data.task.lastDoneDate, '2025-11-01');
+  assert.equal(r.data.task.leadDays, 28);
+  assert.equal(tasks().length, 1, 'the same reminder moves on; no second one is made');
+  assert.deepEqual([r.data.renewal.date, r.data.renewal.expiryDate, r.data.renewal.cost, r.data.renewal.currency], ['2025-11-01', '2026-10-31', 54.85, 'GBP']);
 
-  // the next renewal updates the same reminder (matched by name), not a second one
-  entry('Compliance', { title: ' mot ', date: '2026-10-20', expiryDate: '2027-11-01' });
-  list = tasks();
-  assert.equal(list.length, 1);
-  assert.equal(list[0].dueDate, '2027-11-01');
-  assert.equal(list[0].lastDoneDate, '2026-10-20');
+  // the next renewal is kept too, newest first
+  renew({ date: '2026-10-20', expiryDate: '2027-10-19' });
+  const list = env.call('listRenewals', { token: sam, carId: tasks()[0].carId }).data.renewals;
+  assert.deepEqual(list.map((x) => x.date), ['2026-10-20', '2025-11-01']);
+  assert.equal(tasks()[0].dueDate, '2027-10-19');
+  assert.ok(env.sheets.Audit._rows.slice(1).some((a) => a[3] === 'task_renewed'));
 
-  // no expiry date: no reminder is made or changed
-  entry('Compliance', { title: 'Parking permit', date: '2026-10-21' });
-  assert.equal(tasks().length, 1);
-
-  // an existing reminder can be named explicitly, and its repeat interval is not needed
-  const ins = task({ name: 'Car insurance', kind: 'compliance', dueDate: day(10) }).data.task;
-  entry('Compliance', { title: 'Insurance renewed', date: '2026-10-22', expiryDate: '2027-10-22' }, { taskId: ins.id });
-  assert.equal(tasks().find((t) => t.id === ins.id).dueDate, '2027-10-22');
-  assert.equal(tasks().length, 2);
-  assert.ok(env.sheets.Audit._rows.slice(1).some((a) => a[3] === 'task_created'));
+  // checks
+  assert.equal(renew({ date: '2026-10-20' }).error, 'expiry_required');
+  assert.equal(renew({ expiryDate: '2027-10-19' }).error, 'date_required');
+  assert.equal(renew({ date: '2999-01-01', expiryDate: '3000-01-01' }).error, 'invalid_date');
+  assert.equal(renew({ date: '2026-10-20', expiryDate: '2027', }).error, 'invalid_date');
+  assert.equal(renew({ date: '2026-10-20', expiryDate: '2027-10-19', cost: 'lots' }).error, 'invalid_cost');
+  assert.equal(renew({ date: '2026-10-20', expiryDate: '2027-10-19' }, 'nope').error, 'not_found');
+  assert.equal(env.call('renewTask', { carId: 'x', id: mot.id, fields: {} }).error, 'unauthorized');
+  const oil = task({ name: 'Oil', intervalMonths: '6' }).data.task;
+  assert.equal(renew({ date: '2026-10-20', expiryDate: '2027-10-19' }, oil.id).error, 'invalid_kind', 'maintenance is done by logging maintenance');
+  assert.ok(admin);
 });
 
-test('correcting the expiry date on a renewal updates its reminder', () => {
-  const { env, sam, entry, tasks } = setup();
-  const e = entry('Compliance', { title: 'MOT', date: '2025-11-01', expiryDate: '2026-11-01' }).data.entry;
-  env.call('saveEntry', { token: sam, id: e.id, version: e.version, fields: { title: 'MOT', date: '2025-11-01', expiryDate: '2026-10-31' } });
-  assert.equal(tasks().length, 1);
-  assert.equal(tasks()[0].dueDate, '2026-10-31');
+test('the migration erases old Compliance entries for good, with their files, and keeps their numbers retired', () => {
+  const { env, sam, car, entry } = setup();
+  const db = (code) => require('vm').runInContext(code, env.ctx);
+  db("Db.insert('Entries', { id: 'old-c1', car_id: '" + car.id + "', type: 'Compliance', title: 'MOT passed', date: '2025-01-01', ref: 'C-0007', deleted: false, version: 1, created_by: 'x', created_at: '2025-01-01T00:00:00Z' })");
+  db("Db.insert('Attachments', { id: 'old-a1', car_id: '" + car.id + "', entry_id: 'old-c1', filename: 'mot.pdf', mime: 'application/pdf', drive_file_id: 'nofile', deleted: false, version: 1, created_by: 'x', created_at: '2025-01-01T00:00:00Z' })");
+  const keep = entry('Maintenance', { title: 'Service', date: '2025-02-02' }).data.entry;
+  env.props.SCHEMA_VERSION = '29';
+  env.call('listEntries', { token: sam, carId: car.id }); // the first request runs the migration
+  assert.deepEqual(db("Db.all('Entries').map((e) => e.type + ':' + e.id)").filter((x) => x.startsWith('Compliance')), []);
+  assert.deepEqual(db("Db.all('Attachments').filter((a) => a.id === 'old-a1')"), []);
+  assert.ok(db("Db.all('Entries').some((e) => e.id === '" + keep.id + "')"), 'other entries are untouched');
+  assert.equal(env.props.REF_C, '7', 'the number 7 is never handed out again');
+  assert.equal(env.props.SCHEMA_VERSION, String(require('vm').runInContext('SCHEMA_VERSION', env.ctx)));
 });
 
 // ---------- who gets the email ----------
@@ -365,7 +374,7 @@ test('one email per person lists everything due, most urgent first, with a link 
   // deep links into the app
   assert.ok(html.includes('#/car/' + car.id + '/add/maintenance?task=' + oil.id));
   assert.ok(html.includes('#/car/' + car.id + '/add/maintenance?task=' + tyres.id));
-  assert.ok(html.includes('#/car/' + car.id + '/add/compliance?task=' + mot.id), 'renewals go to the compliance form');
+  assert.ok(html.includes('#/car/' + car.id + '/reminder/' + mot.id), 'a compliance reminder opens its own page, to be marked renewed');
   // what happens next, in words
   assert.match(html, /remind you again in 6 months or 6,000 mi, whichever comes first/);
   assert.match(html, /remind you again in 3 months\./);

@@ -995,8 +995,6 @@ body.selecting #app { padding-bottom: 110px; }
 .filter-tile.ft-issue { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); }
 .filter-tile.ft-maintenance { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
 .filter-tile.ft-purchase { background: var(--warn-bg); color: var(--warn-text); }
-.filter-tile.ft-compliance { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
-.has-compliance .filter-tile.ft-all { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--muted); }
 .filter-tile.on { border-color: currentColor; } /* the chosen tile keeps its soft colour and gains an outline; the bar below it does the pointing */
 .filter-bar { position: relative; padding-bottom: 9px; }
 .filter-slider { position: absolute; left: 0; bottom: 0; height: 5px; width: 0; border-radius: 5px; background: var(--accent); transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s; }
@@ -1049,3 +1047,15 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 .guide-shot img { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); }
 .guide-admin { margin-top: 12px; padding: 8px 10px; border-radius: 10px; background: var(--bg); font-size: 0.9rem; }
 .guide-admin .chip { font-size: 0.7rem; }
+
+/* Reminder type picker: two options, each with a short note of examples */
+.kind-picker { display: grid; gap: 8px; }
+.kind-picker .kind-option { display: flex; margin: 0; font-weight: 400; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; }
+.kind-picker .kind-option:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.kind-picker .kind-option input { margin-top: 4px; flex: none; }
+.kind-name { display: block; font-weight: 600; }
+.kind-note { display: block; margin-top: 2px; font-size: 0.875rem; color: var(--muted); }
+/* Mark renewed: a box at the top of a compliance reminder */
+.renew-box { margin: 14px 0 6px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.renew-box h2 { margin: 0 0 4px; }
+.renew-history { margin-top: 10px; }

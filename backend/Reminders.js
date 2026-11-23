@@ -57,8 +57,10 @@ function collectDigests_(onlyUserId) {
 }
 
 function logLink_(task) {
-  const path = task.kind === 'compliance' ? 'compliance' : 'maintenance';
-  return SITE_URL + '#/car/' + task.car_id + '/add/' + path + '?task=' + task.id;
+  // a compliance reminder is marked renewed on its own page; maintenance is logged as an entry
+  return task.kind === 'compliance'
+    ? SITE_URL + '#/car/' + task.car_id + '/reminder/' + task.id
+    : SITE_URL + '#/car/' + task.car_id + '/add/maintenance?task=' + task.id;
 }
 
 /** What happens once it is done, in plain words. */
