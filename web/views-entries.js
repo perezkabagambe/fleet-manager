@@ -405,17 +405,18 @@
       chips.replaceChildren();
       var counts = {};
       data.forEach(function (e) { counts[e.type] = (counts[e.type] || 0) + 1; });
-      if (Object.keys(counts).length > 1) {
+      if (data.length) {
         // Tiles in the same soft colours as the pictures shown for entries without a photo; the chosen one is solid.
-        var types = ['All'].concat(Object.keys(PLURAL).filter(function (t) { return counts[t]; }));
+        // Every kind always has its tile, with a count of zero if there are none.
+        var types = ['All'].concat(Object.keys(PLURAL));
         var tiles = el('div', { class: 'filter-tiles' });
         // each tile is as wide as its name needs (short ones narrower);
         // set here, not as an attribute (the page's security policy blocks inline style attributes)
         tiles.style.gridTemplateColumns = types.map(function (t) { return 'minmax(0, ' + ((t === 'All' ? 3 : PLURAL[t].length) + 3) + 'fr)'; }).join(' ');
         types.forEach(function (t) {
-          var b = el('button', { type: 'button', class: 'filter-tile ft-' + t.toLowerCase() + (t === filter ? ' on' : ''), 'aria-pressed': t === filter ? 'true' : 'false' }, [
+          var b = el('button', { type: 'button', class: 'filter-tile ft-' + t.toLowerCase() + (t === filter ? ' on' : '') + (t !== 'All' && !counts[t] ? ' none' : ''), 'aria-pressed': t === filter ? 'true' : 'false' }, [
             el('span', { class: 'ft-name', text: t === 'All' ? 'All' : PLURAL[t] }),
-            el('b', { class: 'ft-count', text: String(t === 'All' ? data.length : counts[t]) }),
+            el('b', { class: 'ft-count', text: String(t === 'All' ? data.length : (counts[t] || 0)) }),
           ]);
           b.addEventListener('click', function () { filter = t; render(); });
           tiles.append(b);
@@ -430,7 +431,7 @@
       var shown = data.filter(function (e) { return filter === 'All' || e.type === filter; });
       if (selecting) updateSelectUi();
       list.replaceChildren.apply(list, shown.length ? shown.map(row)
-        : [el('p', { class: 'muted', text: data.length ? 'Nothing of that kind yet.' : 'Nothing recorded yet. Add the first entry above.' })]);
+        : [el('p', { class: 'muted', text: data.length ? 'No ' + (filter === 'All' ? 'entries' : PLURAL[filter].toLowerCase()) + ' yet.' : 'Nothing recorded yet. Add the first entry above.' })]);
     }
 
     function show(entries) {

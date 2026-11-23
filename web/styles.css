@@ -995,6 +995,7 @@ body.selecting #app { padding-bottom: 110px; }
 .filter-tile.ft-issue { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); }
 .filter-tile.ft-maintenance { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
 .filter-tile.ft-purchase { background: var(--warn-bg); color: var(--warn-text); }
+.filter-tile.none:not(.on) { opacity: 0.6; } /* a kind with nothing in it is still there, a little quieter */
 .filter-tile.on { border-color: currentColor; } /* the chosen tile keeps its soft colour and gains an outline; the bar below it does the pointing */
 .filter-bar { position: relative; padding-bottom: 9px; }
 .filter-slider { position: absolute; left: 0; bottom: 0; height: 5px; width: 0; border-radius: 5px; background: var(--accent); transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s; }
