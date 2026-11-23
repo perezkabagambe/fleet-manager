@@ -32,6 +32,8 @@
     var details = el('textarea', { name: 'details', rows: '6', maxlength: '3000' });
     var detailsField = UI.field('Details', details, KINDS[0].hint);
     var hint = detailsField.querySelector('.hint');
+    hint.classList.add('above');
+    detailsField.insertBefore(hint, details); // the guidance for the chosen kind sits above the box, where it is read before typing
     kind.addEventListener('change', function () {
       var k = KINDS.filter(function (x) { return x.value === kind.value; })[0];
       hint.textContent = k.hint;

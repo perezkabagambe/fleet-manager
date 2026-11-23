@@ -1064,3 +1064,4 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 .identified-pick > * + * { margin-top: 8px; }
 .field-pair.bottom-aligned { align-items: end; } /* the boxes line up even when one label wraps to more lines */
 .created-note { margin-bottom: 2px; }
+.field .hint.above { margin: 0 0 6px; }
