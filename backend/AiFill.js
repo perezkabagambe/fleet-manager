@@ -423,6 +423,34 @@ function aiRefreshSpecs_(p, ctx) {
 }
 
 
+/**
+ * Admin only: ask AI for one saved car's engine size, from everything the car's record says (its VIN first). Changes nothing: it
+ * only answers { engineSize (litres, or ''), confidence, summary, sources }, for an admin to check before setting it (setEngineSizes).
+ * Used to fill in the engine size of cars that were saved before the field existed.
+ */
+function aiEngineSize_(p, ctx) {
+  const car = findCar_(cleanStr_(p.carId, 64), false);
+  if (!car) fail_('not_found');
+  const known = aiKnown_({
+    registration: car.registration, vin: car.vin, country: car.country, make: car.make, model: car.model, year: car.year, colour: car.colour,
+    engineCode: car.engine_code, gearboxCode: car.gearbox_code, transmission: car.transmission, fuelType: car.fuel_type, market: car.market, driveSide: car.drive_side,
+  });
+  const lines = aiKnownLines_(known).concat([
+    '',
+    'What is the engine size of this vehicle, in litres to one decimal place (for example 2.5)? If it is a fully electric vehicle, leave it empty.',
+    'Return ONE JSON object: { "engineSize": "", "confidence": "high, medium or low", "summary": "one sentence: which engine, and how sure you are" }',
+  ]);
+  return aiRun_(ctx, known, lines.join('\n'), function (raw) {
+    const size = String(raw.engineSize === undefined || raw.engineSize === null ? '' : raw.engineSize).replace(/[^0-9.]/g, '');
+    return {
+      carId: car.id, registration: car.registration,
+      engineSize: /^\d{1,2}(\.\d)?$/.test(size) && Number(size) >= 0.1 && Number(size) <= 20 ? String(Number(size)) : '',
+      confidence: /^(high|medium|low)$/i.test(String(raw.confidence)) ? String(raw.confidence).toLowerCase() : 'low',
+      summary: cleanStr_(raw.summary, 300),
+    };
+  }, function (out) { return 'AI engine size for ' + car.registration + ': ' + (out.engineSize || 'none') + ' (' + out.confidence + ' confidence)'; });
+}
+
 /** A fuel type the app uses, from what the AI (or a log book) said: '' if it fits none. */
 function mapFuelType_(raw) {
   const t = cleanStr_(raw, 40).toLowerCase();

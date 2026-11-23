@@ -92,6 +92,7 @@ function actions_() {
     aiReadLogbook: { auth: 'user', fn: aiReadLogbook_ }, // reads a log book PDF, then the technical details (one lookup from the allowance)
     aiFindCar: { auth: 'user', fn: aiFindCar_ }, // no script lock: it waits for an outside service and must not block everyone else
     aiRefreshSpecs: { auth: 'user', fn: aiRefreshSpecs_ },
+    aiEngineSize: { auth: 'admin', fn: aiEngineSize_ }, // admin only: one saved car's engine size, to check before it is set
     aiFillCar: { auth: 'user', fn: aiFillCar_ }, // no script lock: it waits for an outside service and must not block everyone else
     getReceiptStatus: { auth: 'user', fn: getReceiptStatus_ },
     getReceiptEmail: { auth: 'user', fn: getReceiptEmail_ },

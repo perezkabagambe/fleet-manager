@@ -491,3 +491,21 @@ test('log book: odd values are cleaned (fuel words mapped, future or malformed a
   assert.equal(odd.details.acquisitionDate, undefined);
   assert.equal(odd.details.transmission, undefined);
 });
+
+test('an admin can ask AI for a saved car\'s engine size: it answers and changes nothing', () => {
+  const { env, sam } = setup();
+  env.seedUser({ name: 'Admin One', email: 'admin@example.com', role: 'admin' });
+  const admin = env.signInAs('admin@example.com');
+  const car = env.call('saveCar', { token: sam, fields: { registration: 'AB12 CDE', make: 'Kia', model: 'Sorento', year: '2013', odometer: '1000' } }).data.car;
+  env.state.gemini = () => reply({ engineSize: '2.2 L', confidence: 'HIGH', summary: 'The D4HB 2.2 diesel.' });
+  assert.equal(env.call('aiEngineSize', { token: sam, carId: car.id }).error, 'forbidden');
+  const r = env.call('aiEngineSize', { token: admin, carId: car.id });
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual([r.data.engineSize, r.data.confidence, r.data.summary], ['2.2', 'high', 'The D4HB 2.2 diesel.']);
+  assert.equal(env.call('getCar', { token: sam, id: car.id }).data.car.engineSize, null, 'nothing was saved');
+  assert.match(env.state.geminiRequests[0].body.contents[0].parts[0].text, /engine size of this vehicle/);
+  env.state.gemini = () => reply({ engineSize: '2199', confidence: 'maybe' });
+  const bad = env.call('aiEngineSize', { token: admin, carId: car.id }).data;
+  assert.deepEqual([bad.engineSize, bad.confidence], ['', 'low']);
+  assert.equal(env.call('aiEngineSize', { token: admin, carId: 'nope' }).error, 'not_found');
+});
