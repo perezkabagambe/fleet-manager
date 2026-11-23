@@ -243,7 +243,7 @@
         nameRow,
         linkRow,
         menuRow('Diagnostics', { href: '#/diag' }),
-        menuRow('Report a bug or request a feature', { href: '#/feedback' }),
+        menuRow('Report a bug, request a feature or leave some feedback', { href: '#/feedback' }),
         menuRow('Sign out', { danger: true, onClick: function () { FleetApp.signOut(); } }),
       ]),
       nameBox,

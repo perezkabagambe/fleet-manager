@@ -191,7 +191,7 @@
     if (/^\/demo/.test(path)) return { title: 'Demo car', back: '#/guide' };
     if (path === '/profile/cars') return { title: 'Choose my cars', back: '#/profile' };
     if (path === '/diag') return { title: 'Diagnostics', back: FleetAuth.hasSession() ? '#/profile' : '#/login' };
-    if (path === '/feedback') return { title: 'Report a bug or request a feature', back: FleetAuth.hasSession() ? '#/profile' : '#/login' };
+    if (path === '/feedback') return { title: 'Bugs, ideas and feedback', back: FleetAuth.hasSession() ? '#/profile' : '#/login' };
     if (path === '/car/new') return { title: 'Add a car', back: '#/' };
     if ((m = /^\/car\/([0-9a-f-]{8,40})$/.exec(path))) return { title: 'Car', back: '#/' };
     if ((m = /^\/car\/([0-9a-f-]{8,40})\/(edit|fluids|people|label)$/.exec(path))) return { title: { edit: 'Edit car', fluids: 'Edit specs', people: 'Owners', label: 'QR label' }[m[2]], back: '#/car/' + m[1] };

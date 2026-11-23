@@ -40,10 +40,12 @@ test('a feature request has its own subject; the kind and title are checked', ()
   assert.equal(env.call('sendFeedback', { token: sam, kind: 'Feature request', title: 'Dark mode' }).ok, true);
   assert.equal(feedbackMails()[0].subject, '[Fleet Manager] Feature request: Dark mode');
   assert.match(feedbackMails()[0].body, /no further details/);
+  assert.equal(env.call('sendFeedback', { token: sam, kind: 'Feedback', title: 'Easy to use' }).ok, true);
+  assert.equal(feedbackMails()[1].subject, '[Fleet Manager] Feedback: Easy to use');
   assert.equal(env.call('sendFeedback', Object.assign({ token: sam }, bug({ kind: 'Praise' }))).error, 'invalid_kind');
   assert.equal(env.call('sendFeedback', Object.assign({ token: sam }, bug({ kind: '' }))).error, 'invalid_kind');
   assert.equal(env.call('sendFeedback', Object.assign({ token: sam }, bug({ title: '  ' }))).error, 'title_required');
-  assert.equal(feedbackMails().length, 1, 'nothing sent for the invalid ones');
+  assert.equal(feedbackMails().length, 2, 'nothing sent for the invalid ones');
 });
 
 test('text is escaped, subjects cannot be split, and secrets after a ? are dropped from the page', () => {

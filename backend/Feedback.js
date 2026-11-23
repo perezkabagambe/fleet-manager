@@ -1,5 +1,5 @@
 /**
- * "Report a bug or request a feature": one form for both. The message goes by email to the app's own account
+ * "Report a bug, request a feature or leave some feedback": one form for all three. The message goes by email to the app's own account
  * and to every admin, with the sender as the reply-to address so an admin can answer straight away.
  *
  * Only signed-in people and guests can send one (so the inboxes cannot be flooded by strangers), and there are
@@ -7,7 +7,7 @@
  * and the page address never includes anything after a "?" (that is where guest secrets would be).
  */
 
-const FEEDBACK_KINDS = ['Bug', 'Feature request'];
+const FEEDBACK_KINDS = ['Bug', 'Feature request', 'Feedback'];
 const APP_EMAIL_FALLBACK = 'potentiafleetmanager@gmail.com';
 
 /** The account the app runs as. */

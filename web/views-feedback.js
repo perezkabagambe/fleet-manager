@@ -1,4 +1,4 @@
-// "Report a bug or request a feature": one form for both, emailed to the app's account and every admin.
+// "Report a bug, request a feature or leave some feedback": one form for all three, emailed to the app's account and every admin.
 (function () {
   'use strict';
 
@@ -8,7 +8,9 @@
   var KINDS = [
     { value: 'Bug', label: 'Report a bug', hint: 'What did you do, what did you expect, and what happened instead?' },
     { value: 'Feature request', label: 'Request a feature', hint: 'What would you like the app to do, and what would it help with?' },
+    { value: 'Feedback', label: 'Leave some feedback', hint: 'What works well, what could be better, or anything else you would like us to know?' },
   ];
+  var PLACEHOLDERS = { 'Bug': 'e.g. Photo will not upload', 'Feature request': 'e.g. Show costs in a chart', 'Feedback': 'e.g. The log is easy to use' };
 
   Views.feedback = function (ctx, root) {
     var signedIn = FleetAuth.hasSession();
@@ -17,7 +19,7 @@
 
     if (!signedIn && !guest) {
       root.replaceChildren(el('section', { class: 'card narrow' }, [
-        el('h1', { text: 'Report a bug or request a feature' }),
+        el('h1', { text: 'Report a bug, request a feature or leave some feedback' }),
         el('p', { text: 'Please sign in first, so we know who to reply to.' }),
         el('a', { class: 'btn block', href: '#/login?next=' + encodeURIComponent('/feedback'), text: 'Sign in' }),
       ]));
@@ -33,7 +35,7 @@
     kind.addEventListener('change', function () {
       var k = KINDS.filter(function (x) { return x.value === kind.value; })[0];
       hint.textContent = k.hint;
-      title.placeholder = kind.value === 'Bug' ? 'e.g. Photo will not upload' : 'e.g. Show costs in a chart';
+      title.placeholder = PLACEHOLDERS[kind.value];
     });
     title.placeholder = 'e.g. Photo will not upload';
     var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: 'Send' });
@@ -66,7 +68,7 @@
 
     root.replaceChildren(el('section', { class: 'card narrow' }, [
       el('a', { class: 'back', href: back, text: '← Back' }),
-      el('h1', { text: 'Report a bug or request a feature' }),
+      el('h1', { text: 'Report a bug, request a feature or leave some feedback' }),
       el('p', { class: 'muted', text: 'This is emailed to the administrators.' }),
       msg, form,
     ]));
