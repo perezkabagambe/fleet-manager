@@ -27,6 +27,129 @@ function getDemoCar_(p, ctx) {
   return { id: car ? car.id : null };
 }
 
+// ---------- made-up receipts and invoices (PDF) for some of the demo car's entries ----------
+
+/** A PDF string literal: ASCII as it is, "(" ")" "\" escaped, and the pound sign as its WinAnsi byte. */
+function pdfText_(t) {
+  return '(' + String(t).replace(/[\\()]/g, '\\$&').replace(/\u00a3/g, '\\243').replace(/[^\x20-\x7e\\]/g, '?') + ')';
+}
+
+/** Width in points of a short string of figures (Helvetica: digits and the pound sign 556, "." and "," 278), to right-align amounts. */
+function figuresWidth_(t, size) {
+  let w = 0;
+  String(t).split('').forEach(function (ch) { w += (ch === '.' || ch === ',' || ch === ' ') ? 278 : 556; });
+  return w * size / 1000;
+}
+
+/** A one-page A4 PDF from drawing steps: { t, x, y, size, bold, grey, right } text, { r: [x, y, w, h], fill } boxes, { l: [x1, y1, x2, y2] } lines. Returns base64. */
+function demoPdf_(steps) {
+  let c = '';
+  steps.forEach(function (st) {
+    if (st.r) {
+      const f = st.fill || [0.9, 0.9, 0.9];
+      c += f.join(' ') + ' rg ' + st.r.join(' ') + ' re f\n';
+    } else if (st.l) {
+      c += '0.75 0.78 0.82 RG 0.6 w ' + st.l[0] + ' ' + st.l[1] + ' m ' + st.l[2] + ' ' + st.l[3] + ' l S\n';
+    } else {
+      const size = st.size || 10;
+      const x = st.right ? st.x - figuresWidth_(st.t, size) : st.x;
+      const col = st.color || (st.grey ? [0.45, 0.5, 0.56] : [0.1, 0.12, 0.15]);
+      c += 'BT ' + col.join(' ') + ' rg /' + (st.bold ? 'F2' : 'F1') + ' ' + size + ' Tf ' + x.toFixed(1) + ' ' + st.y + ' Td ' + pdfText_(st.t) + ' Tj ET\n';
+    }
+  });
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>',
+    '<< /Length ' + c.length + ' >>\nstream\n' + c + 'endstream',
+  ];
+  let out = '%PDF-1.4\n';
+  const offsets = [];
+  objs.forEach(function (o, i) { offsets.push(out.length); out += (i + 1) + ' 0 obj\n' + o + '\nendobj\n'; });
+  const xref = out.length;
+  out += 'xref\n0 ' + (objs.length + 1) + '\n0000000000 65535 f \n';
+  offsets.forEach(function (o) { out += ('0000000000' + o).slice(-10) + ' 00000 n \n'; });
+  out += 'trailer\n<< /Size ' + (objs.length + 1) + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n';
+  const bytes = [];
+  for (let i = 0; i < out.length; i++) bytes.push(out.charCodeAt(i) & 0xff);
+  return Utilities.base64Encode(bytes);
+}
+
+function demoMoney_(n) { return '\u00a3' + n.toFixed(2).replace(/\B(?=(\d{3})+\.)/g, ','); }
+
+function demoDateText_(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso));
+  if (!m) return String(iso);
+  return Number(m[3]) + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1] + ' ' + m[1];
+}
+
+/**
+ * A made-up receipt or invoice. o: { shop, address, kind ('Receipt' | 'Invoice'), number, date (ISO), lines: [[description, quantity, unit price (or null), amount]], vatIncluded, paidWith }.
+ * The total is worked out from the lines. Says plainly, at the bottom, that it is made up.
+ */
+function demoReceiptPdf_(o) {
+  const total = o.lines.reduce(function (sum, l) { return sum + l[3]; }, 0);
+  const steps = [
+    { r: [0, 782, 595.28, 60], fill: [0.07, 0.26, 0.45] },
+    { t: o.shop, x: 40, y: 806, size: 20, bold: true, color: [1, 1, 1] },
+    { t: o.address, x: 40, y: 790, size: 9, color: [0.85, 0.92, 0.98] },
+    { t: o.kind.toUpperCase(), x: 40, y: 738, size: 22, bold: true },
+    { t: o.kind + ' no. ' + o.number, x: 555, y: 744, size: 10, right: true },
+    { t: 'Date: ' + demoDateText_(o.date), x: 555, y: 729, size: 10, right: true },
+    { t: 'Customer: Demo car DEMO 001 (Example Demo Estate 2.0 TDI)', x: 40, y: 700, size: 10 },
+    { t: 'Paid by: ' + o.paidWith, x: 40, y: 685, size: 10 },
+    { r: [40, 640, 515, 22], fill: [0.9, 0.93, 0.96] },
+    { t: 'Description', x: 48, y: 647, size: 10, bold: true },
+    { t: 'Qty', x: 360, y: 647, size: 10, bold: true },
+    { t: 'Unit price', x: 440, y: 647, size: 10, bold: true, right: true },
+    { t: 'Amount', x: 547, y: 647, size: 10, bold: true, right: true },
+  ];
+  let y = 620;
+  o.lines.forEach(function (l) {
+    steps.push({ t: l[0], x: 48, y: y, size: 10 });
+    steps.push({ t: String(l[1]), x: 360, y: y, size: 10 });
+    if (l[2] !== null) steps.push({ t: demoMoney_(l[2]), x: 440, y: y, size: 10, right: true });
+    steps.push({ t: demoMoney_(l[3]), x: 547, y: y, size: 10, right: true });
+    steps.push({ l: [40, y - 8, 555, y - 8] });
+    y -= 24;
+  });
+  y -= 6;
+  steps.push({ t: 'Total', x: 440, y: y, size: 12, bold: true, right: true });
+  steps.push({ t: demoMoney_(total), x: 547, y: y, size: 12, bold: true, right: true });
+  if (o.vatIncluded) steps.push({ t: 'Includes VAT at 20%: ' + demoMoney_(total / 6), x: 547, y: y - 18, size: 9, grey: true, right: true });
+  steps.push({ t: 'Paid in full. Thank you.', x: 40, y: y, size: 11, bold: true });
+  steps.push({ t: 'Made up for the Fleet Manager demo car. This is not a real ' + o.kind.toLowerCase() + '.', x: 40, y: 50, size: 9, grey: true });
+  return demoPdf_(steps);
+}
+
+/** Give some of the demo car's entries a made-up receipt or invoice, if they do not have a file yet (safe to repeat). */
+function ensureDemoReceipts_(carId, ctx) {
+  const entries = Db.all('Entries').filter(function (e) { return e.car_id === carId && !isTrue_(e.deleted); });
+  const attached = Db.all('Attachments').filter(function (a) { return a.car_id === carId && !isTrue_(a.deleted); });
+  const jobs = [
+    { title: 'Front brake pads and discs', file: 'Euro Car Parts receipt.pdf', shop: 'Euro Car Parts', address: 'Example Retail Park, Exampleton', kind: 'Receipt', number: 'ECP-204817', vat: true, paid: 'Card ending 4242',
+      lines: [['Front brake pads (BP1234)', 1, 42.5, 42.5], ['Front brake discs, pair (BD5678)', 1, 68, 68]] },
+    { title: 'Oil and filter kit', file: 'Euro Car Parts receipt.pdf', shop: 'Euro Car Parts', address: 'Example Retail Park, Exampleton', kind: 'Receipt', number: 'ECP-198355', vat: true, paid: 'Card ending 4242',
+      lines: [['5W-30 engine oil, 5 L', 1, 34.99, 34.99], ['Oil filter (OF9012)', 1, 9.5, 9.5]] },
+    { title: 'Front brakes: pads and discs fitted', file: 'Example Garage invoice.pdf', shop: 'Example Garage', address: '1 Workshop Lane, Exampleton', kind: 'Invoice', number: 'EG-3391', vat: true, paid: 'Bank transfer',
+      lines: [['Front brake pads and discs (parts)', 1, 110.5, 110.5], ['Labour: fit pads and discs', '2 h', 40, 80]] },
+    { title: 'Full service (invoice)', file: 'Example Garage invoice.pdf', shop: 'Example Garage', address: '1 Workshop Lane, Exampleton', kind: 'Invoice', number: 'EG-2874', vat: true, paid: 'Card ending 4242',
+      lines: [['Oil, oil filter and air filter', 1, 62, 62], ['Labour: full service and general check', '3 h', 41, 123]] },
+  ];
+  let added = 0;
+  jobs.forEach(function (j) {
+    const e = entries.filter(function (x) { return x.title === j.title; })[0];
+    if (!e || attached.some(function (a) { return a.entry_id === e.id; })) return;
+    try {
+      uploadAttachment_({ entryId: e.id, mime: 'application/pdf', filename: j.file, data: demoReceiptPdf_({ shop: j.shop, address: j.address, kind: j.kind, number: j.number, date: e.date, lines: j.lines, vatIncluded: j.vat, paidWith: j.paid }) }, ctx);
+      added++;
+    } catch (err) { /* the entry is fine without it */ }
+  });
+  return added;
+}
+
 /** Give the demo car the demo picture as its only photo (an older demo picture is removed). True if the picture is now in place. */
 function replaceDemoPhoto_(carId, ctx) {
   try {
@@ -42,7 +165,7 @@ function replaceDemoPhoto_(carId, ctx) {
 /** Admin: create the demo car if it does not exist yet (safe to repeat: it never makes a second one, and it refreshes the demo picture). */
 function createDemoCar_(p, ctx) {
   const existing = findDemoCar_();
-  if (existing) return { id: existing.id, created: false, photo: replaceDemoPhoto_(existing.id, ctx) };
+  if (existing) return { id: existing.id, created: false, photo: replaceDemoPhoto_(existing.id, ctx), receipts: ensureDemoReceipts_(existing.id, ctx) };
 
   const saved = saveCar_({
     fields: {
@@ -101,6 +224,7 @@ function createDemoCar_(p, ctx) {
 
   uploadCarDocument_({ carId: carId, type: 'Logbook', note: 'Demo document', mime: 'application/pdf', data: DEMO_PDF_B64, filename: 'Demo logbook.pdf' }, ctx);
   replaceDemoPhoto_(carId, ctx);
+  ensureDemoReceipts_(carId, ctx);
 
   audit_(ctx.user, 'demo_car_created', 'Car', carId, 'Demo car ' + DEMO_REG + ' created for the user guide');
   return { id: carId, created: true };

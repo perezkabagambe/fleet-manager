@@ -30,6 +30,27 @@ test('creating it again never makes a second one', () => {
   assert.equal(env.call('listCars', { token: admin }).data.cars.filter((c) => c.registration === 'DEMO 001').length, 1);
 });
 
+test('some demo entries have a made-up PDF receipt or invoice, made once and valid', () => {
+  const { env, admin, sam } = setup();
+  const id = env.call('createDemoCar', { token: admin }).data.id;
+  const entries = env.call('getCarPage', { token: sam, id }).data.entries;
+  const withFiles = entries.filter((e) => e.attachmentCount > 0).map((e) => e.title).sort();
+  assert.deepEqual(withFiles, ['Front brake pads and discs', 'Front brakes: pads and discs fitted', 'Full service (invoice)', 'Oil and filter kit']);
+  const brakes = entries.find((e) => e.title === 'Front brake pads and discs');
+  const detail = env.call('getEntry', { token: sam, id: brakes.id }).data;
+  assert.equal(detail.attachments.length, 1);
+  assert.equal(detail.attachments[0].mime, 'application/pdf');
+  const file = env.call('getAttachment', { token: sam, id: detail.attachments[0].id }).data;
+  const text = Buffer.from(file.data, 'base64').toString('latin1');
+  assert.match(text, /^%PDF-1\.4/);
+  assert.match(text, /Euro Car Parts/);
+  assert.match(text, /110\.50/);
+  assert.match(text, /startxref\n\d+\n%%EOF\n$/);
+  // asking again adds nothing
+  const again = env.call('createDemoCar', { token: admin }).data;
+  assert.equal(again.receipts, 0);
+});
+
 test('creating it again swaps in the current demo picture: still exactly one photo', () => {
   const { env, admin, sam } = setup();
   const id = env.call('createDemoCar', { token: admin }).data.id;
