@@ -61,6 +61,12 @@ test('every entry type can be added, with the fields that belong to it', () => {
   assert.equal(add('Compliance', { title: 'MOT passed', date: D1 }).error, 'invalid_type', 'compliance is a reminder now, not an entry type');
 });
 
+test('an issue keeps who confirmed it (the garage field)', () => {
+  const { add, get } = setup();
+  const e = add('Issue', issue({ vendor: 'City Garage' })).data.entry;
+  assert.equal(get(e.id).data.entry.vendor, 'City Garage');
+});
+
 test('required fields, formats and enumerations are enforced', () => {
   const { add, list } = setup();
   const bad = (type, fields, code, extra) => assert.equal(add(type, fields, extra).error, code, code + ' ' + JSON.stringify(fields).slice(0, 60));
