@@ -799,28 +799,9 @@
       // Two short fields side by side, to save scrolling.
       function pair(a, b, cls) { return el('div', { class: 'field-pair' + (cls ? ' ' + cls : '') }, [a, b]); }
       // Vehicle details are three plain groups with simple headings (nothing collapses): key details, technical details, notes.
+      // The fields in three groups. Key details: what identifies the car (and what AI needs to look it up). Other details: the rest of its
+      // technical details. Ownership & Other Details: where it is, its status and mileage, and how it was acquired.
       var keyFields = [
-        pair(
-          UI.field('Registration *', shrinkToFit(text('registration', v.registration, { maxlength: '20', autocapitalize: 'characters', required: true }), 10)),
-          UI.field('VIN / chassis', shrinkToFit(text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 10), 'The 17-character VIN, or chassis number.'),
-          'wide-second' // a VIN is long, a registration is short
-        ),
-        pair(
-          UI.field('Location', select('country', [['UK', 'UK'], ['UG', 'Uganda']], v.country), 'Where it is based. Sets the usual currency.'),
-          UI.field('Date imported', text('importDate', v.importDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.')
-        ),
-        pair(
-          UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
-          odometerField()
-        ),
-        UI.field('Transmission', select('transmission', [['', 'Not recorded'], ['Manual', 'Manual'], ['Automatic', 'Automatic'], ['CVT', 'CVT']], v.transmission), 'Manual, automatic or CVT. AI uses this to find the right gearbox code.'),
-        pair(
-          UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.'),
-          acquisitionCostField(),
-          'aligned' // equal columns, both labels two lines tall, so the two boxes line up
-        ),
-      ];
-      var techFields = [
         pair(
           UI.field('Make *', text('make', v.make, { maxlength: '40', placeholder: 'e.g. Toyota', required: true })),
           UI.field('Model *', text('model', v.model, { maxlength: '40', placeholder: 'e.g. Land Cruiser', required: true }))
@@ -830,19 +811,42 @@
           UI.field('Colour', text('colour', v.colour, { maxlength: '30' }))
         ),
         pair(
-          UI.field('Engine code', text('engineCode', v.engineCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. 1GR-FE.'),
-          UI.field('Gearbox code', text('gearboxCode', v.gearboxCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. A750F. It can be checked against the vehicle\'s UK log book.')
+          UI.field('Fuel type *', select('fuelType', [['', 'Not recorded'], ['Petrol', 'Petrol'], ['Diesel', 'Diesel'], ['Petrol hybrid', 'Petrol hybrid'], ['Diesel hybrid', 'Diesel hybrid'], ['Fully electric', 'Fully electric']], v.fuelType)),
+          UI.field('Engine size (litres) *', text('engineSize', v.engineSize === null || v.engineSize === undefined ? '' : v.engineSize, { inputmode: 'decimal', maxlength: '4', placeholder: 'e.g. 2.5' }), 'Leave empty for an electric car.'),
+          'aligned tall-labels' // equal columns and two-line labels, so the two boxes line up
         ),
         pair(
-          UI.field('Market', select('market', [['', 'Not recorded']].concat(MARKETS.map(function (m) { return [m, m]; })), v.market), 'Where it was built and sold for.'),
+          UI.field('Transmission *', select('transmission', [['', 'Not recorded'], ['Manual', 'Manual'], ['Automatic', 'Automatic'], ['CVT', 'CVT']], v.transmission)),
           UI.field('Drive side', select('driveSide', [['', 'Not recorded'], ['LHD', 'Left-hand (LHD)'], ['RHD', 'Right-hand (RHD)']], v.driveSide))
         ),
         pair(
-          UI.field('Fuel type', select('fuelType', [['', 'Not recorded'], ['Petrol', 'Petrol'], ['Diesel', 'Diesel'], ['Petrol hybrid', 'Petrol hybrid'], ['Diesel hybrid', 'Diesel hybrid'], ['Fully electric', 'Fully electric']], v.fuelType)),
-          UI.field('Engine size (litres)', text('engineSize', v.engineSize === null || v.engineSize === undefined ? '' : v.engineSize, { inputmode: 'decimal', maxlength: '4', placeholder: 'e.g. 2.5' }), 'Optional. Leave empty for an electric car.'),
-          'aligned tall-labels' // equal columns and two-line labels, so the two boxes line up
+          UI.field('Registration *', shrinkToFit(text('registration', v.registration, { maxlength: '20', autocapitalize: 'characters', required: true }), 10)),
+          UI.field('VIN / chassis', shrinkToFit(text('vin', v.vin, { maxlength: '30', autocapitalize: 'characters' }), 10), 'Please enter the VIN if you have it: it is the most reliable way for AI to fill in the rest.'),
+          'wide-second' // a VIN is long, a registration is short
         ),
+      ];
+      var techFields = [
+        pair(
+          UI.field('Engine code', text('engineCode', v.engineCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. 1GR-FE.'),
+          UI.field('Gearbox code', text('gearboxCode', v.gearboxCode, { maxlength: '30', autocapitalize: 'characters' }), 'Optional, e.g. A750F. It can be checked against the vehicle\'s UK log book.')
+        ),
+        UI.field('Market', select('market', [['', 'Not recorded']].concat(MARKETS.map(function (m) { return [m, m]; })), v.market), 'Where it was built and sold for.'),
         UI.field('Fuel capacity (litres)', text('fuelCapacity', v.fuelCapacity === null || v.fuelCapacity === undefined ? '' : v.fuelCapacity, { inputmode: 'decimal', maxlength: '6', placeholder: 'e.g. 87' }), 'Optional. The size of the fuel tank.'),
+      ];
+      var ownershipFields = [
+        pair(
+          UI.field('Location', select('country', [['UK', 'UK'], ['UG', 'Uganda']], v.country), 'Where it is based. Sets the usual currency.'),
+          UI.field('Date imported', text('importDate', v.importDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.')
+        ),
+        pair(
+          UI.field('Status', select('status', [['Active', 'Active'], ['Off-road', 'Off-road'], ['Sold', 'Sold'], ['Scrapped', 'Scrapped']], v.status)),
+          odometerField()
+        ),
+        pair(
+          UI.field('Acquisition date', text('acquisitionDate', v.acquisitionDate, { maxlength: '24', placeholder: 'e.g. Mar 2021' }), 'Optional. A date, month or year.'),
+          acquisitionCostField(),
+          'aligned' // equal columns, both labels two lines tall, so the two boxes line up
+        ),
       ];
       // The parts catalogue link lives at the top of the fluids and specifications part of the form.
       var MAX_CAT = 4;
@@ -879,7 +883,7 @@
 
       var editLogbook = null; // a log book PDF read while editing: it is attached to the car's documents when the changes are saved
 
-      // ---- "Use AI to fill in technical details": the first thing under the Technical details heading, when adding a car and when editing one. It only fills empty boxes. ----
+      // ---- "Use AI to fill in technical details": the first thing under the Other details heading, when adding a car and when editing one. It only fills empty boxes. ----
       function aiAssist() {
         var box = el('div', { class: 'ai-box' });
         var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Use AI to fill in technical details' });
@@ -1195,7 +1199,8 @@
       function groupHeading(text) { return el('h2', { class: 'form-heading', text: text }); }
       var detailsSection = el('div', { class: 'form-groups' }, [
         groupHeading('Key details'), el('div', { class: 'stack' }, keyFields),
-        groupHeading('Technical details'), el('div', { class: 'stack' }, techFields),
+        groupHeading('Other details'), el('div', { class: 'stack' }, techFields),
+        groupHeading('Ownership & Other Details'), el('div', { class: 'stack' }, ownershipFields),
         groupHeading('Notes'), notesField,
       ]);
       var ownersSection = section('Owner/Custodian', ownerFields);
@@ -1414,9 +1419,24 @@
         });
       }
 
+      // What a car needs before it can be saved (an electric car has no engine size)
+      function missingRequired() {
+        var electric = f.fuelType.value === 'Fully electric';
+        return [['registration', 'registration'], ['make', 'make'], ['model', 'model'], ['year', 'year'], ['fuelType', 'fuel type'], ['engineSize', 'engine size'], ['transmission', 'transmission']]
+          .filter(function (n) { return !(n[0] === 'engineSize' && electric) && String(f[n[0]].value).trim() === ''; })
+          .map(function (n) { return n[1]; });
+      }
+
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
         msg.replaceChildren();
+        var need = missingRequired();
+        if (need.length) {
+          msg.replaceChildren(UI.notice('error', 'Please fill in the ' + (need.length > 1 ? need.slice(0, -1).join(', ') + ' and ' + need[need.length - 1] : need[0]) + ' before saving.'));
+          detailsSection.open = true;
+          window.scrollTo(0, 0);
+          return;
+        }
         UI.busy(btn, 'Saving…', run()).catch(function (e) {
           var text = (e.savedParts && e.savedParts.length ? 'Saved: ' + e.savedParts.join(', ') + '. ' : '') +
             'Could not save ' + (e.failedStep || 'the changes') + ': ' + UI.errorText(e);
