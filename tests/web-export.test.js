@@ -142,7 +142,7 @@ test('crc32 matches the standard one, and file names are made safe', () => {
 
 // ---------- the report ----------
 function sample() {
-  const car = { id: 'c1', registration: 'AB12 CDE', make: 'Toyota', model: 'Land Cruiser', year: 2015, colour: 'White', vin: 'JTMHV05J604123456', engineCode: '1VD', gearboxCode: '', country: 'UG', market: 'European', driveSide: 'RHD', fuelCapacity: 93, importDate: '2026-05', acquisitionDate: '2021-03', acquisitionCost: 4500.5, acquisitionCurrency: 'USD', currency: 'UGX', status: 'Active', odometer: 51200, odometerUpdatedAt: '2026-11-01T10:00:00Z', notes: 'Spare key with Sam.', guestEnabled: true, partsouqUrl: 'https://partsouq.com/en/catalog/genuine/', updatedAt: '2026-11-02T09:00:00Z', ownerOther: '' };
+  const car = { id: 'c1', registration: 'AB12 CDE', make: 'Toyota', model: 'Land Cruiser', year: 2015, colour: 'White', vin: 'JTMHV05J604123456', engineCode: '1VD', gearboxCode: '', country: 'UG', market: 'European', driveSide: 'RHD', engineSize: 4.5, fuelCapacity: 93, importDate: '2026-05', acquisitionDate: '2021-03', acquisitionCost: 4500.5, acquisitionCurrency: 'USD', currency: 'UGX', status: 'Active', odometer: 51200, odometerUpdatedAt: '2026-11-01T10:00:00Z', notes: 'Spare key with Sam.', guestEnabled: true, partsouqUrl: 'https://partsouq.com/en/catalog/genuine/', updatedAt: '2026-11-02T09:00:00Z', ownerOther: '' };
   const m = { id: 'e1', ref: 'M-0007', type: 'Maintenance', title: 'Front brake pads', date: '2026-10-02', mileage: 50100, vendor: 'Joe\'s Garage', currency: 'GBP', costMode: 'itemised', labourCost: 90, labourCurrency: 'GBP', labourNote: 'Joe', labourHours: 1.5, otherCost: 5, otherCurrency: 'GBP', otherNote: 'disposal', notes: 'Used the Bosch pads', guestName: '' };
   const i = { id: 'e2', ref: 'I-0003', type: 'Issue', title: 'Squeaky brakes', date: '2026-09-20', mileage: 50000, status: 'Resolved', cost: 0, currency: 'GBP', notes: '' };
   const p = { id: 'e3', ref: 'P-0002', type: 'Purchase', title: 'Pads (front)', date: '2026-09-25', quantity: 1, unitCost: 60, currency: 'GBP', partNumber: '04465-60320', productUrl: 'https://example.com/pads', shippingCost: 4 };
@@ -178,7 +178,7 @@ test('the report opens with the short explanation, then every section in full', 
   assert.ok(first.includes('Exported on 21 Nov 2026 by Perez Kabagambe'));
 
   for (const heading of ['Vehicle details', 'Odometer Log', 'Maintenance & Issues Log', 'Reminders', 'Fluids, Bulbs & Specifications', 'Documents', 'Costs']) assert.ok(all.includes(heading), heading);
-  for (const bit of ['JTMHV05J604123456', 'Uganda', 'Right-hand drive (RHD)', '93 litres', 'May 2026', 'US$4,500.50', 'Owner / custodian Sam', '51,200 mi', '1 Nov 2026']) assert.ok(all.includes(bit), bit);
+  for (const bit of ['JTMHV05J604123456', 'Uganda', 'Right-hand drive (RHD)', '93 litres', '4.5 litres', 'May 2026', 'US$4,500.50', 'Owner / custodian Sam', '51,200 mi', '1 Nov 2026']) assert.ok(all.includes(bit), bit);
   // entries: reference, type-specific fields and the costs
   for (const bit of ['M-0007', 'Front brake pads', '£90.00 (Joe)', ', 1.5 h', 'Pads (front) [04465-60320] x 1 = £64.00', 'Total job cost £159.00', 'Fixes issue Squeaky brakes', 'Reminder Brake check', 'Used the Bosch pads',
     'I-0003', 'Fixed by Front brake pads (2 Oct 2026)', 'P-0002', 'Fitted (used 1, 0 left)', 'Used in Front brake pads x 1']) assert.ok(all.includes(bit), bit);

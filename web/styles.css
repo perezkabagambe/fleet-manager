@@ -1065,3 +1065,6 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 .field-pair.bottom-aligned { align-items: end; } /* the boxes line up even when one label wraps to more lines */
 .created-note { margin-bottom: 2px; }
 .field .hint.above { margin: 0 0 6px; }
+.ai-or { display: flex; align-items: center; gap: 10px; margin: 12px 0; color: var(--muted); font-size: 0.8rem; }
+.ai-or::before, .ai-or::after { content: ''; flex: 1; border-top: 1px solid var(--border); }
+.file-btn.disabled { opacity: 0.5; pointer-events: none; }

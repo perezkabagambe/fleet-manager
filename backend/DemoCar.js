@@ -186,7 +186,7 @@ function createDemoCar_(p, ctx) {
   const saved = saveCar_({
     fields: {
       registration: DEMO_REG, make: 'Example', model: 'Demo Estate 2.0 TDI', year: '2019', colour: 'Blue',
-      vin: 'EXAMPLE0DEMO00001', engineCode: 'DEMO20', gearboxCode: 'DEMO-M6', transmission: 'Manual', fuelType: 'Diesel', fuelCapacity: '55',
+      vin: 'EXAMPLE0DEMO00001', engineCode: 'DEMO20', gearboxCode: 'DEMO-M6', transmission: 'Manual', fuelType: 'Diesel', fuelCapacity: '55', engineSize: '2.0',
       country: 'UK', market: 'UK', driveSide: 'RHD', importDate: '', status: 'Active', odometer: '48250',
       acquisitionDate: '2021-03', acquisitionCost: '9500', acquisitionCurrency: 'GBP', ownerOther: 'Example Garage Ltd',
       catalogues: ['https://partsouq.com/en/catalog/genuine/unit?c=Example', 'https://www.lllparts.co.uk/catalogs/example'],

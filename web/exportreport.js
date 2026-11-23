@@ -59,6 +59,7 @@
       ['Registration', car.registration], ['Make and model', title], ['Status', car.status], ['Colour', car.colour], ['VIN / chassis', car.vin],
       ['Engine code', car.engineCode], ['Transmission', car.transmission], ['Fuel type', car.fuelType], ['Gearbox code', car.gearboxCode], ['Location', car.country === 'UG' ? 'Uganda' : 'United Kingdom'],
       ['Market', car.market], ['Drive', car.driveSide === 'LHD' ? 'Left-hand drive (LHD)' : car.driveSide === 'RHD' ? 'Right-hand drive (RHD)' : ''],
+      ['Engine size', car.engineSize === null || car.engineSize === undefined ? '' : car.engineSize + ' litres'],
       ['Fuel capacity', car.fuelCapacity === null || car.fuelCapacity === undefined ? '' : car.fuelCapacity + ' litres'],
       ['Imported', precise(car.importDate)], ['Acquired', precise(car.acquisitionDate)],
       ['Acquisition cost', car.acquisitionCost === null || car.acquisitionCost === undefined ? 'Not recorded' : money(car.acquisitionCost, car.acquisitionCurrency || car.currency)],

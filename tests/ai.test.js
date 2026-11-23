@@ -14,7 +14,7 @@ function setup(opts) {
   const ann = env.signInAs('ann@example.com');
   if (!opts || opts.key !== false) env.props.GEMINI_API_KEY = KEY;
   const fill = (extra, token) => env.call('aiFillCar', Object.assign({ token: token || sam, registration: 'ua 132fp', vin: 'knaku814se5455201' }, extra || {}));
-  const find = (extra, token) => env.call('aiFindCar', Object.assign({ token: token || sam, registration: 'MV56 HUH', make: 'Kia', model: 'Sorento', year: '2013' }, extra || {}));
+  const find = (extra, token) => env.call('aiFindCar', Object.assign({ token: token || sam, registration: 'MV56 HUH', make: 'Kia', model: 'Sorento', year: '2013', transmission: 'Automatic', driveSide: 'RHD', fuelType: 'Diesel', engineSize: '2.2' }, extra || {}));
   return { env, sam, ann, fill, find };
 }
 
@@ -109,20 +109,47 @@ test('a VIN is used first: the request carries it, everything typed, and a warni
   assert.ok(env.sheets.Audit._rows.slice(1).some((row) => row[3] === 'ai_lookup'));
 });
 
+const FULL = { vin: '', registration: 'MV56 HUH', make: 'Kia', model: 'Sorento', year: '2013', transmission: 'Automatic', driveSide: 'RHD', fuelType: 'Diesel', engineSize: '2.2 L' };
+
+test('without a VIN AI runs only once the make, model, year, transmission, drive side, fuel type and engine size are all filled in', () => {
+  const { env, sam, fill, find } = setup();
+  env.state.gemini = () => reply(GOOD);
+  for (const missing of ['make', 'model', 'year', 'transmission', 'driveSide', 'fuelType', 'engineSize']) {
+    assert.equal(fill(Object.assign({}, FULL, { [missing]: '' })).error, 'ai_need_details', 'fill without ' + missing);
+    assert.equal(find(Object.assign({}, FULL, { [missing]: '' })).error, 'ai_need_details', 'find without ' + missing);
+  }
+  assert.equal(env.state.geminiRequests.length, 0, 'nothing was sent, and no lookup was used');
+  assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 10);
+  // an electric car has no engine size
+  assert.equal(fill(Object.assign({}, FULL, { fuelType: 'Fully electric', engineSize: '' })).ok, true);
+  // a VIN is enough on its own
+  assert.equal(fill({ vin: 'KNAKU814SE5455201', make: '', model: '' }).ok, true);
+  // the engine size typed goes into the question
+  assert.match(env.state.geminiRequests[0].body.contents[0].parts[0].text, /year 2013, transmission Automatic, fuel type Fully electric/);
+});
+
+test('the engine size comes back cleaned, as litres to one decimal', () => {
+  const { env, fill } = setup();
+  env.state.gemini = () => reply(Object.assign({}, GOOD, { details: Object.assign({}, GOOD.details, { engineSize: '2.2 litres' }) }));
+  assert.equal(fill().data.details.engineSize, '2.2');
+  env.state.gemini = () => reply(Object.assign({}, GOOD, { details: Object.assign({}, GOOD.details, { engineSize: '2199' }) }));
+  assert.equal(fill().data.details.engineSize, undefined, 'not litres: dropped');
+});
+
 test('without a VIN the make, model and everything else typed is used; the make and model are needed', () => {
   const { env, sam, fill } = setup();
   env.state.gemini = () => reply(GOOD);
-  assert.equal(fill({ vin: '', make: '', model: '' }).error, 'ai_need_more');
-  assert.equal(fill({ vin: '', make: 'Kia', model: '' }).error, 'ai_need_more');
+  assert.equal(fill({ vin: '', make: '', model: '' }).error, 'ai_need_details');
+  assert.equal(fill({ vin: '', make: 'Kia', model: '' }).error, 'ai_need_details');
   assert.equal(fill({ vin: 'a b' }).error, 'invalid_vin');
   assert.equal(env.state.geminiRequests.length, 0);
-  const r = fill({ vin: '', registration: 'MV56 HUH', make: 'Kia', model: 'Sorento', year: '2013', engineCode: 'D4HB', market: 'European' });
+  const r = fill(Object.assign({}, FULL, { engineCode: 'D4HB', market: 'European' }));
   assert.equal(r.ok, true, r.error);
   assert.equal(r.data.usedVin, false);
   const prompt = env.state.geminiRequests[0].body.contents[0].parts[0].text;
   assert.equal(/VIN:/.test(prompt), false);
   assert.match(prompt, /MV56 HUH/);
-  assert.match(prompt, /make Kia, model Sorento, year 2013, engine code D4HB, market European \(trust these\)/);
+  assert.match(prompt, /make Kia, model Sorento, year 2013, engine code D4HB, transmission Automatic, fuel type Diesel, engine size \(litres\) 2\.2, market European, drive side RHD \(trust these\)/);
   assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 9);
 });
 
@@ -141,7 +168,7 @@ test('with no VIN, a few likely matches are offered: at most three, only usable 
   assert.equal(c[0].why, 'The common diesel');
   assert.equal(r.data.remaining, 9);
   assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 9);
-  assert.equal(find({ make: 'Kia', model: '' }).error, 'ai_need_more');
+  assert.equal(find({ make: 'Kia', model: '' }).error, 'ai_need_details');
   env.state.gemini = () => reply({ candidates: [] });
   assert.deepEqual(find().data.candidates, []);
 });

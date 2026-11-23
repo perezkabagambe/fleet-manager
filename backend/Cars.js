@@ -41,6 +41,7 @@ function summarizeCar_(c) {
     driveSide: c.drive_side || '',
     importDate: c.import_date || '',
     fuelCapacity: c.fuel_capacity === '' || c.fuel_capacity === undefined ? null : Number(c.fuel_capacity),
+    engineSize: c.engine_size === '' || c.engine_size === undefined ? null : Number(c.engine_size),
     currency: c.currency || 'GBP',
     distanceUnit: 'mi',
     partsouqUrl: c.partsouq_url, // the first catalogue (older screens and the export use these two)
@@ -117,6 +118,7 @@ function parseCarInput_(f, existing) {
   out.drive_side = oneOf_(f.driveSide, DRIVE_SIDES, '', 'invalid_drive_side');
   out.import_date = parseDate_(f.importDate);
   out.fuel_capacity = parseFuelCapacity_(f.fuelCapacity);
+  out.engine_size = parseEngineSize_(f.engineSize);
   out.country = oneOf_(f.country, COUNTRIES, 'UK', 'invalid_country');
   // The car has no fixed "currency for costs": every cost carries its own. This is only the
   // starting default for new costs. It is not asked for, so an edit keeps whatever the car has.
@@ -224,6 +226,30 @@ function parseFuelCapacity_(raw) {
   if (s === '') return '';
   if (!/^\d{1,3}(\.\d)?$/.test(s) || Number(s) <= 0) fail_('invalid_fuel_capacity');
   return String(Number(s));
+}
+
+/** Engine size in litres: optional, between 0.1 and 20, one decimal place at most ("2.5", "2.5 L" and "2.5 litres" are all fine). */
+function parseEngineSize_(raw) {
+  const s = String(raw === null || raw === undefined ? '' : raw).replace(/[,\s]/g, '').replace(/l(itres?|iters?)?$/i, '');
+  if (s === '') return '';
+  if (!/^\d{1,2}(\.\d)?$/.test(s) || Number(s) < 0.1 || Number(s) > 20) fail_('invalid_engine_size');
+  return String(Number(s));
+}
+
+/** Admin only: set the engine size of several cars in one go. p.sizes: [{ carId, engineSize }] ('' clears it). Nothing changes if any entry is wrong. */
+function setEngineSizes_(p, ctx) {
+  const list = Array.isArray(p.sizes) ? p.sizes : [];
+  if (!list.length || list.length > 200) fail_('invalid_input');
+  const planned = list.map(function (x) {
+    const car = findCar_(cleanStr_(x && x.carId, 64), false);
+    if (!car) fail_('not_found');
+    return { car: car, size: parseEngineSize_(x.engineSize) };
+  });
+  planned.forEach(function (x) {
+    Db.update('Cars', x.car._row, touch_(x.car, ctx, { engine_size: x.size }));
+    audit_(ctx.user, 'engine_size_set', 'Car', x.car.id, x.car.registration + ': engine size ' + (x.size ? x.size + ' L' : 'cleared'));
+  });
+  return { updated: planned.length };
 }
 
 function parseOdometer_(raw) {

@@ -45,6 +45,7 @@ function actions_() {
     getChanges: { auth: 'user', fn: getChanges_ },
     getCarBundle: { auth: 'user', fn: getCarBundle_ },
     saveCar: { auth: 'user', lock: true, fn: saveCar_ },
+    setEngineSizes: { auth: 'admin', lock: true, fn: setEngineSizes_ },
     updateOdometer: { auth: 'user', lock: true, fn: updateOdometer_ },
     deleteCar: { auth: 'admin', lock: true, fn: deleteCar_ },
     restoreCar: { auth: 'admin', lock: true, fn: restoreCar_ },

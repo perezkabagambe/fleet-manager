@@ -342,6 +342,7 @@
           detail('Transmission', car.transmission),
           detail('Gearbox code', car.gearboxCode),
           detail('Fuel', fuelText),
+          detail('Engine size', car.engineSize === null || car.engineSize === undefined ? '' : car.engineSize + ' L'),
           detail(car.market ? 'Market' : 'Drive', marketText)
         )],
         ['Ownership details', [].concat(
@@ -837,10 +838,11 @@
           UI.field('Drive side', select('driveSide', [['', 'Not recorded'], ['LHD', 'Left-hand (LHD)'], ['RHD', 'Right-hand (RHD)']], v.driveSide))
         ),
         pair(
-          UI.field('Fuel capacity (litres)', text('fuelCapacity', v.fuelCapacity === null || v.fuelCapacity === undefined ? '' : v.fuelCapacity, { inputmode: 'decimal', maxlength: '6', placeholder: 'e.g. 87' }), 'Optional. The size of the fuel tank.'),
           UI.field('Fuel type', select('fuelType', [['', 'Not recorded'], ['Petrol', 'Petrol'], ['Diesel', 'Diesel'], ['Petrol hybrid', 'Petrol hybrid'], ['Diesel hybrid', 'Diesel hybrid'], ['Fully electric', 'Fully electric']], v.fuelType)),
+          UI.field('Engine size (litres)', text('engineSize', v.engineSize === null || v.engineSize === undefined ? '' : v.engineSize, { inputmode: 'decimal', maxlength: '4', placeholder: 'e.g. 2.5' }), 'Optional. Leave empty for an electric car.'),
           'aligned tall-labels' // equal columns and two-line labels, so the two boxes line up
         ),
+        UI.field('Fuel capacity (litres)', text('fuelCapacity', v.fuelCapacity === null || v.fuelCapacity === undefined ? '' : v.fuelCapacity, { inputmode: 'decimal', maxlength: '6', placeholder: 'e.g. 87' }), 'Optional. The size of the fuel tank.'),
       ];
       // The parts catalogue link lives at the top of the fluids and specifications part of the form.
       var MAX_CAT = 4;
@@ -875,27 +877,53 @@
       notes.setAttribute('aria-label', 'Notes');
       var notesField = el('div', { class: 'field' }, [notes]); // the section heading says what it is: no label above the box
 
+      var editLogbook = null; // a log book PDF read while editing: it is attached to the car's documents when the changes are saved
+
       // ---- "Use AI to fill in technical details": the first thing under the Technical details heading, when adding a car and when editing one. It only fills empty boxes. ----
       function aiAssist() {
         var box = el('div', { class: 'ai-box' });
         var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Use AI to fill in technical details' });
-        var HINT = 'Enter the VIN, or at least the make and model. AI fills the empty boxes, but it can be wrong: check what it adds.';
+        var HINT = 'Enter the VIN, or fill in the make, model, year, transmission, drive side, fuel type and engine size. AI fills the empty boxes, but it can be wrong: check what it adds.';
         var hint = el('div', { class: 'hint', text: HINT });
         var picker = el('div', { class: 'ai-matches' });
         var status = el('div', { class: 'ai-status' });
-        box.append(btn, hint, status, picker);
+        box.append(btn, hint);
+        var bookBtn = null;
+        var bookHint = null;
+        var reading = false;
+        if (car) {
+          // editing a car: the log book can be read too, like when a car is added (it fills the empty boxes and is kept with the car's documents)
+          bookHint = el('div', { class: 'hint', text: 'AI reads a clear PDF of the log book, fills the empty boxes and keeps the PDF with this car\'s documents. It may take up to a minute.' });
+          bookBtn = Photos.fileButton('📄 Read the log book (PDF)', 'application/pdf', false, readBook);
+          box.append(el('div', { class: 'ai-or', text: 'or' }), bookBtn, bookHint);
+        }
+        box.append(status, picker);
         box.hidden = true; // shown only once we know AI is switched on
 
         function hasVin() { return f.vin.value.replace(/\s+/g, '').length >= 5; }
-        // a VIN is enough; without one, the make and the model are the least we need
-        function ready() { return hasVin() || (f.make.value.trim() !== '' && f.model.value.trim() !== ''); }
-        function refresh() { btn.disabled = !ready(); }
-        ['registration', 'vin', 'make', 'model'].forEach(function (k) { f[k].addEventListener('input', refresh); });
+        // A VIN is enough. Without one AI needs all of these first (an electric car has no engine size, so it is not asked for).
+        var NEEDED = [['make', 'make'], ['model', 'model'], ['year', 'year'], ['transmission', 'transmission'], ['driveSide', 'drive side'], ['fuelType', 'fuel type'], ['engineSize', 'engine size']];
+        function missing() {
+          if (hasVin()) return [];
+          var electric = f.fuelType.value === 'Fully electric';
+          return NEEDED.filter(function (n) { return !(n[0] === 'engineSize' && electric) && String(f[n[0]].value).trim() === ''; }).map(function (n) { return n[1]; });
+        }
+        function ready() { return missing().length === 0; }
+        var remainingText = '';
+        function refresh() {
+          var m = missing();
+          btn.disabled = m.length > 0;
+          // while something is missing, say what: that is what stops the button working
+          hint.textContent = m.length ? 'To use AI without a VIN, first fill in the ' + m.join(', ') + '.' + remainingText : HINT + remainingText;
+        }
+        ['registration', 'vin', 'make', 'model', 'year', 'engineSize'].forEach(function (k) { f[k].addEventListener('input', refresh); });
+        ['transmission', 'driveSide', 'fuelType'].forEach(function (k) { f[k].addEventListener('change', refresh); });
         refresh();
         FleetApi.call('aiStatus', {}).then(function (r) {
           if (!r.data.available) return;
           box.hidden = false;
-          hint.textContent = HINT + ' ' + r.data.remaining + ' of ' + r.data.limit + ' lookups left today.';
+          remainingText = ' ' + r.data.remaining + ' of ' + r.data.limit + ' lookups left today.';
+          refresh();
         }).catch(function () { /* no AI box: the form works without it */ });
 
         function setIfEmpty(input, value, label, filled) {
@@ -919,6 +947,7 @@
           setIfEmpty(f.gearboxCode, det.gearboxCode, 'gearbox code', filled);
           setIfEmpty(f.market, det.market, 'market', filled);
           setIfEmpty(f.driveSide, det.driveSide, 'drive side', filled);
+          setIfEmpty(f.engineSize, det.engineSize, 'engine size', filled);
           setIfEmpty(f.fuelCapacity, det.fuelCapacity, 'fuel capacity', filled);
           var nFluids = fluidsEd.addSuggested(d.fluids || []);
           var nBulbs = fluidsEd.addSuggested(d.bulbs || []);
@@ -938,14 +967,15 @@
             }))));
           }
           status.replaceChildren.apply(status, kids);
-          hint.textContent = d.remaining + ' AI lookups left today.';
+          remainingText = ' ' + d.remaining + ' AI lookups left today.';
+          refresh();
         }
 
         /** Everything typed so far goes to the AI (never the owner, the notes or any costs). */
         function typed() {
           return {
             registration: f.registration.value, vin: f.vin.value, country: f.country.value, make: f.make.value, model: f.model.value, year: f.year.value,
-            colour: f.colour.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, transmission: f.transmission.value, fuelType: f.fuelType.value, market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value,
+            colour: f.colour.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, transmission: f.transmission.value, fuelType: f.fuelType.value, market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value, engineSize: f.engineSize.value,
           };
         }
 
@@ -964,7 +994,8 @@
           picker.replaceChildren();
           btn.disabled = true;
           FleetApi.call('aiFindCar', typed(), { timeoutMs: 120000 }).then(function (r) {
-            hint.textContent = r.data.remaining + ' AI lookups left today.';
+            remainingText = ' ' + r.data.remaining + ' AI lookups left today.';
+            refresh();
             if (!r.data.candidates.length) {
               status.replaceChildren(UI.notice('error', 'AI could not tell which car this is from what you entered. Add the year, engine or market, or a VIN, and try again.'));
               return;
@@ -975,7 +1006,7 @@
               pick.addEventListener('click', function () {
                 var d = c.details || {};
                 var chosen = Object.assign(typed(), { vin: '' });
-                ['make', 'model', 'year', 'engineCode', 'gearboxCode', 'transmission', 'fuelType', 'market', 'driveSide', 'fuelCapacity', 'colour'].forEach(function (k) { if (d[k]) chosen[k] = d[k]; });
+                ['make', 'model', 'year', 'engineCode', 'gearboxCode', 'transmission', 'fuelType', 'engineSize', 'market', 'driveSide', 'fuelCapacity', 'colour'].forEach(function (k) { if (d[k]) chosen[k] = d[k]; });
                 fillFrom(chosen);
               });
               return el('div', { class: 'ai-match' }, [
@@ -989,6 +1020,25 @@
             picker.replaceChildren.apply(picker, cards.concat([none]));
           }).catch(function (e) { status.replaceChildren(UI.notice('error', UI.errorText(e))); })
             .then(refresh);
+        }
+
+        function readBook(file) {
+          if (reading) return Promise.resolve();
+          reading = true;
+          btn.disabled = true;
+          bookBtn.classList.add('disabled');
+          picker.replaceChildren();
+          status.replaceChildren(UI.waiting('Reading the log book with AI… this can take up to a minute. Please keep this screen open.'));
+          return Photos.prepareAttachment(file).then(function (att) {
+            if (att.mime !== 'application/pdf') throw new FleetApi.ApiError('logbook_pdf_only', 'PDF only');
+            return FleetApi.call('aiReadLogbook', { mime: att.mime, data: att.data }, { timeoutMs: 170000 }).then(function (r) { return { att: att, result: r.data }; });
+          }).then(function (got) {
+            editLogbook = got.att;
+            setIfEmpty(f.vin, (got.result.details || {}).vin, 'VIN', []);
+            apply(got.result);
+            status.append(el('div', { class: 'section-note', text: 'The log book PDF will be saved in this car\'s documents when you save your changes. Check every box AI filled in first.' }));
+          }).catch(function (e) { status.replaceChildren(UI.notice('error', UI.errorText(e))); })
+            .then(function () { reading = false; bookBtn.classList.remove('disabled'); refresh(); });
         }
 
         function run() { return hasVin() ? fillFrom() : findFirst(); }
@@ -1247,7 +1297,7 @@
         return {
           registration: f.registration.value, make: f.make.value, model: f.model.value, year: f.year.value, colour: f.colour.value,
           vin: f.vin.value, engineCode: f.engineCode.value, gearboxCode: f.gearboxCode.value, transmission: f.transmission.value, fuelType: f.fuelType.value, country: f.country.value,
-          market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value, importDate: f.importDate.value,
+          market: f.market.value, driveSide: f.driveSide.value, fuelCapacity: f.fuelCapacity.value, engineSize: f.engineSize.value, importDate: f.importDate.value,
           status: f.status.value, odometer: f.odometer.value,
           acquisitionCost: f.acquisitionCost.value, acquisitionCurrency: f.acquisitionCurrency.value, acquisitionDate: f.acquisitionDate.value,
           catalogues: catUrls(), notes: f.notes.value,
@@ -1343,9 +1393,10 @@
           });
         }).then(function (stop) {
           if (stop === 'stop') return 'stop';
-          if (!prefill || state.logbookDone) return null;
+          var book = prefill ? prefill.att : editLogbook;
+          if (!book || state.logbookDone) return null;
           step = 'the log book';
-          return FleetApi.call('uploadCarDocument', { carId: state.carId, type: 'Logbook', note: 'Read by AI when the vehicle was added', mime: prefill.att.mime, data: prefill.att.data, filename: prefill.att.filename }, { timeoutMs: 240000 }).then(function () {
+          return FleetApi.call('uploadCarDocument', { carId: state.carId, type: 'Logbook', note: prefill ? 'Read by AI when the vehicle was added' : 'Read by AI when the details were updated', mime: book.mime, data: book.data, filename: book.filename }, { timeoutMs: 240000 }).then(function () {
             state.logbookDone = true;
             done.push('log book');
           }, function (e) {

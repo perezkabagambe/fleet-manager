@@ -100,6 +100,7 @@ function aiKnown_(src) {
     transmission: TRANSMISSIONS.indexOf(cleanStr_(src.transmission, 12)) !== -1 ? cleanStr_(src.transmission, 12) : '',
     fuelType: FUEL_TYPES.indexOf(cleanStr_(src.fuelType, 20)) !== -1 ? cleanStr_(src.fuelType, 20) : '', extra: cleanStr_(src.extra, 300),
     market: cleanStr_(src.market, 30), driveSide: cleanStr_(src.driveSide, 4).toUpperCase(), fuelCapacity: cleanStr_(src.fuelCapacity, 8),
+    engineSize: cleanStr_(src.engineSize, 8).replace(/\s*l(itres?)?$/i, ''),
   };
   if (known.vin && !/^[A-Z0-9-]{5,25}$/.test(known.vin)) fail_('invalid_vin');
   return known;
@@ -110,13 +111,23 @@ function aiNeedEnough_(known) {
   if (!known.vin && !(known.make && known.model)) fail_('ai_need_more');
 }
 
+/**
+ * Enough to fill in a car's technical details: a VIN, or without one the make, model, year, transmission, drive side, fuel type and
+ * engine size (an electric car has no engine size, so it is not asked for). Applies to the form's "Use AI to fill in technical details".
+ */
+function aiNeedTechnical_(known) {
+  if (known.vin) return;
+  const electric = known.fuelType === 'Fully electric';
+  if (!(known.make && known.model && known.year && known.transmission && known.driveSide && known.fuelType && (known.engineSize || electric))) fail_('ai_need_details');
+}
+
 function aiKnownLines_(known) {
   const lines = [];
   if (known.vin) lines.push('VIN: ' + known.vin + '  (the most reliable thing we know: it identifies this exact car)');
   if (known.registration) lines.push('Registration number: ' + known.registration);
   lines.push('The car is kept in: ' + (known.country === 'UG' ? 'Uganda' : 'the United Kingdom'));
   const typed = [['make', known.make], ['model', known.model], ['year', known.year], ['colour', known.colour], ['engine code', known.engineCode],
-    ['transmission', known.transmission], ['fuel type', known.fuelType], ['gearbox code', known.gearboxCode], ['market', known.market], ['drive side', known.driveSide], ['fuel tank (litres)', known.fuelCapacity]]
+    ['transmission', known.transmission], ['fuel type', known.fuelType], ['engine size (litres)', known.engineSize], ['gearbox code', known.gearboxCode], ['market', known.market], ['drive side', known.driveSide], ['fuel tank (litres)', known.fuelCapacity]]
     .filter(function (x) { return x[1]; });
   if (typed.length) lines.push('The person has already typed: ' + typed.map(function (x) { return x[0] + ' ' + x[1]; }).join(', ') + (known.vin ? ' (if any of this disagrees with what the VIN decodes to, trust the VIN and say so in the summary)' : ' (trust these)') + '.');
   if (known.extra) lines.push('The vehicle log book also says: ' + known.extra + '.');
@@ -147,6 +158,7 @@ function aiDetailsJson_() {
   '    "market": "",      // exactly one of: ' + MARKETS.join(' | ') + ' (where it was built and sold for)',
   '    "driveSide": "",   // LHD or RHD',
   '    "fuelType": "",    // exactly one of: ' + FUEL_TYPES.join(' | '),
+  '    "engineSize": "",  // engine size in litres to one decimal place, e.g. 2.5 (leave empty for an electric car)',
   '    "fuelCapacity": "" // fuel tank size in litres, a number',
 ].join('\n');
 }
@@ -299,6 +311,8 @@ function aiClean_(raw) {
   if (TRANSMISSIONS.indexOf(trans) !== -1) details.transmission = trans;
   const fuel = mapFuelType_(d.fuelType);
   if (fuel) details.fuelType = fuel;
+  const engine = String(d.engineSize === undefined || d.engineSize === null ? '' : d.engineSize).replace(/[^0-9.]/g, '');
+  if (/^\d{1,2}(\.\d)?$/.test(engine) && Number(engine) >= 0.1 && Number(engine) <= 20) details.engineSize = String(Number(engine));
   const tank = String(d.fuelCapacity === undefined || d.fuelCapacity === null ? '' : d.fuelCapacity).replace(/[^0-9.]/g, '');
   if (/^\d{1,3}(\.\d)?$/.test(tank) && Number(tank) > 0) details.fuelCapacity = String(Number(tank));
 
@@ -375,6 +389,8 @@ function aiRun_(ctx, known, prompt, shape, auditText) {
 /** The car's details, fluids and bulbs, from a VIN or (when the person has settled on one version) the make, model and year. */
 function aiFillCar_(p, ctx) {
   const known = aiKnown_(p);
+  if (!aiKey_()) fail_('ai_not_set_up');
+  aiNeedTechnical_(known);
   return aiRun_(ctx, known, aiFillPrompt_(known), aiClean_, function (out) {
     return 'AI lookup for ' + (known.registration || known.vin || known.make + ' ' + known.model) + ' (' + (known.vin ? 'by VIN' : 'by make and model') + ', ' + out.confidence + ' confidence, ' + out.fluids.length + ' fluids, ' + out.bulbs.length + ' bulbs)';
   });
@@ -384,6 +400,8 @@ function aiFillCar_(p, ctx) {
 function aiFindCar_(p, ctx) {
   const known = aiKnown_(p);
   known.vin = ''; // this step is only for cars without one
+  if (!aiKey_()) fail_('ai_not_set_up');
+  aiNeedTechnical_(known);
   return aiRun_(ctx, known, aiFindPrompt_(known), aiCleanCandidates_, function (out) {
     return 'AI search for ' + (known.registration || known.make + ' ' + known.model) + ': ' + out.candidates.length + ' possible match' + (out.candidates.length === 1 ? '' : 'es');
   });
@@ -395,7 +413,7 @@ function aiRefreshSpecs_(p, ctx) {
   if (!car) fail_('not_found');
   const known = aiKnown_({
     registration: car.registration, vin: car.vin, country: car.country, make: car.make, model: car.model, year: car.year, colour: car.colour,
-    engineCode: car.engine_code, gearboxCode: car.gearbox_code, transmission: car.transmission, fuelType: car.fuel_type, market: car.market, driveSide: car.drive_side, fuelCapacity: car.fuel_capacity,
+    engineCode: car.engine_code, gearboxCode: car.gearbox_code, transmission: car.transmission, fuelType: car.fuel_type, market: car.market, driveSide: car.drive_side, fuelCapacity: car.fuel_capacity, engineSize: car.engine_size,
   });
   const out = aiRun_(ctx, known, aiFillPrompt_(known), aiClean_, function (r) {
     return 'AI specs refresh for ' + car.registration + ' (' + (known.vin ? 'by VIN' : 'by make and model') + ', ' + r.confidence + ' confidence, ' + r.fluids.length + ' fluids, ' + r.bulbs.length + ' bulbs)';
@@ -494,7 +512,10 @@ function aiReadLogbook_(p, ctx) {
   }
   // the technical details, from what the log book says
   const extra = [book.firstRegistered ? 'first registered ' + book.firstRegistered : '', book.engineCapacity ? book.engineCapacity + ' cc' : '', book.fuelPrinted, book.bodyType].filter(Boolean).join(', ');
-  const known = aiKnown_({ registration: book.registration, vin: book.vin, country: 'UK', make: book.make, model: book.model, year: book.year, colour: book.colour, transmission: book.transmission, fuelType: book.fuelType, extra: extra });
+  // the log book gives the engine in cc: 2199 cc is 2.2 litres
+  const cc = Number(String(book.engineCapacity || '').replace(/[^0-9]/g, ''));
+  const bookLitres = cc >= 100 && cc <= 20000 ? String(Math.round(cc / 100) / 10) : '';
+  const known = aiKnown_({ registration: book.registration, vin: book.vin, country: 'UK', make: book.make, model: book.model, year: book.year, colour: book.colour, transmission: book.transmission, fuelType: book.fuelType, engineSize: bookLitres, extra: extra });
   let asked = null;
   if (known.vin || (known.make && known.model)) {
     try {
@@ -510,6 +531,7 @@ function aiReadLogbook_(p, ctx) {
   const t = tech || { details: {}, fluids: [], bulbs: [], summary: '', confidence: 'low' };
   const details = Object.assign({}, t.details);
   ['registration', 'vin', 'make', 'model', 'colour', 'year', 'transmission', 'fuelType', 'acquisitionDate'].forEach(function (k) { if (book[k]) details[k] = book[k]; }); // what the document says wins
+  if (bookLitres) details.engineSize = bookLitres;
   const out = {
     details: details, fluids: t.fluids, bulbs: t.bulbs, summary: t.summary, confidence: t.confidence,
     logbook: { registration: book.registration, vin: book.vin, firstRegistered: book.firstRegistered, acquired: book.acquisitionDate, engineCapacity: book.engineCapacity, fuelType: book.fuelPrinted, confidence: book.confidence },

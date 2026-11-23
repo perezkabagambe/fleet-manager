@@ -20,6 +20,31 @@ function addCar(env, token, fields, extra) {
 
 // ---------- access ----------
 
+test('engine size: optional litres to one decimal, kept on the car, and set in bulk by an admin', () => {
+  const { env, sam, admin } = (() => {
+    const e = createEnv();
+    e.seedUser({ name: 'Admin One', email: 'admin@example.com', role: 'admin' });
+    e.seedUser({ name: 'Sam', email: 'sam@example.com', role: 'user' });
+    return { env: e, sam: e.signInAs('sam@example.com'), admin: e.signInAs('admin@example.com') };
+  })();
+  const none = addCar(env, sam, { registration: 'ENG0', vin: '' }).data.car;
+  assert.equal(none.engineSize, null);
+  const c = addCar(env, sam, { registration: 'ENG1', vin: '', engineSize: '2.5 L' }).data.car;
+  assert.equal(c.engineSize, 2.5);
+  assert.equal(addCar(env, sam, { registration: 'ENG2', vin: '', engineSize: '3' }).data.car.engineSize, 3);
+  ['0', '-1', 'big', '25', '2.55', '0.05'].forEach((x) => assert.equal(addCar(env, sam, { registration: 'ENGX', vin: '', engineSize: x }).error, 'invalid_engine_size', x));
+  // the bulk update is for admins, changes nothing if any entry is wrong, and clears with ''
+  assert.equal(env.call('setEngineSizes', { token: sam, sizes: [{ carId: c.id, engineSize: '1.6' }] }).error, 'forbidden');
+  assert.equal(env.call('setEngineSizes', { token: admin, sizes: [{ carId: c.id, engineSize: '1.6' }, { carId: none.id, engineSize: 'x' }] }).error, 'invalid_engine_size');
+  assert.equal(env.call('getCar', { token: sam, id: c.id }).data.car.engineSize, 2.5, 'nothing changed');
+  assert.equal(env.call('setEngineSizes', { token: admin, sizes: [{ carId: c.id, engineSize: '1.6' }, { carId: none.id, engineSize: '2.0' }] }).data.updated, 2);
+  assert.deepEqual([c, none].map((x) => env.call('getCar', { token: sam, id: x.id }).data.car.engineSize), [1.6, 2]);
+  assert.equal(env.call('setEngineSizes', { token: admin, sizes: [{ carId: c.id, engineSize: '' }] }).ok, true);
+  assert.equal(env.call('getCar', { token: sam, id: c.id }).data.car.engineSize, null);
+  assert.equal(env.call('setEngineSizes', { token: admin, sizes: [] }).error, 'invalid_input');
+  assert.equal(env.call('setEngineSizes', { token: admin, sizes: [{ carId: 'nope', engineSize: '2' }] }).error, 'not_found');
+});
+
 test('car actions need a session; delete and restore need an admin', () => {
   const { env, sam } = setup();
   assert.equal(env.call('listCars').error, 'unauthorized');
