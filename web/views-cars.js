@@ -892,7 +892,7 @@
 
       var editLogbook = null; // a log book PDF read while editing: it is attached to the car's documents when the changes are saved
 
-      // ---- "Use AI to fill in technical details": the first thing under the Technical details heading, when adding a car and when editing one. It only fills empty boxes. ----
+      // ---- "Use AI to fill in technical details": the first thing on the form, when adding a car and when editing one. It only fills empty boxes. ----
       function aiAssist() {
         var box = el('div', { class: 'ai-box' });
         var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Use AI to fill in technical details' });
@@ -1134,7 +1134,8 @@
         btn.addEventListener('click', openAskDialog);
         return box;
       }
-      if (!(prefill && prefill.result.technical)) techFields.unshift(aiAssist()); // at the top of the technical details, for a new car and when editing one (not needed when the log book already filled them in)
+      // The AI workflow is the first thing on the form, when adding a car and when editing one (not needed when the log book already filled the technical details in)
+      var aiBox = (prefill && prefill.result.technical) ? null : aiAssist();
 
       // Owner/custodian: people who use this app are ticked; anyone else is written in.
       var ownerFields = [
@@ -1364,6 +1365,7 @@
       // A new car ends with its Add button. A saved car ends with one section holding both Save and Delete (below), so Save is never
       // mistaken for part of the Photos section; its button belongs to this form through the form attribute.
       var form = el('form', { novalidate: true, id: 'car-form' }, [
+        aiBox,
         prefillNote,
         detailsSection,
         ownersSection,
