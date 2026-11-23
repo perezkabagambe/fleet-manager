@@ -293,5 +293,115 @@
     return btn;
   }
 
-  window.UI = { el: el, field: field, notice: notice, waiting: waiting, errorText: errorText, busy: busy, copyValueButton: copyValueButton, confirm: confirmDialog, editToggle: editToggle, copyText: copyText, shareButton: shareButton };
+
+  // ---------- searchable dropdowns ----------
+  // A drop-down you can type in to narrow down: used wherever the choices are people. `.value` reads and sets the chosen value, and a
+  // 'change' event is fired when the person picks one, so it can stand in for a <select>.
+
+  /** options: [{ value, label }]; opts: { value, placeholder, ariaLabel, searchPlaceholder, emptyText }. */
+  function searchSelect(options, opts) {
+    opts = opts || {};
+    var value = opts.value === undefined || opts.value === null ? '' : String(opts.value);
+    var current = options.slice();
+    var root = el('div', { class: 'ss' });
+    var trigger = el('button', { type: 'button', class: 'ss-trigger', 'aria-haspopup': 'listbox', 'aria-expanded': 'false' });
+    if (opts.ariaLabel) trigger.setAttribute('aria-label', opts.ariaLabel);
+    var search = el('input', { type: 'text', class: 'ss-search', autocomplete: 'off', placeholder: opts.searchPlaceholder || 'Type to search…', 'aria-label': 'Search' });
+    var list = el('ul', { class: 'ss-list', role: 'listbox' });
+    var panel = el('div', { class: 'ss-panel', hidden: true }, [search, list]);
+    root.append(trigger, panel);
+
+    function labelOf(v) {
+      var hit = current.filter(function (o) { return o.value === v; })[0];
+      return hit ? hit.label : '';
+    }
+    function showTrigger() {
+      var l = labelOf(value);
+      trigger.textContent = l || opts.placeholder || 'Choose…';
+      trigger.classList.toggle('ss-empty', !l);
+    }
+    function draw() {
+      var q = search.value.trim().toLowerCase();
+      var hits = current.filter(function (o) { return !q || o.label.toLowerCase().indexOf(q) !== -1; });
+      list.replaceChildren.apply(list, hits.length ? hits.map(function (o) {
+        var b = el('button', { type: 'button', class: 'ss-option' + (o.value === value ? ' on' : ''), role: 'option', 'aria-selected': o.value === value ? 'true' : 'false', text: o.label });
+        b.addEventListener('click', function () { choose(o.value); });
+        return el('li', {}, [b]);
+      }) : [el('li', { class: 'ss-none', text: opts.emptyText || 'No match' })]);
+    }
+    function onDoc(ev) { if (!root.contains(ev.target)) close(); }
+    function onKey(ev) {
+      if (ev.key === 'Escape') { ev.preventDefault(); close(); trigger.focus(); }
+      else if (ev.key === 'Enter' && ev.target === search) {
+        ev.preventDefault();
+        var first = list.querySelector('.ss-option');
+        if (first) first.click();
+      }
+    }
+    function open() {
+      panel.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+      search.value = '';
+      draw();
+      document.addEventListener('click', onDoc, true);
+      document.addEventListener('keydown', onKey, true);
+      search.focus();
+      if (panel.scrollIntoView) panel.scrollIntoView({ block: 'nearest' });
+    }
+    function close() {
+      panel.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', onDoc, true);
+      document.removeEventListener('keydown', onKey, true);
+    }
+    function choose(v) {
+      var changed = v !== value;
+      value = v;
+      showTrigger();
+      close();
+      trigger.focus();
+      if (changed) root.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    search.addEventListener('input', draw);
+    trigger.addEventListener('click', function () { if (panel.hidden) open(); else close(); });
+    Object.defineProperty(root, 'value', { get: function () { return value; }, set: function (v) { value = v === undefined || v === null ? '' : String(v); showTrigger(); } });
+    root.setOptions = function (next) { current = next.slice(); showTrigger(); };
+    showTrigger();
+    return root;
+  }
+
+  /**
+   * Several people (or things) chosen from a searchable list: the chosen ones show as chips with a remove button, and the list offers
+   * only those not chosen yet. opts: { values, placeholder, ariaLabel, emptyText }. `.values()` gives the chosen values; 'change' fires on any change.
+   */
+  function searchMulti(options, opts) {
+    opts = opts || {};
+    var chosen = (opts.values || []).filter(function (v) { return options.some(function (o) { return o.value === v; }); });
+    var root = el('div', { class: 'sm' });
+    var chips = el('div', { class: 'sm-chips' });
+    var holder = el('div', { class: 'sm-add' });
+    root.append(chips, holder);
+
+    function labelOf(v) { return (options.filter(function (o) { return o.value === v; })[0] || { label: v }).label; }
+    function draw() {
+      chips.replaceChildren.apply(chips, chosen.length ? chosen.map(function (v) {
+        var rm = el('button', { type: 'button', class: 'sm-remove', 'aria-label': 'Remove ' + labelOf(v), text: '✕' });
+        rm.addEventListener('click', function () { chosen = chosen.filter(function (x) { return x !== v; }); draw(); root.dispatchEvent(new Event('change', { bubbles: true })); });
+        return el('span', { class: 'sm-chip' }, [el('span', { text: labelOf(v) }), rm]);
+      }) : [el('span', { class: 'muted small-text', text: opts.emptyText || 'No one chosen yet.' })]);
+      var rest = options.filter(function (o) { return chosen.indexOf(o.value) === -1; });
+      var picker = searchSelect(rest, { placeholder: rest.length ? (opts.placeholder || 'Add someone…') : 'Everyone is chosen', ariaLabel: opts.ariaLabel || 'Add someone', emptyText: 'No one else' });
+      picker.addEventListener('change', function (ev) {
+        ev.stopPropagation();
+        if (picker.value) { chosen = chosen.concat([picker.value]); draw(); root.dispatchEvent(new Event('change', { bubbles: true })); }
+      });
+      holder.replaceChildren(picker);
+      if (!rest.length) picker.querySelector('.ss-trigger').disabled = true;
+    }
+    root.values = function () { return chosen.slice(); };
+    draw();
+    return root;
+  }
+
+  window.UI = { searchSelect: searchSelect, searchMulti: searchMulti, el: el, field: field, notice: notice, waiting: waiting, errorText: errorText, busy: busy, copyValueButton: copyValueButton, confirm: confirmDialog, editToggle: editToggle, copyText: copyText, shareButton: shareButton };
 })();

@@ -1092,3 +1092,21 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 .ask-cell .tick { color: var(--ok); font-weight: 700; width: 1em; text-align: center; }
 .ask-help { color: var(--bad); font-size: 0.82rem; margin-top: 8px; }
 .ask-fine { color: var(--muted); font-size: 0.78rem; margin: 10px 0 12px; }
+
+/* searchable drop-downs (people pickers) */
+.ss { position: relative; }
+.ss-trigger { width: 100%; text-align: left; font: inherit; font-size: 16px; min-height: 48px; padding: 10px 36px 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%235d6b79' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center; color: var(--text); cursor: pointer; }
+.ss-trigger.ss-empty { color: var(--muted); }
+.ss-trigger:disabled { opacity: 0.6; cursor: default; }
+.ss-panel { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); padding: 8px; }
+.ss-panel[hidden] { display: none; }
+.ss-search { width: 100%; min-height: 40px; padding: 8px 10px; font: inherit; font-size: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); }
+.ss-list { list-style: none; margin: 6px 0 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.ss-option { width: 100%; text-align: left; font: inherit; padding: 10px 10px; min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--text); cursor: pointer; overflow-wrap: anywhere; }
+.ss-option:hover, .ss-option:focus-visible { background: color-mix(in srgb, var(--accent) 10%, transparent); outline: none; }
+.ss-option.on { font-weight: 700; color: var(--accent); }
+.ss-none { padding: 10px; color: var(--muted); }
+.sm-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.sm-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 12px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; font-size: 0.95rem; }
+.sm-remove { border: 0; background: transparent; color: inherit; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 0.9rem; }
+.sm-remove:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }

@@ -921,8 +921,8 @@
       function identifiedByField() {
         var me = (FleetAuth.getUser() || {}).id;
         var chosen = existing ? (existing.identifiedBy || SOMEONE_ELSE) : (users.some(function (u) { return u.id === me; }) ? me : SOMEONE_ELSE);
-        identifiedSelect = el('select', { name: 'identifiedBy' }, users.map(function (u) { return el('option', { value: u.id, text: u.name + (u.id === me ? ' (me)' : ''), selected: u.id === chosen }); })
-          .concat([el('option', { value: SOMEONE_ELSE, text: 'Someone else or a garage…', selected: chosen === SOMEONE_ELSE })]));
+        var pickOptions = users.map(function (u) { return { value: u.id, label: u.name + (u.id === me ? ' (me)' : '') }; }).concat([{ value: SOMEONE_ELSE, label: 'Someone else or a garage…' }]);
+        identifiedSelect = UI.searchSelect(pickOptions, { value: chosen, ariaLabel: 'Who identified the issue', searchPlaceholder: 'Search people…' });
         var other = text('vendor', existing && !existing.identifiedBy ? v.vendor : '', { maxlength: '80', placeholder: 'Name of the person or garage', 'aria-label': 'Name of the person or garage' });
         var otherField = el('div', { class: 'identified-other' }, [other]);
         function sync() { otherField.hidden = identifiedSelect.value !== SOMEONE_ELSE; }

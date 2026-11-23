@@ -639,21 +639,19 @@
   function ownersEditor(people, users, tickMe) {
     var me = FleetAuth.getUser();
     if (users) {
-      var boxes = users.map(function (u) {
-        var b = el('input', { type: 'checkbox' });
-        b.checked = people.owners.some(function (x) { return x.userId === u.id; }) || (!!tickMe && u.id === me.id);
-        return { user: u, box: b };
-      });
-      var ids = function () { return boxes.filter(function (x) { return x.box.checked; }).map(function (x) { return x.user.id; }).sort().join(','); };
+      // admins: a searchable drop-down of every approved user; the chosen ones show as chips
+      var wanted = people.owners.map(function (x) { return x.userId; });
+      if (tickMe && wanted.indexOf(me.id) === -1) wanted.push(me.id);
+      var picker = UI.searchMulti(users.map(function (u) { return { value: u.id, label: u.name + ' (' + u.email + ')' }; }), { values: wanted, placeholder: 'Add an owner or custodian…', ariaLabel: 'Add an owner or custodian', emptyText: 'No one chosen yet.' });
+      var ids = function () { return picker.values().sort().join(','); };
       var snap = people.owners.map(function (x) { return x.userId; }).sort().join(',');
       return {
-        node: el('div', { class: 'stack' }, boxes.map(function (x) {
-          return el('label', { class: 'check' }, [x.box, el('span', { text: x.user.name + ' (' + x.user.email + ')' })]);
-        })),
+        node: picker,
         dirty: function () { return ids() !== snap; },
         save: function (carId) {
+          var chosen = picker.values();
           return FleetApi.call('setCarPeople', {
-            carId: carId, people: boxes.map(function (x) { return { userId: x.user.id, owner: x.box.checked }; }),
+            carId: carId, people: users.map(function (u) { return { userId: u.id, owner: chosen.indexOf(u.id) !== -1 }; }),
           }).then(function () { snap = ids(); });
         },
       };
@@ -1279,7 +1277,7 @@
         groupHeading('Ownership & Other Details'), el('div', { class: 'stack' }, ownershipFields),
         groupHeading('Notes'), notesField,
       ]);
-      var ownersSection = section('Owner/Custodian', ownerFields);
+      var ownersSection = section('Owner/Custodian', ownerFields, true); // open to start with, like Photos
       // ---- "Refresh specs with AI" (a saved car): shows what AI would change and lets the person tick what to use ----
       function refreshSpecsBox() {
         var box = el('div', { class: 'ai-box' });
@@ -1360,7 +1358,7 @@
 
       var fluidsSection = section('💧 Fluids & Specifications', car ? [catalogueField, refreshSpecsBox(), fluidsEd.node] : [catalogueField, fluidsEd.node], false, 'kind-fluid');
       var bulbsSection = section('💡 Bulbs', [fluidsEd.bulbsNode], false, 'kind-bulb');
-      var photoSection = section('Photos', photoFields);
+      var photoSection = section('Photos', photoFields, true);
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: car ? 'Save changes' : 'Add car' });
       // A new car ends with its Add button. A saved car ends with one section holding both Save and Delete (below), so Save is never
       // mistaken for part of the Photos section; its button belongs to this form through the form attribute.
@@ -1369,9 +1367,9 @@
         prefillNote,
         detailsSection,
         ownersSection,
+        photoSection,
         fluidsSection,
         bulbsSection,
-        photoSection,
       ].concat(car ? [] : [btn]));
       if (car) btn.setAttribute('form', 'car-form');
 
