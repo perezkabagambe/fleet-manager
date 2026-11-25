@@ -213,7 +213,7 @@
 
     function addBlock() {
       return el('details', { class: 'copy-section', open: !!ctx.query.car || undefined }, [
-        el('summary', { text: 'Add a report, invoice or receipt' }),
+        el('summary', { text: 'Add an inspection report, garage invoice or purchase receipt' }),
         el('p', { class: 'muted small-text', text: reading
           ? 'Take a photo, or choose photos or PDFs. AI reads them and you check everything before it is saved.'
           : 'Take a photo, or choose a photo or PDF. Automatic reading is not switched on yet, so you will fill the details in yourself.' }),
