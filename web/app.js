@@ -127,6 +127,7 @@
     else if (r.path === '/feedback') view = Views.feedback;
     else if (r.path === '/inbox') view = Views.inbox;
     else if ((m = /^\/inbox\/([0-9a-f-]{8,40})$/.exec(r.path))) { r.params.id = m[1]; view = Views.receipt; }
+    else if ((m = /^\/inbox\/([0-9a-f-]{8,40})\/review$/.exec(r.path))) { r.params.id = m[1]; view = Views.reportReview; }
     else if (r.path === '/guide') view = Views.guide;
     else if ((m = /^\/demo(?:\/(\w+))?$/.exec(r.path))) { r.params.where = m[1] || 'car'; view = Views.demoLink; }
     else if (r.path === '/profile') view = Views.profile;
@@ -183,7 +184,8 @@
     var m;
     if (path === '/') return { title: 'Fleet', icon: 'car' };
     if (path === '/inbox') return { title: 'AI Inbox', icon: 'inbox' };
-    if (/^\/inbox\/[0-9a-f-]+$/.test(path)) return { title: 'Receipt', back: '#/inbox' };
+    if (/^\/inbox\/[0-9a-f-]+\/review$/.test(path)) return { title: 'Review the report', back: '#/inbox' };
+    if (/^\/inbox\/[0-9a-f-]+$/.test(path)) return { title: 'From the AI Inbox', back: '#/inbox' };
     if (path === '/admin/users') return { title: 'Users', icon: 'users' };
     if ((m = /^\/admin\/users\/([0-9a-f-]+)\/cars$/.exec(path))) return { title: 'Their cars', back: '#/admin/users' };
     if (path === '/profile') return { title: 'Me', icon: 'user' };

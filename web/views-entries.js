@@ -138,7 +138,7 @@
   function costText(e) {
     if (e.type === 'Maintenance') return moneyMap(e.jobCost);
     if (e.type === 'Purchase') return fmt.money(e.total, e.currency);
-    if (e.type === 'Issue' && e.cost !== null && e.cost !== undefined) return fmt.money(e.cost, e.currency);
+    if (e.type === 'Issue' && e.cost !== null && e.cost !== undefined) return LinkedIssues.shared(fmt.money(e.cost, e.currency), e.feeShared);
     return '';
   }
 
@@ -454,7 +454,7 @@
     function showHint() { receiptHint.hidden = emailPart.hidden && aiPart.hidden; }
     receiptEmailFor(car).then(function (a) {
       if (!a.address && !a.publicAddress) return;
-      var kids = [document.createTextNode('Email part receipts or garage invoices for automatic processing. ')];
+      var kids = [document.createTextNode('Email AI a garage invoice, part receipt, inspection report, or just describe or photograph a problem. Start the subject with Issue:, Invoice: or Receipt: so it knows which. ')];
       if (a.address) {
         kids.push(
           document.createTextNode('Simple address (from your own email): '),
@@ -474,10 +474,10 @@
       showHint();
     }).catch(function () { /* no email part: the log works without it */ });
 
-    // Upload a receipt here: AI reads it, then the entry form opens filled in, to check and save
+    // Upload a receipt or report here: AI reads it, then the entry form or the review screen opens, to check and save
     function drawAiPart(status, problem) {
       var left = status.remaining;
-      var kids = [el('p', { text: 'Or upload one now: AI reads it and opens the entry to review and save. Parts purchase receipts and garage invoices only.' })];
+      var kids = [el('p', { text: 'Or upload one now: AI reads it and you review it before saving. A receipt, an invoice, a report or a photo of a problem.' })];
       if (problem) kids.push(problem);
       if (left > 0) {
         var input = el('input', { type: 'file', accept: 'image/*,application/pdf', class: 'file-input', 'aria-label': 'Choose a photo or PDF of a receipt or invoice' });
@@ -488,7 +488,7 @@
         });
         kids.push(
           el('p', { text: 'AI can get things wrong: check every box. ' + left + ' of ' + status.limit + ' AI reads left today.' }),
-          el('label', { class: 'btn small secondary file-btn' }, [el('span', { text: 'Upload a receipt' }), input])
+          el('label', { class: 'btn small secondary file-btn' }, [el('span', { text: 'Upload a receipt or report' }), input])
         );
       } else {
         kids.push(el('p', { text: 'No AI reads left today. They come back tomorrow.' }));
@@ -496,7 +496,7 @@
       aiPart.replaceChildren.apply(aiPart, kids);
     }
     function readReceiptFile(file, status) {
-      aiPart.replaceChildren(UI.waiting('Reading the receipt with AI… this can take up to a minute. Please keep this screen open.'));
+      aiPart.replaceChildren(UI.waiting('Reading it with AI… this can take up to a minute. Please keep this screen open.'));
       Photos.prepareAttachment(file).then(function (a) {
         if (a.mime !== 'image/jpeg' && a.mime !== 'application/pdf') throw new FleetApi.ApiError('invalid_attachment', 'Not a photo or PDF');
         return FleetApi.call('uploadReceipt', { carId: car.id, mime: a.mime, data: a.data, filename: a.filename }, { timeoutMs: 240000 });
@@ -504,12 +504,13 @@
         var saved = up.data.receipt;
         return FleetApi.call('readReceipt', { id: saved.id }, { timeoutMs: 90000 }).then(function (x) { return x.data.receipt; }, function () { return saved; });
       }).then(function (r) {
+        if (r.status === 'Pending' && window.InboxUI && InboxUI.destination(r) !== '/inbox/' + r.id) { FleetApp.go(InboxUI.destination(r)); return; } // a report: to its review
         if (r.status === 'Pending' && (r.kind === 'Purchase' || r.kind === 'Maintenance')) {
           FleetApp.go('/car/' + car.id + '/add/' + r.kind.toLowerCase(), { inbox: r.id });
           return;
         }
         var text = r.status === 'Pending'
-          ? 'That does not look like a parts purchase receipt or a garage invoice, so it cannot be used here. It is saved in the AI Inbox.'
+          ? 'AI could not tell what that is. It is saved in the AI Inbox, where you can say what it is.'
           : (r.note || (r.status === 'Queued' ? 'AI could not read it just now. It is saved in the AI Inbox and will be read later.' : 'AI could not read it. It is saved in the AI Inbox, where you can fill in the entry by hand.'));
         FleetApi.call('getReceiptStatus').then(function (st) { drawAiPart(st.data, UI.notice('info', text)); }, function () { drawAiPart(status, UI.notice('info', text)); });
       }).catch(function (e) {
@@ -677,7 +678,6 @@
       // type-specific details
       if (e.type === 'Maintenance') {
         var rows = [];
-        if (d.linkedIssue) rows.push(el('p', {}, [el('span', { class: 'muted', text: 'Fixes issue: ' }), el('a', { href: '#/car/' + carId + '/entry/' + d.linkedIssue.id, text: d.linkedIssue.title + ' (' + d.linkedIssue.status + ')' })]));
         if (e.costMode === 'lump') {
           rows.push(el('dl', { class: 'details' }, line('Invoice total', e.lumpSumCost === null ? '' : fmt.money(e.lumpSumCost, e.lumpCurrency))));
         } else {
@@ -699,13 +699,19 @@
           total ? el('div', { class: 'job-total' }, [el('span', { text: 'Job cost' }), el('strong', { text: total })]) : null,
         ]));
       } else if (e.type === 'Issue') {
-        var issueRows = [].concat(line('Inspection or fee', e.cost === null ? '' : fmt.money(e.cost, e.currency)));
+        var issueRows = [].concat(
+          line('Inspection fee', e.cost === null ? '' : LinkedIssues.shared(fmt.money(e.cost, e.currency), e.feeShared)),
+          line('Quoted repair cost', e.quoteCost === null || e.quoteCost === undefined ? '' : LinkedIssues.shared(fmt.money(e.quoteCost, e.quoteCurrency), e.quoteShared)));
+        var sharedNote = [e.feeShared ? 'the inspection fee (counted once)' : '', e.quoteShared ? 'the quoted cost' : ''].filter(Boolean);
+        var related = d.related || [];
         cards.push(el('section', { class: 'card' }, [
           el('h2', { text: 'Details' }),
           issueRows.length ? el('dl', { class: 'details' }, issueRows) : null,
-          d.fixedBy && d.fixedBy.length
-            ? el('div', {}, [el('div', { class: 'field-label one-line', text: 'Maintenance tasks related to this issue' })].concat(d.fixedBy.map(function (r) {
-              return el('div', {}, [el('a', { href: '#/car/' + carId + '/entry/' + r.id, text: r.title + ' · ' + dateText(r.date) })]);
+          sharedNote.length ? el('p', { class: 'muted small-text', text: 'In brackets: shared with other issues, ' + sharedNote.join(' and ') + '.' }) : null,
+          e.quoteCost === null || e.quoteCost === undefined ? null : el('p', { class: 'muted small-text', text: 'A quote is not money spent, so it is not counted in the car\'s costs.' }),
+          related.length
+            ? el('div', {}, [el('div', { class: 'field-label one-line', text: 'Maintenance and purchases related to this issue' })].concat(related.map(function (r) {
+              return el('div', {}, [el('a', { href: '#/car/' + carId + '/entry/' + r.id, text: (r.ref ? r.ref + ' · ' : '') + r.title + ' · ' + dateText(r.date) + (r.resolves ? ' (resolved it)' : '') })]);
             })))
             : el('p', { class: 'muted', text: 'No maintenance linked to this issue yet.' }),
         ]));
@@ -762,6 +768,9 @@
           refreshTopThumb();
           msg.replaceChildren(UI.notice('ok', 'Added.'));
         }).catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
+      }
+      if (d.linkedIssues && d.linkedIssues.length) {
+        cards.push(el('section', { class: 'card' }, [el('h2', { text: 'Linked issues (' + d.linkedIssues.length + ')' }), LinkedIssues.view(carId, d.linkedIssues)]));
       }
       cards.push(el('section', { class: 'card', id: 'entry-files' }, [
         el('h2', { text: 'Photos and documents' }),
@@ -936,8 +945,11 @@
           UI.field('Status', select('status', ISSUE_STATUSES.map(function (s) { return [s, s]; }), v.status || 'Not resolved')),
           el('div', { class: 'field-pair bottom-aligned' }, [
             identifiedByField(),
-            amountRow('Inspection fee', text('cost', v.cost === null || v.cost === undefined ? '' : v.cost, { inputmode: 'decimal' }), 'Optional.', 'f-cost'),
+            amountRow('Inspection fee', text('cost', v.cost === null || v.cost === undefined ? '' : v.cost, { inputmode: 'decimal' }), v.feeShared ? 'Shared. Changing it takes this issue out of the group.' : 'Optional. Counted in costs.', 'f-cost'),
           ]),
+          costField('Quoted repair cost', text('quoteCost', v.quoteCost === null || v.quoteCost === undefined ? '' : v.quoteCost, { inputmode: 'decimal' }),
+            currencyPick('quoteCurrency', existing && v.quoteCost !== null && v.quoteCost !== undefined ? v.quoteCurrency : currencySelect.value),
+            v.quoteShared ? 'Shared quote. Changing it takes this issue out of the group. Not counted in costs.' : 'Optional. What a repair is quoted at. Not counted in costs.', 'f-quote'),
         ];
       } else if (type === 'Purchase') {
         costTotal = el('div', { class: 'job-total' });
@@ -1024,25 +1036,6 @@
       // ----- maintenance: parts, labour, other costs -----
       function jobFields() {
         var out = [UI.field('Garage or who did the work', text('vendor', v.vendor, { maxlength: '80' }), 'Optional.')]; // the mileage sits beside the date, near the top
-
-        var issueSelect = null;
-        var resolveCheck = null;
-        {
-          issueSelect = el('select', { name: 'linkedIssueId' }, [el('option', { value: '', text: 'Not linked to an issue' })].concat(
-            lists.issues.map(function (i) { return el('option', { value: i.id, text: i.title + ' (' + i.status + ')', selected: i.id === v.linkedIssueId }); })));
-          f.linkedIssueId = issueSelect;
-          resolveCheck = el('input', { type: 'checkbox' });
-          resolveCheck.checked = true;
-          var resolveRow = el('label', { class: 'check', hidden: true }, [resolveCheck, el('span', { text: 'Mark this issue as Resolved' })]);
-          var syncResolve = function () {
-            var chosen = lists.issues.filter(function (i) { return i.id === issueSelect.value; })[0];
-            resolveRow.hidden = !(chosen && chosen.status !== 'Resolved');
-          };
-          issueSelect.addEventListener('change', syncResolve);
-          syncResolve();
-          f.resolve = resolveCheck;
-          out.push(el('div', { class: 'field' }, [el('label', { text: 'Fixes an issue?' }), issueSelect, resolveRow]));
-        }
 
         // cost mode
         var modeItemised = el('input', { type: 'radio', name: 'costMode', value: 'itemised' });
@@ -1246,12 +1239,43 @@
 
       // ----- save -----
       var btn = el('button', { type: 'submit', class: 'btn block big save-gap', text: existing ? 'Save changes' : 'Add ' + meta.label.toLowerCase() });
-      var form = el('form', { novalidate: true }, top.concat(body, [notesField, attachSection, btn]));
+      // every kind of entry can have linked issues (a maintenance entry says which of them it resolved)
+      var linkEditor = LinkedIssues.editor({
+        choices: lists.issues.filter(function (i) { return !existing || i.id !== existing.id; }),
+        selected: existingData ? (existingData.linkedIssues || []) : [],
+        resolvable: isJob,
+      });
+      var form = el('form', { novalidate: true }, top.concat(body, [linkEditor.node, notesField, attachSection, btn]));
+
+      // a new issue can come from an inspection or diagnostic report instead: AI reads it and every problem goes to the review screen
+      var reportBox = null;
+      if (type === 'Issue' && !existing && !draft && window.InboxUI) {
+        var reportInput = el('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true, class: 'file-input', 'aria-label': 'Choose the report or photos' });
+        var reportStatus = el('div', { class: 'ai-status' });
+        var reportBtn = el('label', { class: 'btn small secondary file-btn' }, [el('span', { text: '📄 Upload an inspection or diagnostic report' }), reportInput]);
+        reportInput.addEventListener('change', function () {
+          var chosen = reportInput.files ? Array.prototype.slice.call(reportInput.files) : [];
+          reportInput.value = '';
+          if (!chosen.length) return;
+          var wait = UI.waiting('Adding…');
+          reportStatus.replaceChildren(wait);
+          reportBtn.classList.add('disabled');
+          InboxUI.send(chosen, car.id, 'Issue', function (t) { var w = wait.querySelector('.ai-wait-text'); if (w) w.textContent = t; }).then(function (out) {
+            reportBtn.classList.remove('disabled');
+            reportStatus.replaceChildren.apply(reportStatus, out.failed.map(function (x) { return UI.notice('error', x.name + ': ' + UI.errorText(x.error)); }));
+            if (out.done.length && !out.failed.length) InboxUI.openResult(out.done);
+            else if (out.done.length) reportStatus.append(el('a', { class: 'btn block secondary', href: '#' + InboxUI.destination(out.done[0]), text: 'Carry on with what was added' }));
+          });
+        });
+        reportBox = el('div', { class: 'ai-box' }, [reportBtn,
+          el('div', { class: 'hint', text: 'A PDF or photos: a scan report, an inspection sheet, a quote, or just photos of the problem. AI finds each issue and you check them all before anything is saved. Or fill in one issue yourself below.' }),
+          reportStatus]);
+      }
 
       function collect() {
         var fields = {};
         ['title', 'date', 'mileage', 'vendor', 'notes', 'status', 'cost', 'partNumber', 'quantity', 'unitCost',
-          'productUrl', 'lumpSumCost', 'labourCost', 'labourNote', 'labourHours', 'otherCost', 'otherNote', 'linkedIssueId',
+          'productUrl', 'lumpSumCost', 'labourCost', 'labourNote', 'labourHours', 'otherCost', 'otherNote', 'quoteCost', 'quoteCurrency',
           'labourCurrency', 'otherCurrency', 'lumpCurrency'].forEach(function (k) {
           if (f[k]) fields[k] = f[k].value;
         });
@@ -1307,11 +1331,11 @@
               ? { purchaseId: r.purchaseId, quantity: r.quantity }
               : { name: r.name, quantity: r.quantity, unitCost: r.unitCost, partNumber: r.partNumber, vendor: r.vendor, currency: r.currency };
           });
-          if (f.resolve && f.linkedIssueId.value) payload.resolveIssue = f.resolve.checked;
         }
         if (type === 'Purchase') {
           payload.items = purchaseItems.map(function (r) { return { id: r.id, name: r.name, partNumber: r.partNumber, quantity: r.quantity, unitCost: r.unitCost }; });
         }
+        payload.links = linkEditor.value();
         if (f.mileage && !odoRow.hidden && odoCheck.checked) payload.updateOdometer = true;
         if (taskSelect && taskSelect.value && !taskSelect.disabled) payload.taskId = taskSelect.value;
         return FleetApi.call('saveEntry', payload).then(function (r) {
@@ -1339,10 +1363,10 @@
 
       root.replaceChildren(el('section', { class: 'card' }, [
         draft ? fmt.backLink('#/inbox/' + draft.id, 'The receipt') : fmt.backLink(existing ? '#/car/' + car.id + '/entry/' + existing.id : '#/car/' + car.id + '/add', existing ? existing.title : 'Add an entry'),
-        el('h1', { text: existing ? 'Edit ' + meta.label.toLowerCase() : 'Add ' + (type === 'Purchase' ? 'a purchased item' : type === 'Maintenance' ? 'maintenance' : 'a ' + meta.label.toLowerCase()) }),
+        el('h1', { text: existing ? 'Edit ' + meta.label.toLowerCase() : 'Add ' + (type === 'Purchase' ? 'a purchased item' : type === 'Maintenance' ? 'maintenance' : 'an issue') }),
         el('p', { class: 'muted', text: car.registration + ' · ' + car.make + ' ' + car.model + '. ' + meta.blurb }),
         draft ? InboxUI.panel(draft) : null,
-        msg, form,
+        msg, reportBox, form,
       ]));
     }
 

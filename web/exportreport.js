@@ -174,7 +174,9 @@
 
     if (e.type === 'Issue') {
       kv('Status', e.status);
-      kv('Cost', e.cost ? money(e.cost, e.currency) : '');
+      var shared = function (text, is) { return is && text ? '(' + text + ') shared' : text; };
+      kv('Inspection fee', e.cost ? shared(money(e.cost, e.currency), e.feeShared) : '');
+      kv('Quoted repair', e.quoteCost ? shared(money(e.quoteCost, e.quoteCurrency), e.quoteShared) : '');
       if (d && d.fixedBy && d.fixedBy.length) kv('Fixed by', d.fixedBy.map(function (f) { return f.title + ' (' + day(f.date) + ')'; }).join('; '));
     } else if (e.type === 'Purchase') {
       if (d && d.items && d.items.length) {
@@ -205,8 +207,10 @@
         }
       }
       if (d && d.jobCost && Object.keys(d.jobCost).length) kv('Total job cost', moneyList(d.jobCost));
-      if (d && d.linkedIssue) kv('Fixes issue', d.linkedIssue.title);
       if (d && d.reminder) kv('Reminder', d.reminder.name);
+    }
+    if (d && d.linkedIssues && d.linkedIssues.length) {
+      kv('Linked issues', d.linkedIssues.map(function (i) { return (i.ref ? i.ref + ' ' : '') + i.title + (i.resolves ? ' (resolved by this)' : ''); }).join('; '));
     }
     kv('Notes', e.notes);
 

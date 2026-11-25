@@ -148,7 +148,7 @@ function sample() {
   const p = { id: 'e3', ref: 'P-0002', type: 'Purchase', title: 'Pads (front)', date: '2026-09-25', quantity: 1, unitCost: 60, currency: 'GBP', partNumber: '04465-60320', productUrl: 'https://example.com/pads', shippingCost: 4 };
   const details = {
     e1: { entry: m, car: { id: 'c1' }, attachments: [{ id: 'a1', ref: 'A-0001', filename: 'invoice.pdf', mime: 'application/pdf', size: 20480 }, { id: 'a2', ref: 'A-0002', filename: 'pads.jpg', mime: 'image/jpeg', size: 300000 }, { id: 'a3', ref: 'A-0003', filename: 'quote.xlsx', mime: 'application/octet-stream', size: 5000 }],
-      parts: [{ name: 'Pads (front)', partNumber: '04465-60320', quantity: 1, cost: 64, currency: 'GBP' }], jobCost: { GBP: 159 }, linkedIssue: { id: 'e2', title: 'Squeaky brakes' }, reminder: { id: 't1', name: 'Brake check' } },
+      parts: [{ name: 'Pads (front)', partNumber: '04465-60320', quantity: 1, cost: 64, currency: 'GBP' }], jobCost: { GBP: 159 }, linkedIssues: [{ id: 'e2', ref: 'I-0003', title: 'Squeaky brakes', resolves: true }], reminder: { id: 't1', name: 'Brake check' } },
     e2: { entry: i, car: { id: 'c1' }, attachments: [], fixedBy: [{ id: 'e1', title: 'Front brake pads', date: '2026-10-02' }] },
     e3: { entry: p, car: { id: 'c1' }, attachments: [], stock: { used: 1, remaining: 0, status: 'Fitted', total: 64 }, usedIn: [{ id: 'e1', title: 'Front brake pads', quantity: 1 }] },
   };
@@ -180,7 +180,7 @@ test('the report opens with the short explanation, then every section in full', 
   for (const heading of ['Vehicle details', 'Odometer Log', 'Maintenance & Issues Log', 'Reminders', 'Fluids, Bulbs & Specifications', 'Documents', 'Costs']) assert.ok(all.includes(heading), heading);
   for (const bit of ['JTMHV05J604123456', 'Uganda', 'Right-hand drive (RHD)', '93 litres', '4.5 litres', 'May 2026', 'US$4,500.50', 'Owner / custodian Sam', '51,200 mi', '1 Nov 2026']) assert.ok(all.includes(bit), bit);
   // entries: reference, type-specific fields and the costs
-  for (const bit of ['M-0007', 'Front brake pads', '£90.00 (Joe)', ', 1.5 h', 'Pads (front) [04465-60320] x 1 = £64.00', 'Total job cost £159.00', 'Fixes issue Squeaky brakes', 'Reminder Brake check', 'Used the Bosch pads',
+  for (const bit of ['M-0007', 'Front brake pads', '£90.00 (Joe)', ', 1.5 h', 'Pads (front) [04465-60320] x 1 = £64.00', 'Total job cost £159.00', 'Linked issues I-0003 Squeaky brakes (resolved by this)', 'Reminder Brake check', 'Used the Bosch pads',
     'I-0003', 'Fixed by Front brake pads (2 Oct 2026)', 'P-0002', 'Fitted (used 1, 0 left)', 'Used in Front brake pads x 1']) assert.ok(all.includes(bit), bit);
   // files: every one by its ID and folder, pictures captioned, a file that could not be saved marked
   assert.ok(all.includes('A-0001 invoice.pdf · PDF · 20 KB · folder A-0001'));

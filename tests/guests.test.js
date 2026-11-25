@@ -171,14 +171,14 @@ test('a guest cannot smuggle in parts, an issue link, a reminder, an odometer ch
   const stock = staffAdd('Purchase', { title: 'Oil', date: D, quantity: '5', unitCost: '10' }).data.entry;
   const g = join('Bob').data.guestToken;
   const r = as('guestSaveEntry', g, {
-    type: 'Maintenance', carId: other.id, taskId: 'x', resolveIssue: true, updateOdometer: true,
+    type: 'Maintenance', carId: other.id, taskId: 'x', resolveIssue: true, updateOdometer: true, links: [{ issueId: issue.id, resolves: true }],
     parts: [{ purchaseId: stock.id, quantity: '3' }],
     fields: job({ mileage: '99999', linkedIssueId: issue.id, labourCost: '500', costMode: 'itemised', carId: other.id }),
   });
   assert.equal(r.ok, true);
   const saved = env.call('getEntry', { token: sam, id: r.data.entry.id }).data;
   assert.equal(saved.entry.carId, car.id, 'always the guest\'s own car');
-  assert.equal(saved.entry.linkedIssueId, '');
+  assert.deepEqual(saved.linkedIssues, []);
   assert.equal(saved.entry.labourCost, null);
   assert.equal(saved.parts.length, 0, 'no parts');
   assert.equal(env.call('getCar', { token: sam, id: car.id }).data.car.odometer, 50000, 'odometer untouched');

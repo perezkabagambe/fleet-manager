@@ -441,3 +441,36 @@ test('Diagnostics shows the latest problem Gemini reported', () => {
   assert.match(h.reading.lastError, /HTTP 429 RESOURCE_EXHAUSTED/);
   assert.match(h.reading.lastError, /Quota exceeded/);
 });
+
+test('an email that only describes a problem, with photos, is read as an issue report with every photo and the text', () => {
+  const { env, run, inbox, address } = setup();
+  env.state.gemini = () => answer({ documentType: 'inspection_report', vendor: '', date: '', total: null, mileage: 51000, issues: [{ title: 'Cracked wing mirror', notes: 'Hit in a car park', quotedCost: 80, photos: [1, 2] }] });
+  env.state.gmail = [thread([mail({ to: address(), id: 'fault-1', subject: 'Mirror', body: 'The mirror is cracked. 51000 miles. Garage quoted 80.', attachments: [
+    { type: 'image/jpeg', name: 'logo.jpg', bytes: jpgBytes(20000) }, { type: 'image/jpeg', name: 'close.jpg', bytes: jpgBytes(90000) }, { type: 'image/jpeg', name: 'wide.jpg', bytes: jpgBytes(200000) },
+  ] })])];
+  run();
+  const [item] = inbox();
+  assert.deepEqual([item.kind, item.status, item.issueCount, item.chosenKind], ['Issue', 'Pending', 1, '']);
+  assert.deepEqual(item.files.map((f) => f.filename), ['wide.jpg', 'close.jpg'], 'both photos, biggest first; the small logo is left out');
+  const parts = env.state.geminiRequests[0].body.contents[0].parts;
+  assert.match(parts[0].text, /The mirror is cracked\. 51000 miles/);
+  assert.equal(parts.filter((p) => p.inline_data).length, 2);
+});
+
+test('an email that states its type is read as that type; with no attachment the email itself is kept', () => {
+  const { env, run, inbox, address } = setup();
+  env.state.gemini = () => answer({ documentType: 'other', vendor: '', date: '', total: null, issues: [{ title: 'Brakes squeal' }] });
+  const to = address();
+  env.state.gmail = [
+    thread([mail({ to, id: 't-1', subject: 'Fwd: Issue: brakes', body: 'Brakes squeal when cold.' })]),
+    thread([mail({ to, id: 't-2', subject: 'Brakes', body: 'Hello\nType: Invoice\nThanks' })]),
+    thread([mail({ to, id: 't-3', subject: 'About the issue we discussed', body: 'No type line here.' })]),
+  ];
+  run();
+  const by = {};
+  inbox().forEach((i) => { by[i.subject] = i; });
+  assert.deepEqual([by['Fwd: Issue: brakes'].chosenKind, by['Fwd: Issue: brakes'].kind, by['Fwd: Issue: brakes'].files.length], ['Issue', 'Issue', 1]);
+  assert.equal(by.Brakes.chosenKind, 'Maintenance');
+  assert.equal(by['About the issue we discussed'].chosenKind, '', 'a mention in passing is not a statement of the type');
+  assert.match(env.state.geminiRequests[0].body.contents[0].parts[0].text, /The person says it is/);
+});

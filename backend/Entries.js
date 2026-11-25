@@ -186,16 +186,28 @@ function entryVendor_(e) {
   return e.vendor;
 }
 
-function summarizeEntry_(e, guestNames) {
+/** How many live entries share each shared fee and each shared quote: { fee: { group: n }, quote: { group: n } }. */
+function sharedGroups_(entries) {
+  const out = { fee: {}, quote: {} };
+  entries.forEach(function (e) {
+    if (e.fee_group) out.fee[e.fee_group] = (out.fee[e.fee_group] || 0) + 1;
+    if (e.quote_group) out.quote[e.quote_group] = (out.quote[e.quote_group] || 0) + 1;
+  });
+  return out;
+}
+
+/** `groups` (sharedGroups_ of the car's live entries) says whether an amount is shared with another issue; without it, it reads as not shared. */
+function summarizeEntry_(e, guestNames, groups) {
   return {
     guestName: guestNames && String(e.created_by).indexOf('guest:') === 0 ? (guestNames[String(e.created_by).slice(6)] || 'Guest') : '',
     id: e.id, ref: e.ref || '', carId: e.car_id, type: e.type, title: e.title, notes: e.notes, date: e.date,
     mileage: numOrNull_(e.mileage), mileageUnit: e.mileage === '' ? '' : 'mi', vendor: entryVendor_(e), identifiedBy: e.identified_by || '', currency: e.currency || 'GBP',
-    status: e.status, linkedIssueId: e.linked_issue_id, costMode: e.cost_mode || 'itemised',
+    status: e.status, costMode: e.cost_mode || 'itemised',
     lumpSumCost: numOrNull_(e.lump_sum_cost), lumpCurrency: e.lump_currency || e.currency || 'GBP',
     labourCost: numOrNull_(e.labour_cost), labourCurrency: e.labour_currency || e.currency || 'GBP', labourNote: e.labour_note,
     labourHours: numOrNull_(e.labour_hours), otherCost: numOrNull_(e.other_cost), otherCurrency: e.other_currency || e.currency || 'GBP', otherNote: e.other_note,
-    cost: numOrNull_(e.cost),
+    cost: numOrNull_(e.cost), feeShared: !!(groups && e.fee_group && groups.fee[e.fee_group] > 1),
+    quoteCost: numOrNull_(e.quote_cost), quoteCurrency: e.quote_currency || e.currency || 'GBP', quoteShared: !!(groups && e.quote_group && groups.quote[e.quote_group] > 1),
     partNumber: e.part_number, quantity: numOrNull_(e.quantity), unitCost: numOrNull_(e.unit_cost),
     shippingCost: numOrNull_(e.shipping_cost), productUrl: e.product_url,
     taskId: e.task_id || '',
@@ -218,7 +230,7 @@ function entryContext_(carId) {
     itemsByEntry[e.id].forEach(function (i) { purchasesById[i.id] = i; });
   });
   const usage = liveUsage_(entries.filter(function (e) { return JOB_TYPES.indexOf(e.type) !== -1; }), Db.all('PartUsage'));
-  return { entries: entries, purchasesById: purchasesById, itemsByEntry: itemsByEntry, usage: usage, used: usedQuantities_(usage, '') };
+  return { entries: entries, purchasesById: purchasesById, itemsByEntry: itemsByEntry, usage: usage, used: usedQuantities_(usage, ''), links: liveLinks_(carId, entries), groups: sharedGroups_(entries) };
 }
 
 /** A purchase as a whole: its items, total price, how much has been used, and its stock status. */
@@ -254,6 +266,108 @@ function describeUsage_(u, purchasesById) {
   };
 }
 
+// ---------- linked issues ----------
+// Any entry can have a list of linked issues. A link is one EntryLinks row (entry -> issue); between two issues it counts both
+// ways. A maintenance entry's link can say it `resolves` the issue. Links to or from a deleted entry are kept but not shown,
+// so restoring the entry brings them back.
+
+const MAX_LINKS = 40;
+
+/** A car's links whose two ends are both live entries. */
+function liveLinks_(carId, entries) {
+  const live = {};
+  entries.forEach(function (e) { live[e.id] = e; });
+  return Db.all('EntryLinks').filter(function (l) { return l.car_id === carId && !isTrue_(l.deleted) && live[l.entry_id] && live[l.issue_id]; });
+}
+
+/** The issues linked to an entry: [{ id, ref, title, status, date, resolves }], oldest reference first. */
+function linkedIssuesOf_(entry, c) {
+  const byId = {};
+  c.entries.forEach(function (e) { byId[e.id] = e; });
+  const found = {};
+  c.links.forEach(function (l) {
+    if (l.entry_id === entry.id) found[l.issue_id] = found[l.issue_id] || isTrue_(l.resolves);
+    else if (entry.type === 'Issue' && l.issue_id === entry.id && byId[l.entry_id].type === 'Issue') found[l.entry_id] = found[l.entry_id] || false;
+  });
+  return Object.keys(found).map(function (id) {
+    const i = byId[id];
+    return { id: i.id, ref: i.ref || '', title: i.title, status: i.status, date: i.date, resolves: found[id] };
+  }).sort(function (a, b) { return String(a.ref).localeCompare(String(b.ref)); });
+}
+
+/** The maintenance and purchase entries that link to an issue. */
+function relatedToIssue_(issue, c) {
+  const byId = {};
+  c.entries.forEach(function (e) { byId[e.id] = e; });
+  return c.links.filter(function (l) { return l.issue_id === issue.id && byId[l.entry_id].type !== 'Issue'; }).map(function (l) {
+    const e = byId[l.entry_id];
+    return { id: e.id, ref: e.ref || '', type: e.type, title: e.title, date: e.date, resolves: isTrue_(l.resolves) };
+  }).sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+}
+
+/**
+ * What a save asks of the links: [{ issueId, resolves }] to make the list exactly that, or null to leave it alone.
+ * `links` is the whole list. An older copy of the app sends a maintenance entry's single `linkedIssueId` (with resolveIssue):
+ * that only ever adds that link, so it can never take the others away.
+ */
+function parseLinks_(p, type, existing, c) {
+  const issueOf = function (id) {
+    const hit = c.entries.filter(function (e) { return e.id === id && e.type === 'Issue'; })[0];
+    if (!hit || (existing && hit.id === existing.id)) fail_('not_found');
+    return hit;
+  };
+  if (p.links !== undefined && p.links !== null) {
+    if (!Array.isArray(p.links) || p.links.length > MAX_LINKS) fail_('invalid_input');
+    const seen = {};
+    return p.links.map(function (l) {
+      const issue = issueOf(cleanStr_(l && l.issueId, 64));
+      return { issueId: issue.id, resolves: type === 'Maintenance' && !!(l && l.resolves === true) };
+    }).filter(function (l) { if (seen[l.issueId]) return false; seen[l.issueId] = true; return true; });
+  }
+  const single = cleanStr_(p.fields && p.fields.linkedIssueId, 64);
+  if (!single || type !== 'Maintenance') return null;
+  issueOf(single);
+  const keep = (existing ? linkedIssuesOf_(existing, c) : []).filter(function (x) { return x.id !== single; }).map(function (x) { return { issueId: x.id, resolves: x.resolves }; });
+  return keep.concat([{ issueId: single, resolves: p.resolveIssue === true }]);
+}
+
+/** Make an entry's links exactly `wanted`, and resolve the issues a maintenance entry says it resolved. Returns true if any issue changed to Resolved. */
+function saveLinks_(entry, wanted, c, ctx) {
+  const now = nowIso_();
+  const types = {};
+  c.entries.forEach(function (e) { types[e.id] = e.type; });
+  types[entry.id] = entry.type;
+  const want = {};
+  wanted.forEach(function (w) { want[w.issueId] = w; });
+  const have = {};
+  Db.all('EntryLinks').forEach(function (l) {
+    if (isTrue_(l.deleted) || l.car_id !== entry.car_id || !types[l.entry_id] || !types[l.issue_id]) return; // links to deleted entries are left as they are
+    const out = l.entry_id === entry.id;
+    const back = entry.type === 'Issue' && l.issue_id === entry.id && types[l.entry_id] === 'Issue';
+    if (!out && !back) return;
+    const other = out ? l.issue_id : l.entry_id;
+    const w = want[other];
+    if (!w || have[other]) {
+      Db.update('EntryLinks', l._row, { deleted: true, updated_at: now, updated_by: ctx.user.id, version: Number(l.version || 1) + 1 });
+      return;
+    }
+    have[other] = true;
+    if (isTrue_(l.resolves) !== w.resolves) Db.update('EntryLinks', l._row, { resolves: w.resolves ? 'TRUE' : '', updated_at: now, updated_by: ctx.user.id, version: Number(l.version || 1) + 1 });
+  });
+  wanted.forEach(function (w) {
+    if (!have[w.issueId]) Db.insert('EntryLinks', Object.assign(baseColumns_(ctx), { car_id: entry.car_id, entry_id: entry.id, issue_id: w.issueId, resolves: w.resolves ? 'TRUE' : '' }));
+  });
+  let resolved = false;
+  wanted.filter(function (w) { return w.resolves; }).forEach(function (w) {
+    const issue = Db.all('Entries').filter(function (e) { return e.id === w.issueId && !isTrue_(e.deleted); })[0];
+    if (!issue || issue.status === 'Resolved') return;
+    Db.update('Entries', issue._row, { status: 'Resolved', updated_at: now, updated_by: ctx.user.id, version: Number(issue.version || 1) + 1 });
+    audit_(ctx.user, 'issue_status_changed', 'Entry', issue.id, 'Issue "' + issue.title + '": ' + issue.status + ' to Resolved (maintenance "' + entry.title + '")');
+    resolved = true;
+  });
+  return resolved;
+}
+
 // ---------- reading ----------
 
 function listEntries_(p, ctx) {
@@ -270,7 +384,8 @@ function listEntries_(p, ctx) {
   const guestNames = guestNamesById_();
   const rowOf = {};
   const entries = c.entries.map(function (e) {
-    const s = summarizeEntry_(e, guestNames);
+    const s = summarizeEntry_(e, guestNames, c.groups);
+    s.linkedIssueIds = linkedIssuesOf_(e, c).map(function (x) { return x.id; });
     rowOf[e.id] = e._row;
     s.attachmentCount = attachments[e.id] || 0;
     const fi = firstImage[e.id];
@@ -307,7 +422,9 @@ function getEntry_(p, ctx) {
 
 /** What the entry page shows. `c` is entryContext_(car.id) and `attachments` the entry's live attachment rows, so a whole car can be built in one pass. */
 function buildEntryDetail_(e, car, c, guestNames, attachments) {
-  const out = { entry: summarizeEntry_(e, guestNames), car: { id: car.id, registration: car.registration, distanceUnit: 'mi', currency: car.currency || 'GBP' } };
+  const out = { entry: summarizeEntry_(e, guestNames, c.groups), car: { id: car.id, registration: car.registration, distanceUnit: 'mi', currency: car.currency || 'GBP' } };
+  out.entry.linkedIssueIds = linkedIssuesOf_(e, c).map(function (x) { return x.id; });
+  out.linkedIssues = linkedIssuesOf_(e, c);
 
   out.attachments = attachments.map(attachmentShape_);
 
@@ -320,14 +437,10 @@ function buildEntryDetail_(e, car, c, guestNames, attachments) {
     out.parts = c.usage.filter(function (u) { return u.event_id === e.id; })
       .map(function (u) { return describeUsage_(u, c.purchasesById); }).filter(Boolean);
     out.jobCost = jobCost_(e, c.usage, c.purchasesById);
-    if (e.linked_issue_id) {
-      const issue = c.entries.filter(function (x) { return x.id === e.linked_issue_id; })[0];
-      if (issue) out.linkedIssue = { id: issue.id, title: issue.title, status: issue.status };
-    }
   }
   if (e.type === 'Issue') {
-    out.fixedBy = c.entries.filter(function (x) { return x.type === 'Maintenance' && x.linked_issue_id === e.id; })
-      .map(function (x) { return { id: x.id, title: x.title, date: x.date }; });
+    out.related = relatedToIssue_(e, c); // the maintenance and purchases that link to this issue
+    out.fixedBy = out.related.filter(function (x) { return x.type === 'Maintenance'; }).map(function (x) { return { id: x.id, title: x.title, date: x.date, resolves: x.resolves }; });
   }
   if (e.type === 'Purchase') {
     const ps = purchaseSummary_(e, c);
@@ -362,7 +475,7 @@ function listPurchases_(p, ctx) {
   const own = {};
   c.usage.forEach(function (u) { if (eventId && u.event_id === eventId) own[u.purchase_id] = numOr0_(u.quantity_used); });
   const issues = c.entries.filter(function (e) { return e.type === 'Issue'; })
-    .map(function (e) { return { id: e.id, title: e.title, status: e.status, date: e.date }; })
+    .map(function (e) { return { id: e.id, ref: e.ref || '', title: e.title, status: e.status, date: e.date }; })
     .sort(function (a, b) { return b.date.localeCompare(a.date); });
   const purchases = Object.keys(c.purchasesById).map(function (id) { return c.purchasesById[id]; })
     .map(function (i) {
@@ -426,7 +539,12 @@ function parseEntryInput_(f, type, car, items) {
 
   if (type === 'Issue') {
     out.status = oneOf_(f.status, ISSUE_STATUSES, 'Not resolved', 'invalid_status');
-    out.cost = parseMoney_(f.cost);
+    out.cost = parseMoney_(f.cost); // the inspection fee: money spent, so it counts in the car's costs
+    // The quoted repair cost: only what a repair would cost, so it never counts. A request that does not mention it leaves it as it was.
+    if (f.quoteCost !== undefined) {
+      out.quote_cost = parseMoney_(f.quoteCost);
+      out.quote_currency = out.quote_cost === '' ? '' : oneOf_(f.quoteCurrency, CURRENCIES, out.currency, 'invalid_currency');
+    }
     // Who identified the issue: a user of the app (kept as their id, so their name is always their current one), or free text
     // in `vendor` for someone else or a garage outside the app. A request that does not say leaves it as it was.
     if (f.identifiedBy !== undefined) {
@@ -458,7 +576,6 @@ function parseEntryInput_(f, type, car, items) {
     out.lump_currency = costCurrency(out.lump_sum_cost, f.lumpCurrency);
     out.labour_currency = costCurrency(out.labour_cost, f.labourCurrency);
     out.other_currency = costCurrency(out.other_cost, f.otherCurrency);
-    out.linked_issue_id = cleanStr_(f.linkedIssueId, 64);
   }
   return out;
 }
@@ -532,10 +649,7 @@ function saveEntry_(p, ctx) {
   const isJob = JOB_TYPES.indexOf(type) !== -1;
   if (!isJob && p.parts && p.parts.length) fail_('invalid_input');
 
-  if (input.linked_issue_id) {
-    const issue = c.entries.filter(function (e) { return e.id === input.linked_issue_id && e.type === 'Issue'; })[0];
-    if (!issue) fail_('not_found');
-  }
+  const wantedLinks = parseLinks_(p, type, existing, c); // null: this request does not change the links
   const plan = isJob ? planParts_(p.parts || [], car, input.date, input.currency, existing ? existing.id : '', c) : null;
 
   // A maintenance entry can be logged against a reminder.
@@ -560,6 +674,10 @@ function saveEntry_(p, ctx) {
   const now = nowIso_();
   let row;
   if (existing) {
+    // changing a shared amount on one issue takes that issue out of the group: its new amount counts on its own
+    const differs = function (k) { return input[k] !== undefined && String(existing[k] === undefined ? '' : existing[k]) !== String(input[k]); };
+    if (existing.fee_group && (differs('cost') || (String(existing.cost) !== '' && differs('currency')))) input.fee_group = '';
+    if (existing.quote_group && (differs('quote_cost') || differs('quote_currency'))) input.quote_group = '';
     const before = {};
     const after = {};
     Object.keys(input).forEach(function (k) {
@@ -579,13 +697,9 @@ function saveEntry_(p, ctx) {
   if (type === 'Purchase') savePurchaseItems_(row, items, ctx);
 
   const extras = {};
-  if (type === 'Maintenance' && p.resolveIssue === true && input.linked_issue_id) {
-    const issue = Db.all('Entries').filter(function (e) { return e.id === input.linked_issue_id; })[0];
-    if (issue && issue.status !== 'Resolved') {
-      Db.update('Entries', issue._row, { status: 'Resolved', updated_at: now, updated_by: ctx.user.id, version: Number(issue.version || 1) + 1 });
-      audit_(ctx.user, 'issue_status_changed', 'Entry', issue.id, 'Issue "' + issue.title + '": ' + issue.status + ' to Resolved (maintenance "' + input.title + '")');
-      extras.issueResolved = true;
-    }
+  if (wantedLinks) {
+    const resolved = saveLinks_(row, wantedLinks, c, ctx);
+    if (resolved) extras.issueResolved = true;
   }
   if (p.updateOdometer === true && input.mileage !== '') {
     const reading = Number(input.mileage);
@@ -793,9 +907,13 @@ function getCarCosts_(p, ctx) {
     b.categories[category] = round2_((b.categories[category] || 0) + amount);
     y.categories[category] = round2_((y.categories[category] || 0) + amount);
   }
+  const counted = {}; // shared fees already counted
   c.entries.forEach(function (e) {
     if (e.type === 'Purchase') add(e.currency, e.date, 'parts', purchaseSummary_(e, c).total);
-    else if (e.type === 'Issue') add(e.currency, e.date, 'issues', numOr0_(e.cost));
+    else if (e.type === 'Issue') {
+      if (e.fee_group) { if (counted[e.fee_group]) return; counted[e.fee_group] = true; }
+      add(e.currency, e.date, 'issues', numOr0_(e.cost)); // the quoted repair cost is never spent money
+    }
     else if (e.cost_mode === 'lump') add(e.lump_currency || e.currency, e.date, 'invoices', numOr0_(e.lump_sum_cost));
     else {
       add(e.labour_currency || e.currency, e.date, 'labour', numOr0_(e.labour_cost));

@@ -157,11 +157,18 @@ function getAttachment_(p, ctx) {
 }
 
 /** Admin only. The file goes to the Drive trash (recoverable for 30 days). */
+/** Move files to the Drive trash, except any another attachment still points at (one report can be on several entries). */
+function trashUnusedFiles_(ids) {
+  const used = {};
+  Db.all('Attachments').forEach(function (a) { if (!isTrue_(a.deleted)) { used[a.drive_file_id] = true; used[a.thumb_file_id] = true; } });
+  trashFiles_(ids.filter(function (id) { return id && !used[id]; }));
+}
+
 function deleteAttachment_(p, ctx) {
   const found = liveAttachment_(cleanStr_(p.id, 64));
   if (!found) fail_('not_found');
   Db.update('Attachments', found.att._row, { deleted: true, updated_at: nowIso_(), updated_by: ctx.user.id, version: Number(found.att.version || 1) + 1 });
-  trashFiles_([found.att.drive_file_id, found.att.thumb_file_id]);
+  trashUnusedFiles_([found.att.drive_file_id, found.att.thumb_file_id]);
   audit_(ctx.user, 'attachment_removed', 'Entry', found.entry.id, found.att.filename + ' removed from "' + found.entry.title + '"');
   return { done: true };
 }

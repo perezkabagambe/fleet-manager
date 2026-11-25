@@ -220,8 +220,8 @@ function createDemoCar_(p, ctx) {
   saveEntry_({ carId: carId, type: 'Issue', fields: { title: 'Offside wing mirror cracked', date: demoDay_(9), mileage: '48100', notes: 'Cracked in a car park. Still usable.' } }, ctx);
 
   saveEntry_({
-    carId: carId, type: 'Maintenance', resolveIssue: true,
-    fields: { title: 'Front brakes: pads and discs fitted', date: demoDay_(38), mileage: '47800', vendor: 'Example Garage', currency: 'GBP', costMode: 'itemised', labourCost: '80', labourCurrency: 'GBP', labourNote: '2 hours', linkedIssueId: squeak.id },
+    carId: carId, type: 'Maintenance', links: [{ issueId: squeak.id, resolves: true }],
+    fields: { title: 'Front brakes: pads and discs fitted', date: demoDay_(38), mileage: '47800', vendor: 'Example Garage', currency: 'GBP', costMode: 'itemised', labourCost: '80', labourCurrency: 'GBP', labourNote: '2 hours'},
     parts: padItems.map(function (i) { return { purchaseId: i.id, quantity: String(i.quantity) }; }),
   }, ctx);
   saveEntry_({

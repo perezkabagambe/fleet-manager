@@ -112,12 +112,13 @@
       p([b('The easy way to log work is to email it.'), document.createTextNode(' Every car has two addresses: a '), b('simple'), document.createTextNode(' one, made from its registration, for your own email, and a '), b('public'), document.createTextNode(' one that works for anyone, so you can share it with a garage.')]),
       el('ol', {}, [
         el('li', {}, [document.createTextNode('Open the demo car\'s '), link('log', 'Maintenance & Issues Log'), document.createTextNode('. The purple note shows both addresses.')]),
-        el('li', {}, [document.createTextNode('Email a parts receipt or garage invoice (PDF or photo) to either one. A garage can send its invoice straight to the public address.')]),
+        el('li', {}, [document.createTextNode('Email a receipt, invoice or inspection report (PDF or photo) to either one, or just describe a problem and attach photos. Start the subject with Issue:, Invoice: or Receipt: so AI knows which. A garage can send straight to the public address.')]),
         el('li', {}, [document.createTextNode('AI reads it and puts it in the '), page('/inbox', 'AI Inbox'), document.createTextNode('. Check what it read, tap '), b('Draft an entry from this receipt'), document.createTextNode(', review, and save.')]),
       ]),
       shot('guide-email', 'The car\'s email addresses in the log note'),
       shot('guide-inbox', 'What AI read from a receipt'),
-      p([document.createTextNode('No email handy? Tap '), b('Upload a receipt'), document.createTextNode(' in the same note, or share a PDF or photo to the Android app.')]),
+      p([document.createTextNode('No email handy? Tap '), b('Upload a receipt or report'), document.createTextNode(' in the same note, add it in the '), page('/inbox', 'AI Inbox'), document.createTextNode(', or share a PDF or photo to the Android app.')]),
+      p([b('Inspection or diagnostic reports'), document.createTextNode(' (also quotes, a described problem or photos of it) become one issue for each problem. On an '), link('addissue', 'issue'), document.createTextNode(', tap '), b('Upload an inspection or diagnostic report'), document.createTextNode('. You check every issue on one review screen before saving. A quoted repair cost is kept on the issue but never counted as money spent.')]),
     ], true),
     section('2. Adding a car', [
       p([document.createTextNode('Tap '), page('/car/new', 'Add a car'), document.createTextNode(' on the Fleet page, then choose:')]),

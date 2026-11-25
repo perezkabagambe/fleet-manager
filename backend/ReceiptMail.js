@@ -21,6 +21,7 @@ const RECEIPT_MAIL_THREADS = 25;  // threads looked at per run
 const RECEIPT_INBOX_MAX = 200;
 const MAX_EMAIL_FILE = 10000000;   // a photo straight from a phone camera is often 3 to 6 MB
 const MIN_EMAIL_IMAGE = 15000;     // smaller pictures are logos and tracking pixels, not receipts
+const MIN_EMAIL_PHOTO = 60000;     // a further picture is only kept as well if it is at least this big (a photo, not a signature logo)
 const RECEIPT_TAG_RE = /\+([a-z0-9]{2,32})@/i;
 
 // ---------- each car's address ----------
@@ -208,38 +209,67 @@ function receiptFileKind_(mime, name) {
 }
 
 /**
- * The file to keep as the receipt: the best PDF or picture in the email (pictures pasted into the body count, as a photo
- * sent from a phone usually is one), otherwise the email itself as a PDF (or, failing that, plain text).
+ * The files to keep from an email, the main one first. A PDF beats a picture, and the biggest of each wins (the rest of the small
+ * pictures are logos and decoration). Further PDFs and real photos are kept too, as several photos of faults, or a report with
+ * photos, belong together. With no attachment at all, the email itself is kept as a PDF (or, failing that, as text): a problem
+ * can simply be described in an email.
  */
-function receiptEmailFile_(message) {
+function receiptEmailFiles_(message) {
   let attachments = [];
   try { attachments = message.getAttachments({ includeInlineImages: true, includeAttachments: true }) || []; } catch (e) { attachments = []; }
-  let pdf = null;
-  let image = null;
+  const pdfs = [];
+  const images = [];
   attachments.forEach(function (a) {
     let bytes;
     try { bytes = a.getBytes(); } catch (e) { return; }
     const kind = receiptFileKind_(a.getContentType(), a.getName());
     if (!kind || bytes.length > MAX_EMAIL_FILE) return;
     const found = { bytes: bytes, mime: kind, name: a.getName() };
-    if (kind === 'application/pdf') {
-      if (isPdf_(bytes) && (!pdf || bytes.length > pdf.bytes.length)) pdf = found;
-    } else if (bytes.length >= MIN_EMAIL_IMAGE && (!image || bytes.length > image.bytes.length)) {
-      image = found; // the biggest picture is the receipt; the rest are logos and decoration
-    }
+    if (kind === 'application/pdf') { if (isPdf_(bytes)) pdfs.push(found); } else if (bytes.length >= MIN_EMAIL_IMAGE) images.push(found);
   });
-  const chosen = pdf || image;
-  if (chosen) {
-    const ext = { 'application/pdf': ['.pdf', /\.pdf$/i], 'image/jpeg': ['.jpg', /\.jpe?g$/i], 'image/png': ['.png', /\.png$/i], 'image/webp': ['.webp', /\.webp$/i], 'image/heic': ['.heic', /\.heic$/i], 'image/heif': ['.heif', /\.heif$/i] }[chosen.mime];
-    const base = cleanStr_(chosen.name, 100).replace(/[\\/:*?"<>|]/g, '_') || 'receipt';
-    return { bytes: chosen.bytes, mime: chosen.mime, filename: ext[1].test(base) ? base : base + ext[0] };
+  const bigger = function (x, y) { return y.bytes.length - x.bytes.length; };
+  pdfs.sort(bigger);
+  images.sort(bigger);
+  const first = pdfs[0] || images[0];
+  if (first) {
+    const rest = pdfs.slice(1, 3).concat(images.filter(function (i) { return i !== first && i.bytes.length >= MIN_EMAIL_PHOTO; }));
+    let total = first.bytes.length;
+    const kept = [first].concat(rest.filter(function (f) {
+      if (total + f.bytes.length > MAX_RECEIPT_TOTAL) return false;
+      total += f.bytes.length;
+      return true;
+    })).slice(0, MAX_RECEIPT_FILES);
+    return kept.map(function (chosen) {
+      const ext = { 'application/pdf': ['.pdf', /\.pdf$/i], 'image/jpeg': ['.jpg', /\.jpe?g$/i], 'image/png': ['.png', /\.png$/i], 'image/webp': ['.webp', /\.webp$/i], 'image/heic': ['.heic', /\.heic$/i], 'image/heif': ['.heif', /\.heif$/i] }[chosen.mime];
+      const base = cleanStr_(chosen.name, 100).replace(/[\\/:*?"<>|]/g, '_') || 'receipt';
+      return { bytes: chosen.bytes, mime: chosen.mime, filename: ext[1].test(base) ? base : base + ext[0] };
+    });
   }
   try {
     const blob = Utilities.newBlob('<html><body>' + String(message.getBody() || '') + '</body></html>', 'text/html', 'receipt.html').getAs('application/pdf');
     const bytes = blob.getBytes();
-    if (isPdf_(bytes) && bytes.length <= MAX_ATTACH_FILE) return { bytes: bytes, mime: 'application/pdf', filename: 'receipt-email.pdf' };
+    if (isPdf_(bytes) && bytes.length <= MAX_ATTACH_FILE) return [{ bytes: bytes, mime: 'application/pdf', filename: 'receipt-email.pdf' }];
   } catch (e) { /* the email could not be turned into a PDF: keep its text instead */ }
-  return { bytes: Utilities.newBlob(receiptEmailText_(message), 'text/plain', 'receipt-email.txt').getBytes(), mime: GENERIC_MIME, filename: 'receipt-email.txt' };
+  return [{ bytes: Utilities.newBlob(receiptEmailText_(message), 'text/plain', 'receipt-email.txt').getBytes(), mime: GENERIC_MIME, filename: 'receipt-email.txt' }];
+}
+
+/**
+ * The entry type an email states in so many words: a subject starting "Issue:", "Invoice:" or "Receipt:", or a line such as
+ * "Type: issue" in the text. '' when it does not say (AI then works it out from what the email and its files contain).
+ */
+function receiptSaidKind_(subject, body) {
+  const word = function (w) {
+    w = String(w || '').toLowerCase();
+    if (/^(issue|fault|problem|inspection|diagnostic|quote|estimate)/.test(w)) return 'Issue';
+    if (/^(maintenance|invoice|garage)/.test(w)) return 'Maintenance';
+    if (/^(purchase|receipt|parts?)/.test(w)) return 'Purchase';
+    return '';
+  };
+  const words = '(issues?|faults?|problems?|inspection|diagnostic|quote|estimate|maintenance|garage invoice|invoice|purchase receipt|purchase|receipt|parts receipt)';
+  const inSubject = new RegExp('^\\s*(?:(?:re|fwd?)\\s*:\\s*)*' + words + '\\s*[:\\-]', 'i').exec(String(subject || ''));
+  if (inSubject) return word(inSubject[1]);
+  const inBody = new RegExp('(?:^|\\n)\\s*(?:entry\\s+)?type\\s*[:\\-=]\\s*' + words + '\\b', 'i').exec(String(body || '').slice(0, 4000));
+  return inBody ? word(inBody[1]) : '';
 }
 
 /** Decide what to do with one email: { car, user } to accept it, or { skip: 'why' }. */
@@ -272,13 +302,21 @@ function handleReceiptMessage_(message, carsBySecret, carsByReg, usersByEmail) {
   if (seen) return 'skipped';
   if (Db.all('Inbox').filter(function (r) { return !isTrue_(r.deleted) && RECEIPT_OPEN.indexOf(r.status) !== -1; }).length >= RECEIPT_INBOX_MAX) return 'skipped';
 
-  const file = receiptEmailFile_(message);
+  const files = receiptEmailFiles_(message);
+  const file = files[0];
+  const said = receiptSaidKind_(message.getSubject(), message.getPlainBody());
   const row = withScriptLock_(function () {
+    const more = files.slice(1).map(function (f) { return saveReceiptFile_(f.bytes, f.mime, f.filename, ''); });
     return storeReceipt_({
       source: 'email', car_id: car ? car.id : '', sender: user ? user.name : from, subject: cleanStr_(message.getSubject(), 120), email_id: emailId, sender_id: user ? user.id : '',
-    }, file.bytes, file.mime, file.filename, null);
+    }, file.bytes, file.mime, file.filename, null, '', more);
   });
-  audit_(null, 'receipt_emailed', 'Inbox', row.id, 'Receipt "' + file.filename + '" arrived by email' + (car ? ' for ' + car.registration : ''));
+  if (said) {
+    withScriptLock_(function () { Db.update('Inbox', findReceipt_(row.id)._row, { kind: said, chosen_kind: said }); });
+    row.kind = said;
+    row.chosen_kind = said;
+  }
+  audit_(null, 'receipt_emailed', 'Inbox', row.id, 'Receipt "' + file.filename + '" arrived by email' + (files.length > 1 ? ' with ' + (files.length - 1) + ' more file' + (files.length > 2 ? 's' : '') : '') + (car ? ' for ' + car.registration : ''));
   readStoredReceipt_(row, '', receiptEmailText_(message), user ? user.id : ''); // an admin who sent it gets the confirmation instead of the admin notice
   return 'read';
 }
@@ -287,6 +325,14 @@ function handleReceiptMessage_(message, carsBySecret, carsByReg, usersByEmail) {
 function notifyReceiptSender_(row, user) {
   if (!dailyCap_('rc_ack', RECEIPT_MAIL_DAILY)) return;
   const read = row.status === 'Pending';
+  if (read && row.kind === 'Issue') {
+    const found = (receiptData_(row).issues || []).length;
+    const said = 'We received your report and read it' + (found ? ': ' + plural_(found, 'issue') + ' found' : '') + '. It is now in the AI Inbox in Fleet Manager, waiting for someone to check it. Nothing has been added to the vehicle\'s log yet.';
+    const link = SITE_URL + '#/inbox';
+    sendMail_(user.email, 'Your report is waiting for review', layout_('Your report is waiting for review', '<p>Hi ' + esc_(user.name) + ',</p><p>' + esc_(said) + '</p>' + button_(link, 'Open the AI Inbox')),
+      'Hi ' + user.name + ',\n\n' + said + '\n' + link);
+    return;
+  }
   const what = read
     ? 'We received your receipt' + (row.vendor ? ' from ' + row.vendor : '') + (row.total !== '' ? ' (' + (row.currency ? row.currency + ' ' : '') + row.total + ')' : '') + ' and it has been read.'
     : 'We received your receipt, but it could not be read automatically, so it needs to be filled in by hand.';

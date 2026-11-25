@@ -1,5 +1,6 @@
-// The AI Inbox: add a photo or PDF of a receipt, see what is waiting for review, check what the AI read from it,
-// and send it to the normal entry form (pre-filled) to be corrected and saved. Nothing is added to a car by itself.
+// The AI Inbox: add reports, invoices and receipts (upload, share from the phone, or email), see what is waiting for review,
+// check what the AI read, and go on to review it. A report or problem goes to the review screen (views-report.js); an invoice or
+// receipt can also go to the normal entry form, pre-filled. Nothing is added to a car by itself.
 (function () {
   'use strict';
 
@@ -8,7 +9,9 @@
   var UPLOAD_TIMEOUT_MS = 240000;
   var READ_TIMEOUT_MS = 90000; // the AI can take a while to answer
 
-  var KIND_LABEL = { Purchase: 'Parts purchase', Maintenance: 'Garage invoice' };
+  var KIND_LABEL = { Purchase: 'Parts purchase', Maintenance: 'Garage invoice', Issue: 'Report or problem' };
+  var KIND_CHOICES = [['Issue', 'Issue (inspection or diagnostic report, quote, or a problem)'], ['Maintenance', 'Maintenance or garage invoice'], ['Purchase', 'Purchase receipt']];
+  var MAX_FILES = 8;
   var STATUS_LABEL = { New: 'Not read yet', Pending: 'Ready to check', Queued: 'Waiting to be read', Unreadable: 'Needs filling in by hand', Approved: 'Added', Dismissed: 'Dismissed' };
 
   function fmt() { return Views.fmt; }
@@ -44,6 +47,106 @@
     return caches.open(SHARED_CACHE).then(function (cache) { return cache.delete(key); }).catch(function () { /* it is only a cache */ });
   }
 
+  // ---------- sending files to be read: one way for every route (AI Inbox, share, "Add an issue") ----------
+  function asReceiptFile(f) {
+    return Photos.prepareAttachment(f).then(function (a) {
+      if (a.mime !== 'image/jpeg' && a.mime !== 'application/pdf') throw new FleetApi.ApiError('invalid_attachment', 'Not a photo or PDF');
+      return a;
+    });
+  }
+  function readIt(receipt) {
+    return FleetApi.call('readReceipt', { id: receipt.id }, { timeoutMs: READ_TIMEOUT_MS }).then(function (x) { return x.data.receipt; }, function () {
+      return receipt; // saved; reading can be tried again from its page
+    });
+  }
+  /**
+   * Store the files and have AI read them. For an issue, all the files are ONE item (a report in several pages, or photos of
+   * faults); otherwise each file is its own invoice or receipt. Resolves to { done: [receipt], failed: [{ name, error }] }.
+   */
+  function send(files, carId, kind, progress) {
+    var done = [];
+    var failed = [];
+    var groups = kind === 'Issue' ? [files] : files.map(function (f) { return [f]; });
+    if (kind === 'Issue' && files.length > MAX_FILES) return Promise.resolve({ done: [], failed: [{ name: files.length + ' files', error: new FleetApi.ApiError('too_many_files', 'Too many files') }] });
+    var chain = Promise.resolve();
+    groups.forEach(function (group, g) {
+      var lead = groups.length > 1 ? 'File ' + (g + 1) + ' of ' + groups.length + ': ' : '';
+      chain = chain.then(function () {
+        var receipt = null;
+        progress(lead + 'Adding the file' + (group.length > 1 ? 's' : '') + '…');
+        var each = Promise.resolve();
+        group.forEach(function (f) {
+          each = each.then(function () {
+            return asReceiptFile(f).then(function (a) {
+              var body = { mime: a.mime, data: a.data, thumb: a.thumb, filename: a.filename };
+              if (!receipt) return FleetApi.call('uploadReceipt', Object.assign({ carId: carId, kind: kind || undefined }, body), { timeoutMs: UPLOAD_TIMEOUT_MS }).then(function (r) { receipt = r.data.receipt; });
+              return FleetApi.call('addReceiptFile', Object.assign({ id: receipt.id }, body), { timeoutMs: UPLOAD_TIMEOUT_MS }).then(function (r) { receipt = r.data.receipt; });
+            }).catch(function (e) { failed.push({ name: f.name || 'a file', error: e }); });
+          });
+        });
+        return each.then(function () {
+          if (!receipt) return null;
+          progress(lead + 'Reading with AI… this can take up to a minute.');
+          return readIt(receipt).then(function (r) { done.push(r); });
+        });
+      });
+    });
+    return chain.then(function () { refreshCount(); return { done: done, failed: failed }; });
+  }
+
+  /** Where to go for an item that has just been read: a report goes straight to its review. */
+  function destination(r) {
+    return r.status === 'Pending' && (r.kind === 'Issue' || (r.kind === 'Maintenance' && r.issueCount)) ? '/inbox/' + r.id + '/review' : '/inbox/' + r.id;
+  }
+  function openResult(done) {
+    if (done.length === 1) {
+      var r = done[0];
+      if (r.status !== 'Pending') FleetApp.setFlash('info', r.note || 'It was saved in the AI Inbox.');
+      else if (destination(r) === '/inbox/' + r.id) FleetApp.setFlash('ok', 'It was read. Check what it says, then draft the entry.');
+      FleetApp.go(destination(r));
+    } else {
+      FleetApp.setFlash('ok', done.length + ' files added. Open each one to check it.');
+      FleetApp.go('/inbox');
+    }
+  }
+
+  /**
+   * "Which vehicle, and what is it?" then read it. `preset` are files already chosen (shared from the phone); without them the
+   * form asks for them. onSent() runs once they are all stored.
+   */
+  function uploadForm(cars, carId, preset, onSent) {
+    var carPick = UI.searchSelect(cars.map(function (c) { return { value: c.id, label: c.registration + ' · ' + c.make + ' ' + c.model }; }), { value: carId || '', placeholder: 'Choose a vehicle…', ariaLabel: 'Which vehicle is it for?', searchPlaceholder: 'Search cars…' });
+    var kindPick = el('select', { name: 'kind' }, [el('option', { value: '', text: 'Choose…' })].concat(KIND_CHOICES.map(function (k) { return el('option', { value: k[0], text: k[1] }); })));
+    var file = preset ? null : el('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true, class: 'file-input', 'aria-label': 'Choose photos or PDFs' });
+    var hint = el('div', { class: 'hint' });
+    function explain() {
+      hint.textContent = kindPick.value === 'Issue' ? 'All the files are read together as one report. Photos of a fault are fine, even with no writing.'
+        : kindPick.value ? 'Each file is read as its own ' + (kindPick.value === 'Purchase' ? 'receipt.' : 'invoice.') : '';
+    }
+    kindPick.addEventListener('change', explain);
+    var status = el('div');
+    var go = el('button', { type: 'button', class: 'btn block', text: 'Read it with AI' });
+    go.addEventListener('click', function () {
+      var files = preset || (file.files ? Array.prototype.slice.call(file.files) : []);
+      var wrong = !carPick.value ? 'Choose which vehicle this is for.' : !kindPick.value ? 'Choose what it is.' : !files.length ? 'Choose a photo or a PDF first.' : '';
+      if (wrong) { status.replaceChildren(UI.notice('error', wrong)); return; }
+      var wait = UI.waiting('Adding…');
+      status.replaceChildren(wait);
+      UI.busy(go, 'Working…', send(files, carPick.value, kindPick.value, function (t) { var w = wait.querySelector('.ai-wait-text'); if (w) w.textContent = t; })).then(function (out) {
+        status.replaceChildren.apply(status, out.failed.map(function (x) { return UI.notice('error', x.name + ': ' + UI.errorText(x.error)); }));
+        if (out.done.length && onSent) onSent();
+        if (out.done.length && !out.failed.length) openResult(out.done);
+        else if (out.done.length) status.append(el('a', { class: 'btn block secondary', href: '#' + destination(out.done[0]), text: 'Carry on with what was added' }));
+      }).catch(function (e) { status.replaceChildren(UI.notice('error', UI.errorText(e))); });
+    });
+    return el('div', {}, [
+      el('div', { class: 'field' }, [el('label', { text: 'Which vehicle is it for?' }), carPick]),
+      el('div', { class: 'field' }, [el('label', { text: 'What is it?' }), kindPick, hint]),
+      preset ? null : el('div', { class: 'field' }, [el('label', { text: 'Photos or PDFs' }), file]),
+      status, go,
+    ]);
+  }
+
   // ---------- how many are waiting (the number on the menu) ----------
   var count = 0;
   function setCount(n) {
@@ -57,12 +160,12 @@
 
   // ---------- looking at the stored receipt ----------
   /** A "View receipt" button: a photo is shown on the page, a PDF is saved/opened by the phone. */
-  function viewer(receipt, onError) {
+  function viewer(receipt, onError, name) {
     var shown = Viewer.canShow(receipt.mime); // a photo or PDF is shown in the app; anything else is saved to the phone
-    var btn = el('button', { type: 'button', class: 'btn small secondary', text: shown ? 'View the receipt' : 'Download the receipt' });
+    var btn = el('button', { type: 'button', class: 'btn small secondary', text: (shown ? 'View ' : 'Download ') + (name || (receipt.kind === 'Issue' ? 'the report' : 'the receipt')) });
     var holder = el('div');
     btn.addEventListener('click', function () {
-      var go = Viewer.show({ mime: receipt.mime, filename: receipt.filename, load: function () { return FleetApi.call('getReceiptFile', { id: receipt.id }, { timeoutMs: UPLOAD_TIMEOUT_MS }).then(function (r) { return r.data; }); } });
+      var go = Viewer.show({ mime: receipt.mime, filename: receipt.filename, load: function () { return FleetApi.call('getReceiptFile', { id: receipt.id, index: receipt.index || 0 }, { timeoutMs: UPLOAD_TIMEOUT_MS }).then(function (r) { return r.data; }); } });
       if (!shown) UI.busy(btn, 'Loading…', go).catch(function (e) { if (onError) onError(e); });
     });
     return el('div', { class: 'receipt-view' }, [el('div', { class: 'attach-actions' }, [btn]), holder]);
@@ -98,7 +201,7 @@
     var sharedBox = el('div');
     root.replaceChildren(el('section', { class: 'card' }, [
       el('div', { class: 'page-head' }, [el('h1', { text: 'AI Inbox' })]),
-      el('p', { class: 'section-note', text: 'Receipts waiting to be checked. Nothing is added to a vehicle\'s log until someone has looked at it and saved it.' }),
+      el('p', { class: 'section-note', text: 'Reports, invoices and receipts waiting to be checked. Nothing is added to a vehicle\'s log until someone has looked at it and saved it.' }),
       msg, sharedBox, fileBox, listBox, recentBox,
     ]));
 
@@ -109,117 +212,37 @@
     if (flash) msg.append(UI.notice(flash.kind === 'ok' ? 'ok' : 'info', flash.text)); // e.g. "3 receipts added"
 
     function addBlock() {
-      var carSelect = el('select', { name: 'carId' }, [el('option', { value: '', text: 'Not sure yet (the AI will try to tell)' })].concat(
-        cars.map(function (c) { return el('option', { value: c.id, text: c.registration + ' · ' + c.make + ' ' + c.model, selected: c.id === ctx.query.car }); })));
-      var file = el('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true, class: 'file-input', 'aria-label': 'Choose photos or PDFs of receipts' });
-      var go = el('button', { type: 'button', class: 'btn block', text: 'Add this receipt' });
-      var status = el('div');
-      file.addEventListener('change', function () {
-        var n = file.files ? file.files.length : 0;
-        go.textContent = n > 1 ? 'Add these ' + n + ' receipts' : 'Add this receipt';
-      });
-      go.addEventListener('click', function () {
-        var files = file.files ? Array.prototype.slice.call(file.files) : [];
-        if (!files.length) { status.replaceChildren(UI.notice('error', 'Choose a photo or a PDF first.')); return; }
-        status.replaceChildren(UI.waiting(reading ? 'Adding the receipt and reading it with AI… this can take up to a minute.' : 'Adding the receipt…'));
-        // each file becomes its own receipt, added one after another
-        var done = [];
-        var failed = [];
-        var chain = Promise.resolve();
-        var label = go.textContent;
-        files.forEach(function (f, i) {
-          chain = chain.then(function () {
-            return send(f, carSelect.value, function (t) {
-              var label2 = files.length > 1 ? 'Receipt ' + (i + 1) + ' of ' + files.length + ': ' + t : t;
-              go.textContent = label2;
-              var w = status.querySelector('.ai-wait-text');
-              if (w) w.textContent = label2 + (/Reading/.test(t) ? ' with AI… this can take up to a minute.' : '');
-            }).then(function (r) { done.push(r); }, function (e) { failed.push({ name: f.name || 'a file', error: e }); });
-          });
-        });
-        UI.busy(go, 'Adding…', chain.then(function () { go.textContent = label; })).then(function () {
-          status.replaceChildren();
-          if (failed.length) {
-            status.replaceChildren.apply(status, (done.length ? [UI.notice('ok', done.length + ' receipt' + (done.length === 1 ? ' was' : 's were') + ' added. They are in the list below.')] : [])
-              .concat(failed.map(function (x) { return UI.notice('error', x.name + ': ' + UI.errorText(x.error)); })));
-            refreshCount();
-            return; // stay here so the problems stay in view
-          }
-          if (!done.length) return;
-          if (done.length === 1) {
-            var r = done[0];
-            FleetApp.setFlash(r.status === 'Pending' ? 'ok' : 'info', r.status === 'Pending' ? 'The receipt was read. Check what it says, then fill in the entry.' : (r.note || 'The receipt was saved.'));
-            FleetApp.go('/inbox/' + r.id);
-          } else {
-            FleetApp.setFlash('ok', done.length + ' receipts added. Open each one to check it.');
-            FleetApp.go('/inbox');
-          }
-        });
-      });
       return el('details', { class: 'copy-section', open: !!ctx.query.car || undefined }, [
-        el('summary', { text: 'Add receipts (photos or PDFs)' }),
+        el('summary', { text: 'Add a report, invoice or receipt' }),
         el('p', { class: 'muted small-text', text: reading
-          ? 'Take a photo, or choose one or more photos or PDFs. Each is read automatically and then waits here for you to check it.'
+          ? 'Take a photo, or choose photos or PDFs. AI reads them and you check everything before it is saved.'
           : 'Take a photo, or choose a photo or PDF. Automatic reading is not switched on yet, so you will fill the details in yourself.' }),
-        el('div', { class: 'field' }, [el('label', { text: 'Which vehicle is it for?' }), carSelect]),
-        el('div', { class: 'field' }, [el('label', { text: 'Receipt' }), file]),
-        status, go,
+        uploadForm(cars, ctx.query.car, null, null),
       ]);
     }
 
-    // Files shared to the app: read them straight away (AI tries to tell which vehicle), then open the result
+    // Files shared to the app: ask which vehicle and what they are, then read them
     function checkShared() {
       readShared().then(function (items) {
         if (!items.length) {
           if (ctx.query.shared) sharedBox.replaceChildren(UI.notice('info', 'No shared file was found. Share it again, or add it below.'));
           return;
         }
-        var wait = UI.waiting(items.length > 1 ? 'Reading ' + items.length + ' shared files with AI… this can take up to a minute each.' : 'Reading the shared file with AI… this can take up to a minute.');
-        sharedBox.replaceChildren(wait);
-        var done = [];
-        var failed = [];
-        var chain = Promise.resolve();
-        items.forEach(function (it, i) {
-          chain = chain.then(function () {
-            return send(it.file, '', function (t) {
-              var w = wait.querySelector('.ai-wait-text');
-              if (w) w.textContent = (items.length > 1 ? 'File ' + (i + 1) + ' of ' + items.length + ': ' : '') + t + (/Reading/.test(t) ? ' with AI… this can take up to a minute.' : '');
-            }).then(function (r) { done.push(r); }, function (e) { failed.push({ name: it.file.name, error: e }); })
-              .then(function () { return dropShared(it.key); });
-          });
-        });
-        chain.then(function () {
-          sharedBox.replaceChildren.apply(sharedBox, failed.map(function (x) { return UI.notice('error', x.name + ': ' + UI.errorText(x.error) + ' Share it again, or add it below.'); }));
-          if (failed.length) { refreshCount(); return; }
-          if (done.length === 1) {
-            var r = done[0];
-            FleetApp.setFlash(r.status === 'Pending' ? 'ok' : 'info', r.status === 'Pending' ? 'The shared file was read. Check what it says, then draft the entry.' : (r.note || 'The shared file was saved here.'));
-            FleetApp.go('/inbox/' + r.id);
-          } else {
-            FleetApp.setFlash('ok', done.length + ' shared files added. Open each one to check it.');
-            FleetApp.go('/inbox');
-          }
-        });
+        var drop = function () { return Promise.all(items.map(function (it) { return dropShared(it.key); })); };
+        var discard = el('button', { type: 'button', class: 'linklike', text: 'Discard what was shared' });
+        discard.addEventListener('click', function () { drop().then(function () { sharedBox.replaceChildren(); }); });
+        sharedBox.replaceChildren(el('div', { class: 'report-box shared-box' }, [
+          el('h2', { text: items.length > 1 ? items.length + ' shared files' : 'Shared file' }),
+          el('p', { class: 'muted small-text', text: items.map(function (it) { return it.file.name; }).join(', ') }),
+          uploadForm(cars, '', items.map(function (it) { return it.file; }), drop),
+          discard,
+        ]));
       });
-    }
-    checkShared();
-
-    /** Store the file, then have it read. Resolves to the receipt (read, or kept for filling in by hand). */
-    function send(f, carId, progress) {
-      return Photos.prepareAttachment(f).then(function (a) {
-        if (a.mime !== 'image/jpeg' && a.mime !== 'application/pdf') throw new FleetApi.ApiError('invalid_attachment', 'Not a photo or PDF');
-        return FleetApi.call('uploadReceipt', { carId: carId, mime: a.mime, data: a.data, filename: a.filename }, { timeoutMs: UPLOAD_TIMEOUT_MS });
-      }).then(function (r) {
-        progress('Reading the receipt…');
-        return FleetApi.call('readReceipt', { id: r.data.receipt.id }, { timeoutMs: READ_TIMEOUT_MS }).then(function (x) { return x.data.receipt; }, function () {
-          return r.data.receipt; // saved; reading can be tried again from its page
-        });
-      }).then(function (r) { refreshCount(); return r; });
     }
 
     function row(r) {
       var title = r.vendor || r.subject || r.filename;
-      var bits = [KIND_LABEL[r.kind] || '', r.date ? when(r.date) : '', r.total !== null ? fmt().money(r.total, r.currency || 'GBP') : '', r.car || ''].filter(Boolean);
+      var bits = [KIND_LABEL[r.kind] || '', r.issueCount ? r.issueCount + ' issue' + (r.issueCount === 1 ? '' : 's') : '', r.date ? when(r.date) : '', r.total !== null && r.kind !== 'Issue' ? fmt().money(r.total, r.currency || 'GBP') : '', r.car || ''].filter(Boolean);
       return el('a', { class: 'inbox-row', href: '#/inbox/' + r.id }, [
         el('div', { class: 'inbox-title', text: title }),
         el('div', { class: 'muted small-text', text: bits.join(' · ') || 'Not read yet' }),
@@ -235,9 +258,10 @@
       cars = res[1].data.cars || [];
       reading = data.reading;
       setCount(data.open.length);
-      FleetApp.setBanner({ subtitle: data.open.length ? data.open.length + (data.open.length === 1 ? ' receipt waiting to be checked' : ' receipts waiting to be checked') : 'Nothing waiting' });
+      FleetApp.setBanner({ subtitle: data.open.length ? data.open.length + ' waiting to be checked' : 'Nothing waiting' });
       fileBox.replaceChildren(addBlock());
-      listBox.replaceChildren.apply(listBox, data.open.length ? data.open.map(row) : [el('p', { class: 'muted', text: 'Nothing is waiting. Add a receipt above' + (data.reading ? '' : ', or email one once that is switched on') + '.' })]);
+      checkShared();
+      listBox.replaceChildren.apply(listBox, data.open.length ? data.open.map(row) : [el('p', { class: 'muted', text: 'Nothing is waiting. Add something above' + (data.reading ? '' : ', or email it once that is switched on') + '.' })]);
       if (data.recent.length) {
         recentBox.replaceChildren(el('details', { class: 'copy-section' }, [el('summary', { text: 'Recently handled (' + data.recent.length + ')' }), el('div', { class: 'stack' }, data.recent.map(row))]));
       }
@@ -276,10 +300,10 @@
       }
       var carName = '';
       cars.forEach(function (c) { if (c.id === r.carId) carName = c.registration + ' · ' + c.make + ' ' + c.model; });
+      var isReport = r.kind === 'Issue';
       fact('Shop or garage', r.vendor);
       fact('Date', r.date ? when(r.date) : '');
-      fact('Total', money(r.total));
-      fact('Order or invoice no.', d.orderNumber);
+      if (!isReport) { fact('Total', money(r.total)); fact('Order or invoice no.', d.orderNumber); } else fact('Report reference', d.reportRef);
       fact('Registration on it', d.registration);
       fact('Mileage on it', d.mileage ? fmt().num(d.mileage) + ' mi' : '');
       if (d.title) fact('Entry title it would get', d.title, true);
@@ -287,7 +311,7 @@
       if (d.work) fact('Work described', d.work, true);
       if (d.summary) fact('AI summary', d.summary, true);
       var readoutHead = el('div', { class: 'readout-head' }, [
-        KIND_LABEL[r.kind] ? el('span', { class: 'chip ' + (r.kind === 'Maintenance' ? 't-maintenance' : 't-purchase'), text: KIND_LABEL[r.kind] }) : el('span', { class: 'chip', text: 'Type not clear' }),
+        KIND_LABEL[r.kind] ? el('span', { class: 'chip ' + (r.kind === 'Maintenance' ? 't-maintenance' : r.kind === 'Issue' ? 't-issue' : 't-purchase'), text: KIND_LABEL[r.kind] }) : el('span', { class: 'chip', text: 'Type not clear' }),
         d.confidence ? el('span', { class: 'chip conf-' + d.confidence, text: 'AI confidence: ' + d.confidence }) : null,
       ]);
 
@@ -312,17 +336,55 @@
         : complete ? 'Items add up to ' + money(Math.round(sum * 100) / 100) + (r.total !== null ? (Math.abs(sum - r.total) > 0.011 ? ', but the total reads ' + money(r.total) + ' (a difference of ' + money(Math.round(Math.abs(sum - r.total) * 100) / 100) + ').' : ', which matches the total.') : '.')
         : 'Some items have no price, so they cannot be added up.';
 
+      var found = d.issues || [];
       var carSelect = el('select', { name: 'carId' }, [el('option', { value: '', text: 'Choose a vehicle…' })].concat(
         cars.map(function (c) { return el('option', { value: c.id, text: c.registration + ' · ' + c.make + ' ' + c.model, selected: c.id === r.carId }); })));
-      var kindSelect = el('select', { name: 'kind' }, [
-        el('option', { value: 'Purchase', text: 'A parts purchase (receipt for things bought)', selected: r.kind !== 'Maintenance' }),
-        el('option', { value: 'Maintenance', text: 'A garage invoice (work done on the vehicle)', selected: r.kind === 'Maintenance' }),
-      ]);
-      var go = el('button', { type: 'button', class: 'btn block big draft-btn', text: 'Draft an entry from this receipt\u00a0→' });
-      go.addEventListener('click', function () {
+      var guess = r.kind || (found.length ? 'Issue' : 'Purchase');
+      var kindSelect = el('select', { name: 'kind' }, KIND_CHOICES.map(function (k) { return el('option', { value: k[0], text: k[1], selected: k[0] === guess }); }));
+      var next = el('div', { class: 'stack' });
+      var issuesText = function () { return found.length + ' issue' + (found.length === 1 ? '' : 's'); };
+      function draftEntry(kind) {
         if (!carSelect.value) { msg.replaceChildren(UI.notice('error', 'Choose which vehicle this is for.')); return; }
-        FleetApp.go('/car/' + carSelect.value + '/add/' + kindSelect.value.toLowerCase(), { inbox: r.id });
-      });
+        FleetApp.go('/car/' + carSelect.value + '/add/' + kind.toLowerCase(), { inbox: r.id });
+      }
+      function review(as) {
+        var go2 = function () { FleetApp.go('/inbox/' + r.id + '/review', as ? { as: as } : undefined); };
+        if (carSelect.value && carSelect.value !== r.carId) { // keep the vehicle chosen here for the review
+          FleetApi.call('setReceiptCar', { id: r.id, carId: carSelect.value }).then(go2, function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+        } else go2();
+      }
+      function button(text, cls, onClick) {
+        var b = el('button', { type: 'button', class: cls, text: text });
+        b.addEventListener('click', function () { onClick(b); });
+        return b;
+      }
+      function readAs(kind, b) {
+        msg.replaceChildren(UI.waiting('Reading with AI… this can take up to a minute.'));
+        UI.busy(b, 'Reading…', FleetApi.call('readReceipt', { id: r.id, kind: kind }, { timeoutMs: READ_TIMEOUT_MS })).then(function (x) {
+          refreshCount();
+          openResult([x.data.receipt]);
+        }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+      }
+      function drawNext() {
+        var kind = kindSelect.value;
+        var kids = [];
+        if (kind === 'Issue') {
+          if (found.length) kids.push(button('Review ' + issuesText() + '\u00a0→', 'btn block big draft-btn', function () { review(''); }));
+          else {
+            kids.push(button(r.status === 'New' ? 'Read it with AI' : 'Read it again as an issue', 'btn block big', function (b) { readAs('Issue', b); }));
+            kids.push(button('Add the issues by hand', 'btn block secondary', function () { review(''); }));
+          }
+        } else if (kind === 'Maintenance' && found.length) {
+          kids.push(button('Review the invoice and ' + issuesText() + '\u00a0→', 'btn block big draft-btn', function () { review('Maintenance'); }));
+          kids.push(button('Draft just the maintenance entry', 'btn block secondary', function () { draftEntry('Maintenance'); }));
+        } else {
+          kids.push(button('Draft an entry from this ' + (kind === 'Purchase' ? 'receipt' : 'invoice') + '\u00a0→', 'btn block big draft-btn', function () { draftEntry(kind); }));
+        }
+        kids.push(el('p', { class: 'small-text muted center', text: 'You\'ll have a chance to edit before saving.' }));
+        next.replaceChildren.apply(next, kids);
+      }
+      kindSelect.addEventListener('change', drawNext);
+      drawNext();
 
       var again = null;
       if (r.status !== 'Pending' && open) {
@@ -337,9 +399,9 @@
       }
       var dismiss = null;
       if (open && FleetAuth.isAdmin()) {
-        dismiss = el('button', { type: 'button', class: 'btn small danger', text: 'Dismiss this receipt' });
+        dismiss = el('button', { type: 'button', class: 'btn small danger', text: 'Dismiss' });
         dismiss.addEventListener('click', function () {
-          UI.confirm('Dismiss this receipt? It is removed from the Inbox and its file goes to the Drive bin.', { okLabel: 'Dismiss', danger: true }).then(function (yes) {
+          UI.confirm('Dismiss this? It is removed from the Inbox and its files go to the Drive bin.', { okLabel: 'Dismiss', danger: true }).then(function (yes) {
             if (!yes) return;
             UI.busy(dismiss, 'Dismissing…', FleetApi.call('dismissReceipt', { id: r.id })).then(function () {
               refreshCount();
@@ -350,34 +412,36 @@
       }
 
       var done = null;
-      if (r.status === 'Approved') done = el('p', {}, [el('span', { text: 'This receipt was added as an entry. ' }), r.entryId && r.carId ? el('a', { href: '#/car/' + r.carId + '/entry/' + r.entryId, text: 'Open the entry' }) : null]);
-      else if (r.status === 'Dismissed') done = el('p', { class: 'muted', text: 'This receipt was dismissed.' });
+      if (r.status === 'Approved') done = el('p', {}, [el('span', { text: 'This has been added to the log. ' }), r.entryId && r.carId ? el('a', { href: '#/car/' + r.carId + '/entry/' + r.entryId, text: 'Open the entry' }) : null]);
+      else if (r.status === 'Dismissed') done = el('p', { class: 'muted', text: 'This was dismissed.' });
 
       root.replaceChildren(el('section', { class: 'card' }, [
         fmt().backLink('#/inbox', 'AI Inbox'),
-        el('h1', { text: r.vendor || r.subject || 'Receipt' }),
+        el('h1', { text: r.vendor || r.subject || r.filename }),
         el('p', { class: 'muted small-text', text: (STATUS_LABEL[r.status] || r.status) + ' · ' + (r.source === 'email' ? 'Emailed' : 'Added') + (r.sender ? ' by ' + r.sender : '') + ' · ' + when(r.receivedAt) + ' · ' + r.filename + ' (' + kb(r.size) + ')' }),
         msg,
         r.note ? UI.notice(r.status === 'Pending' ? 'warn' : 'info', r.note) : null,
-        viewer(r, function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); }),
+        (r.files || []).length > 1 ? el('div', { class: 'stack' }, r.files.map(function (f) { return viewer({ id: r.id, index: f.index, mime: f.mime, filename: f.filename }, function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); }, f.filename); }))
+          : viewer(r, function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); }),
         r.status === 'New' ? null : el('h2', { text: 'What AI read from it' }),
         r.status === 'New' ? null : readoutHead,
         r.status === 'New' ? null : el('div', { class: 'facts' }, facts),
-        r.status === 'New' ? null : el('h3', { class: 'readout-items', text: 'Items' }),
-        r.status === 'New' ? null : table,
-        r.status === 'New' ? null : el('p', { class: 'muted small-text', text: itemsNote }),
-        d.kind || r.status === 'Pending' ? el('p', { class: 'section-note', text: 'The AI can get things wrong. You will check every box on the next screen before anything is saved.' }) : null,
+        r.status === 'New' || !found.length ? null : el('h3', { class: 'readout-items', text: 'Issues found (' + found.length + ')' }),
+        r.status === 'New' || !found.length ? null : el('ul', { class: 'plain-list' }, found.map(function (i) { return el('li', { text: i.title + (i.codes && i.codes.length ? ' (' + i.codes.map(function (c) { return c.code; }).join(', ') + ')' : '') }); })),
+        r.status === 'New' || isReport ? null : el('h3', { class: 'readout-items', text: 'Items' }),
+        r.status === 'New' || isReport ? null : table,
+        r.status === 'New' || isReport ? null : el('p', { class: 'muted small-text', text: itemsNote }),
+        d.kind || r.status === 'Pending' ? el('p', { class: 'section-note', text: 'The AI can get things wrong. You will check everything on the next screen before anything is saved.' }) : null,
         done,
         open ? el('div', { class: 'stack' }, [
           el('div', { class: 'field' }, [el('label', { text: 'Which vehicle is it for?' }), carSelect]),
-          el('div', { class: 'field' }, [el('label', { text: 'What kind of entry should it become?' }), kindSelect]),
-          go,
-          el('p', { class: 'small-text muted center' , text: 'You\'ll have a chance to edit before saving the entry.' }),
+          el('div', { class: 'field' }, [el('label', { text: 'What is it?' }), kindSelect]),
+          next,
           el('div', { class: 'btn-row' }, [again, dismiss]),
         ]) : null,
       ]));
     }
   };
 
-  window.InboxUI = { panel: panel, refreshCount: refreshCount, getCount: function () { return count; } };
+  window.InboxUI = { panel: panel, send: send, destination: destination, openResult: openResult, refreshCount: refreshCount, getCount: function () { return count; } };
 })();

@@ -188,7 +188,7 @@ test('maintenance can link to an issue and mark it resolved; links are checked',
   assert.equal(r.data.issueResolved, true);
   assert.equal(get(i.id).data.entry.status, 'Resolved');
   assert.deepEqual(get(i.id).data.fixedBy.map((x) => x.title), ['Replaced brake pads']);
-  assert.equal(get(r.data.entry.id).data.linkedIssue.title, 'Faulty parking sensor');
+  assert.deepEqual(get(r.data.entry.id).data.linkedIssues.map((x) => [x.title, x.resolves]), [['Faulty parking sensor', true]]);
 
   // without the flag the issue is left alone
   const i2 = add('Issue', issue({ title: 'Noise' })).data.entry;
@@ -201,8 +201,72 @@ test('maintenance can link to an issue and mark it resolved; links are checked',
   const other = env.call('saveCar', { token: sam, fields: { registration: 'OTHER 1', make: 'Ford', model: 'Ka', year: '2010' } }).data.car;
   const foreign = env.call('saveEntry', { token: sam, carId: other.id, type: 'Issue', fields: issue() }).data.entry;
   assert.equal(add('Maintenance', repair({ linkedIssueId: foreign.id })).error, 'not_found');
-  const rep = list().find((e) => e.type === 'Maintenance' && e.linkedIssueId === i.id);
+  const rep = list().find((e) => e.type === 'Maintenance' && e.linkedIssueIds.includes(i.id));
   assert.ok(rep);
+});
+
+test('any entry can have a list of linked issues; between issues a link counts both ways', () => {
+  const { env, sam, admin, add, get } = setup();
+  const a = add('Issue', issue({ title: 'A' })).data.entry;
+  const b = add('Issue', issue({ title: 'B' }), { links: [{ issueId: a.id }] }).data.entry;
+  const c = add('Issue', issue({ title: 'C' })).data.entry;
+  const titles = (id) => get(id).data.linkedIssues.map((x) => x.title);
+  assert.deepEqual(titles(b.id), ['A']);
+  assert.deepEqual(titles(a.id), ['B'], 'the other issue shows it too');
+  const job = add('Maintenance', repair(), { links: [{ issueId: a.id, resolves: true }, { issueId: c.id, resolves: false }, { issueId: c.id }] }).data;
+  assert.equal(job.issueResolved, true);
+  assert.deepEqual(get(job.entry.id).data.linkedIssues.map((x) => [x.title, x.resolves, x.status]), [['A', true, 'Resolved'], ['C', false, 'Not resolved']]);
+  const buy = add('Purchase', purchase(), { links: [{ issueId: c.id, resolves: true }] }).data.entry;
+  assert.deepEqual(get(buy.id).data.linkedIssues.map((x) => [x.title, x.resolves]), [['C', false]], 'only maintenance resolves');
+  assert.equal(get(c.id).data.entry.status, 'Not resolved');
+  assert.deepEqual(get(c.id).data.related.map((x) => x.type).sort(), ['Maintenance', 'Purchase']);
+  assert.deepEqual(titles(c.id), [], 'a job or a purchase is not an "issue linked to an issue"');
+
+  // checks: only live issues of the same car, never itself; a save without links leaves them; an empty list removes them
+  const edit = (e, extra, fields) => env.call('saveEntry', Object.assign({ token: sam, id: e.id, version: get(e.id).data.entry.version, fields: fields || issue({ title: e.title }) }, extra || {}));
+  assert.equal(edit(a, { links: [{ issueId: a.id }] }).error, 'not_found');
+  assert.equal(edit(a, { links: [{ issueId: job.entry.id }] }).error, 'not_found');
+  assert.equal(edit(a, { links: 'all' }).error, 'invalid_input');
+  assert.equal(edit(a).ok, true);
+  assert.deepEqual(titles(a.id), ['B']);
+  assert.equal(edit(a, { links: [{ issueId: c.id }] }).ok, true);
+  assert.deepEqual(titles(a.id), ['C']);
+  assert.deepEqual(titles(b.id), [], 'unlinked from both sides');
+  assert.equal(edit(a, { links: [] }).ok, true);
+  assert.deepEqual(titles(a.id), []);
+
+  // a deleted issue drops out of the lists and comes back when it is restored
+  env.call('deleteEntry', { token: admin, id: c.id });
+  assert.deepEqual(get(job.entry.id).data.linkedIssues.map((x) => x.title), ['A']);
+  const jobNow = get(job.entry.id).data.entry;
+  env.call('saveEntry', { token: sam, id: jobNow.id, version: jobNow.version, fields: repair(), links: [{ issueId: a.id, resolves: true }] });
+  env.call('restoreEntry', { token: admin, id: c.id });
+  assert.deepEqual(get(job.entry.id).data.linkedIssues.map((x) => x.title), ['A', 'C'], 'the link to the restored issue was kept');
+});
+
+test('the migration moves a maintenance entry\'s single issue link into the list', () => {
+  const { env, sam, car, add, get } = setup();
+  const i = add('Issue', issue()).data.entry;
+  const job = add('Maintenance', repair()).data.entry;
+  const col = env.sheets.Entries._rows[0].indexOf('linked_issue_id');
+  env.sheets.Entries._rows.forEach((r, n) => { if (n > 0 && r[0] === job.id) r[col] = i.id; });
+  env.invalidate();
+  env.props.SCHEMA_VERSION = '32';
+  assert.deepEqual(get(job.id).data.linkedIssues.map((x) => [x.id, x.resolves]), [[i.id, false]]);
+  assert.deepEqual(get(i.id).data.fixedBy.map((x) => x.id), [job.id]);
+  assert.ok(car && sam);
+});
+
+test('an issue has an inspection fee that counts and a quoted repair cost that never does', () => {
+  const { env, sam, car, add, get } = setup();
+  const e = add('Issue', issue({ cost: '60', currency: 'GBP', quoteCost: '420', quoteCurrency: 'GBP' })).data.entry;
+  assert.deepEqual([get(e.id).data.entry.cost, get(e.id).data.entry.quoteCost, get(e.id).data.entry.quoteCurrency], [60, 420, 'GBP']);
+  const spent = () => env.call('getCarCosts', { token: sam, carId: car.id }).data.currencies.map((x) => [x.currency, x.total]);
+  assert.deepEqual(spent(), [['GBP', 60]]);
+  assert.equal(add('Issue', issue({ quoteCost: 'lots' })).error, 'invalid_cost');
+  // an older app that does not send the quote keeps it
+  env.call('saveEntry', { token: sam, id: e.id, version: e.version, fields: issue({ cost: '60', currency: 'GBP', title: 'Renamed' }) });
+  assert.equal(get(e.id).data.entry.quoteCost, 420);
 });
 
 test('the old "Repair" type is now Maintenance: a stale app is accepted, and stored Repair rows are converted by the migration', () => {
@@ -224,7 +288,7 @@ test('the old "Repair" type is now Maintenance: a stale app is accepted, and sto
   assert.equal(back.entry.type, 'Maintenance');
   assert.equal(back.entry.title, 'Old brake job');
   assert.equal(back.parts.length, 1, 'its parts are still attached');
-  assert.equal(back.linkedIssue.id, i.id, 'and its issue link');
+  assert.equal(back.linkedIssues[0].id, i.id, 'and its issue link');
   assert.equal(get(i.id).data.fixedBy.some((x) => x.id === old.id), true);
   assert.ok(env.sheets.Audit._rows.some((r) => r[3] === 'entry_types_merged'));
   assert.equal(env.call('saveEntry', { token: sam, carId: i.carId, type: 'Nonsense', fields: {} }).error, 'invalid_type');

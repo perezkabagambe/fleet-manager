@@ -31,8 +31,10 @@ const SCHEMA = {
     cols: ['car_id', 'type', 'title', 'notes', 'date', 'mileage', 'cost', 'currency', 'vendor', 'status',
       'linked_issue_id', 'task_id', 'cost_mode', 'lump_sum_cost', 'labour_cost', 'labour_note', 'labour_hours',
       'other_cost', 'other_note', 'part_number', 'quantity', 'unit_cost', 'shipping_cost', 'product_url', 'expiry_date',
-      'mileage_unit', 'labour_currency', 'other_currency', 'lump_currency', 'ref', 'deleted_at', 'identified_by'],
+      'mileage_unit', 'labour_currency', 'other_currency', 'lump_currency', 'ref', 'deleted_at', 'identified_by', 'quote_cost', 'quote_currency', 'fee_group', 'quote_group'],
   },
+  // Issues linked to an entry of any kind (one row per link; between two issues it counts both ways). `resolves`: a maintenance entry resolved that issue.
+  EntryLinks: { base: true, cols: ['car_id', 'entry_id', 'issue_id', 'resolves'] },
   // People who scanned a car's QR code: one row per guest name, kept for ever so a name is never reused.
   Guests: { base: true, cols: ['car_id', 'name', 'name_key', 'token_hash', 'expires_at', 'blocked', 'last_seen'] },
   // Documents kept against a whole car (logbook, insurance, import papers...); the files live in its Drive folder.
@@ -54,7 +56,7 @@ const SCHEMA = {
   Inbox: {
     base: true,
     cols: ['source', 'status', 'car_id', 'kind', 'received_at', 'sender', 'subject', 'filename', 'mime', 'size', 'drive_file_id', 'data',
-      'vendor', 'date', 'total', 'currency', 'order_ref', 'note', 'duplicate_of', 'entry_id', 'handled_by', 'handled_at', 'notified', 'email_id', 'sender_id', 'retry_after', 'attempts', 'ack_sent', 'email_text'],
+      'vendor', 'date', 'total', 'currency', 'order_ref', 'note', 'duplicate_of', 'entry_id', 'handled_by', 'handled_at', 'notified', 'email_id', 'sender_id', 'retry_after', 'attempts', 'ack_sent', 'email_text', 'files', 'chosen_kind'],
   },
   Locks: { base: false, cols: ['record_type', 'record_id', 'user_id', 'acquired_at', 'heartbeat_at'] },
   Audit: { base: false, cols: ['timestamp', 'user_id', 'user_email', 'action', 'record_type', 'record_id', 'summary', 'before', 'after'] },
@@ -63,7 +65,7 @@ const SCHEMA = {
 
 // Bump this whenever SCHEMA changes. The next request after a deploy then adds any
 // missing tabs/columns automatically (additive only), so setup need not be re-run.
-const SCHEMA_VERSION = 32; // 32: a car has an engine size in litres (Cars.engine_size) (31: an issue can say which user identified it (Entries.identified_by) (30: Compliance entries are gone; compliance reminders are renewed on their own (TaskRenewals tab) (29: a car can have several parts catalogues (Cars.catalogues, JSON) (28: a car keeps its parts catalogue website's icon (Cars.catalogue_icon) (27: a car has a fuel type (Cars.fuel_type) (26: a car has a transmission type (Cars.transmission) (25: a car can have up to 15 photos (CarPhotos tab) (24: deleted entries keep when they were deleted (recycle bin, Entries.deleted_at) (23: receipts can wait for the daily reading allowance (Inbox queue columns) (22: receipts can arrive by email (Cars.receipt_secret, Inbox.email_id) (21: receipts waiting for review (Inbox tab) (20: a purchase can hold several items (PurchaseItems tab) (19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
+const SCHEMA_VERSION = 33; // 33: inspection reports: quoted and shared amounts on issues, linked issues on any entry (EntryLinks), several files per Inbox item (32: a car has an engine size in litres (Cars.engine_size) (31: an issue can say which user identified it (Entries.identified_by) (30: Compliance entries are gone; compliance reminders are renewed on their own (TaskRenewals tab) (29: a car can have several parts catalogues (Cars.catalogues, JSON) (28: a car keeps its parts catalogue website's icon (Cars.catalogue_icon) (27: a car has a fuel type (Cars.fuel_type) (26: a car has a transmission type (Cars.transmission) (25: a car can have up to 15 photos (CarPhotos tab) (24: deleted entries keep when they were deleted (recycle bin, Entries.deleted_at) (23: receipts can wait for the daily reading allowance (Inbox queue columns) (22: receipts can arrive by email (Cars.receipt_secret, Inbox.email_id) (21: receipts waiting for review (Inbox tab) (20: a purchase can hold several items (PurchaseItems tab) (19: every attachment and car document has an ID such as A-0042 (18: bulbs are a kind of fluid-list row instead of having "Bulb: " in their name (17: every entry has a reference number such as M-0042 (16: image attachments get a small thumbnail (thumb_file_id) (15: every distance is in miles (14: car documents tab (13: Cars get market, drive_side, import_date and fuel_capacity columns (12: Cars get engine_code and gearbox_code columns (11: guest access is switched on for every car (10: guest access (every car gets a QR secret) (9: Repair entries become Maintenance; 8: the migration also creates the weekly reminder trigger)
 
 /** Add any missing tabs and columns. Never renames or removes anything. */
 function ensureSchema_(ss) {
@@ -88,6 +90,7 @@ function migrateIfNeeded_() {
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 19) numberExistingFiles_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 25) listExistingCarPhotos_();
     if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 30) eraseComplianceEntries_();
+    if (Number(props.getProperty('SCHEMA_VERSION') || 0) < 33) moveSingleIssueLinks_();
     Db.invalidateAll(); // the sheets were changed directly: nothing remembered about them can be trusted
     props.setProperty('SCHEMA_VERSION', String(SCHEMA_VERSION));
   } finally {
@@ -241,6 +244,20 @@ function eraseComplianceEntries_() {
   ids.forEach(function (id) { top = Math.max(top, refNumber_(gone[id].ref, 'C')); });
   props_().setProperty('REF_C', String(top));
   audit_(null, 'compliance_entries_erased', 'Entries', '', ids.length + ' Compliance entr' + (ids.length === 1 ? 'y' : 'ies') + ' erased (compliance is now handled by reminders)');
+}
+
+/** One-off (version 33): a maintenance entry used to link to one issue (Entries.linked_issue_id). Links now live in EntryLinks. */
+function moveSingleIssueLinks_() {
+  const have = {};
+  Db.all('EntryLinks').forEach(function (l) { have[l.entry_id + '|' + l.issue_id] = true; });
+  const now = nowIso_();
+  let n = 0;
+  Db.all('Entries').forEach(function (e) {
+    if (!e.linked_issue_id || have[e.id + '|' + e.linked_issue_id]) return;
+    Db.insert('EntryLinks', { id: Utilities.getUuid(), created_at: now, created_by: e.updated_by || e.created_by, updated_at: now, updated_by: e.updated_by || e.created_by, version: 1, deleted: false, car_id: e.car_id, entry_id: e.id, issue_id: e.linked_issue_id, resolves: '' });
+    n++;
+  });
+  if (n) audit_(null, 'issue_links_moved', 'Entries', '', n + ' issue link' + (n === 1 ? '' : 's') + ' moved to the linked issues list');
 }
 
 /** One-off (version 11): guest access starts ON for every car. Admins can switch any car off afterwards, and that choice is kept. */

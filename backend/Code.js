@@ -105,6 +105,9 @@ function actions_() {
     resetReceiptTimer: { auth: 'admin', fn: resetReceiptTimer_ },
     processReceiptsNow: { auth: 'admin', fn: processReceiptsNow_ }, // no script lock: it waits for outside services
     uploadReceipt: { auth: 'user', lock: true, fn: uploadReceipt_ },
+    addReceiptFile: { auth: 'user', lock: true, fn: addReceiptFile_ },
+    setReceiptCar: { auth: 'user', lock: true, fn: setReceiptCar_ },
+    saveReport: { auth: 'user', lock: true, fn: saveReport_ },
     readReceipt: { auth: 'user', fn: readReceipt_ }, // no script lock: it waits for an outside service and must not block everyone else
     listInbox: { auth: 'user', fn: listInbox_ },
     getInboxCount: { auth: 'user', fn: getInboxCount_ },
