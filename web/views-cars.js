@@ -445,18 +445,22 @@
         setTimeout(fitNotes, 400);
       }
 
-      // "I own or look after this car": a quick toggle, so nobody has to open Edit car for it
+      // "I own or look after this car": a quick way to add yourself, so nobody has to open Edit car for it. It is only offered to someone
+      // who is not listed yet; taking yourself off is done in Edit car.
       var me = FleetAuth.getUser();
       var isMine = !!me && people.owners.some(function (x) { return x.userId === me.id; });
-      var mineBtn = el('button', { type: 'button', class: 'btn small secondary', text: isMine ? 'I no longer look after this car' : 'I own or look after this car' });
-      mineBtn.addEventListener('click', function () {
-        msg.replaceChildren();
-        UI.busy(mineBtn, 'Saving…', FleetApi.call('setMyCarRole', { carId: car.id, owner: !isMine })).then(function () {
-          carsCache = null;
-          FleetApp.setFlash('ok', isMine ? 'You are no longer listed as an owner/custodian of this car.' : 'You are now listed as an owner/custodian of this car. Its reminders will come to you.');
-          Views.car(Object.assign({}, ctx, { keepOpen: true }), root);
-        }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
-      });
+      var mineBtn = null;
+      if (!isMine) {
+        mineBtn = el('button', { type: 'button', class: 'btn small secondary', text: 'I own or look after this car' });
+        mineBtn.addEventListener('click', function () {
+          msg.replaceChildren();
+          UI.busy(mineBtn, 'Saving…', FleetApi.call('setMyCarRole', { carId: car.id, owner: true })).then(function () {
+            carsCache = null;
+            FleetApp.setFlash('ok', 'You are now listed as an owner/custodian of this car. Its reminders will come to you.');
+            Views.car(Object.assign({}, ctx, { keepOpen: true }), root);
+          }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
+        });
+      }
 
       // Fluids are blue with a water drop; bulbs are amber with a light bulb.
       function specRow(f, name, kind) {
@@ -517,7 +521,7 @@
           Photos.carousel(car),
           detailGroups,
           car.notes ? el('div', { class: 'car-notes' }, [el('div', { class: 'car-notes-label', text: 'Notes' }), notesEl, notesMore]) : null,
-          el('div', { class: 'btn-row' }, [mineBtn]),
+          mineBtn ? el('div', { class: 'btn-row' }, [mineBtn]) : null,
         ]),
         collapsible('Odometer Log', el('section', { class: 'card' }, [
           el('h2', { text: 'Odometer Log' }),
