@@ -366,45 +366,37 @@
           openResult([x.data.receipt]);
         }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
       }
+      // The buttons when there is nothing from AI to use: ask AI (again), or type it in.
+      function askOrType(kind) {
+        return [
+          button(r.status === 'New' ? 'Process with AI' : '\u21bb Retry AI processing', 'btn block big', function (b) { readAs(kind, b); }),
+          el('p', { class: 'small-text muted center btn-caption', text: 'You check what AI finds before anything is saved.' }),
+          el('p', { class: 'or-rule', text: 'or' }),
+          kind === 'Issue' ? button('Add the issues by hand', 'btn block secondary', function () { review(''); })
+            : button('Fill in the entry by hand', 'btn block secondary', function () { draftEntry(kind); }),
+        ];
+      }
       function drawNext() {
         var kind = kindSelect.value;
         var kids = [];
-        if (!wasRead) { // not read yet (the AI was busy, or it has not been asked): read it now, or fill it in by hand
-          kids.push(button('Read it with AI now', 'btn block big', function (b) { readAs(kind, b); }));
-          kids.push(kind === 'Issue' ? button('Add the issues by hand', 'btn block secondary', function () { review(''); })
-            : button('Fill in the entry by hand', 'btn block secondary', function () { draftEntry(kind); }));
-        } else if (kind === 'Issue') {
-          if (found.length) kids.push(button('Review ' + issuesText() + '\u00a0→', 'btn block big draft-btn', function () { review(''); }));
-          else {
-            kids.push(button('Read it again as an issue', 'btn block big', function (b) { readAs('Issue', b); }));
-            kids.push(button('Add the issues by hand', 'btn block secondary', function () { review(''); }));
-          }
-        } else if (kind === 'Maintenance' && found.length) {
+        var asking = !wasRead || (kind === 'Issue' && !found.length); // not read yet, or read without finding any issues
+        if (asking) kids = askOrType(kind);
+        else if (kind === 'Issue') kids.push(button('Review ' + issuesText() + '\u00a0→', 'btn block big draft-btn', function () { review(''); }));
+        else if (kind === 'Maintenance' && found.length) {
           kids.push(button('Review the invoice and ' + issuesText() + '\u00a0→', 'btn block big draft-btn', function () { review('Maintenance'); }));
           kids.push(button('Draft just the maintenance entry', 'btn block secondary', function () { draftEntry('Maintenance'); }));
         } else {
           kids.push(button('Draft an entry from this ' + (kind === 'Purchase' ? 'receipt' : 'invoice') + '\u00a0→', 'btn block big draft-btn', function () { draftEntry(kind); }));
         }
-        kids.push(el('p', { class: 'small-text muted center', text: 'You\'ll have a chance to edit before saving.' }));
+        if (!asking && r.status !== 'Pending') kids.push(button('\u21bb Retry AI processing', 'btn block secondary', function (b) { readAs(kind, b); }));
         next.replaceChildren.apply(next, kids);
       }
       kindSelect.addEventListener('change', drawNext);
       drawNext();
 
-      var again = null;
-      if (wasRead && r.status !== 'Pending' && open) { // when it has not been read, "Read it with AI now" above does this
-        again = el('button', { type: 'button', class: 'btn small secondary', text: 'Try reading it again' });
-        again.addEventListener('click', function () {
-          msg.replaceChildren(UI.waiting('Reading the receipt with AI… this can take up to a minute.'));
-          UI.busy(again, 'Reading…', FleetApi.call('readReceipt', { id: r.id }, { timeoutMs: READ_TIMEOUT_MS })).then(function () {
-            refreshCount();
-            FleetApp.go('/inbox/' + r.id);
-          }).catch(function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); });
-        });
-      }
       var dismiss = null;
       if (open && FleetAuth.isAdmin()) {
-        dismiss = el('button', { type: 'button', class: 'btn small danger', text: 'Dismiss' });
+        dismiss = el('button', { type: 'button', class: 'linklike quiet-danger', text: 'Dismiss this upload' });
         dismiss.addEventListener('click', function () {
           UI.confirm('Dismiss this? It is removed from the Inbox and its files go to the Drive bin.', { okLabel: 'Dismiss', danger: true }).then(function (yes) {
             if (!yes) return;
@@ -443,7 +435,7 @@
           el('div', { class: 'field' }, [el('label', { text: 'Which vehicle is it for?' }), carSelect]),
           el('div', { class: 'field' }, [el('label', { text: 'What is it?' }), kindSelect]),
           next,
-          el('div', { class: 'btn-row' }, [again, dismiss]),
+          dismiss ? el('div', { class: 'inbox-foot' }, [dismiss]) : null,
         ]) : null,
       ]));
     }
