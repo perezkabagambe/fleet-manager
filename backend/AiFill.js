@@ -113,7 +113,7 @@ function aiNeedEnough_(known) {
 
 /**
  * Enough to fill in a car's technical details: a VIN, or without one the make, model, year, transmission, drive side, fuel type and
- * engine size (an electric car has no engine size, so it is not asked for). Applies to the form's "Use AI to fill in technical details".
+ * engine size (an electric car has no engine size, so it is not asked for). Applies to "Use AI to fill in technical details" and "Refresh specs".
  */
 function aiNeedTechnical_(known) {
   if (known.vin) return;
@@ -415,8 +415,11 @@ function aiRefreshSpecs_(p, ctx) {
     registration: car.registration, vin: car.vin, country: car.country, make: car.make, model: car.model, year: car.year, colour: car.colour,
     engineCode: car.engine_code, gearboxCode: car.gearbox_code, transmission: car.transmission, fuelType: car.fuel_type, market: car.market, driveSide: car.drive_side, fuelCapacity: car.fuel_capacity, engineSize: car.engine_size,
   });
+  // the same rule as "Use AI to fill in technical details": a VIN, or all the details AI needs without one
+  if (!aiKey_()) fail_('ai_not_set_up');
+  aiNeedTechnical_(known);
   const out = aiRun_(ctx, known, aiFillPrompt_(known), aiClean_, function (r) {
-    return 'AI specs refresh for ' + car.registration + ' (' + (known.vin ? 'by VIN' : 'by make and model') + ', ' + r.confidence + ' confidence, ' + r.fluids.length + ' fluids, ' + r.bulbs.length + ' bulbs)';
+    return 'AI specs refresh for ' + car.registration + ' (' + (known.vin ? 'by VIN' : 'by its details') + ', ' + r.confidence + ' confidence, ' + r.fluids.length + ' fluids, ' + r.bulbs.length + ' bulbs)';
   });
   delete out.details; // a refresh is about the specs only: the car's own details are left alone
   return out;

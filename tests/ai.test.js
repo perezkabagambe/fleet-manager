@@ -173,7 +173,7 @@ test('with no VIN, a few likely matches are offered: at most three, only usable 
   assert.deepEqual(find().data.candidates, []);
 });
 
-test('refresh specs: a saved car is looked up by its VIN first, then its make and model; details are left alone', () => {
+test('refresh specs: a saved car is looked up by its VIN, or without one by all the details AI needs; details are left alone', () => {
   const { env, sam } = setup();
   env.state.gemini = () => reply(GOOD);
   const car = env.call('saveCar', { token: sam, fields: { registration: 'MV56 HUH', make: 'Kia', model: 'Sorento', year: '2013', vin: 'KNAKU814SE5455201', engineCode: 'D4HB', odometer: '1' } }).data.car;
@@ -185,10 +185,22 @@ test('refresh specs: a saved car is looked up by its VIN first, then its make an
   const prompt = env.state.geminiRequests[0].body.contents[0].parts[0].text;
   assert.match(prompt, /VIN: KNAKU814SE5455201/);
   assert.match(prompt, /engine code D4HB/);
-  const noVin = env.call('saveCar', { token: sam, fields: { registration: 'ZZ99 ZZZ', make: 'Toyota', model: 'Hilux', year: '2012', odometer: '1' } }).data.car;
+  // without a VIN it follows the same rule as filling in technical details
+  const full = { make: 'Toyota', model: 'Hilux', year: '2012', odometer: '1', transmission: 'Manual', driveSide: 'RHD', fuelType: 'Diesel', engineSize: '3.0' };
+  ['transmission', 'driveSide', 'fuelType', 'engineSize'].forEach((missing, n) => {
+    const short = env.call('saveCar', { token: sam, fields: Object.assign({}, full, { registration: 'SH0' + n + ' RTX', [missing]: '' }) }).data.car;
+    assert.equal(env.call('aiRefreshSpecs', { token: sam, carId: short.id }).error, 'ai_need_details', 'without ' + missing);
+  });
+  assert.equal(env.state.geminiRequests.length, 1, 'nothing was sent for those');
+  assert.equal(env.call('aiStatus', { token: sam }).data.remaining, 9, 'and no lookup was used');
+  const noVin = env.call('saveCar', { token: sam, fields: Object.assign({ registration: 'ZZ99 ZZZ' }, full) }).data.car;
   const r2 = env.call('aiRefreshSpecs', { token: sam, carId: noVin.id });
+  assert.equal(r2.ok, true, r2.error);
   assert.equal(r2.data.usedVin, false);
   assert.equal(/VIN:/.test(env.state.geminiRequests[1].body.contents[0].parts[0].text), false);
+  // an electric car has no engine size to give
+  const electric = env.call('saveCar', { token: sam, fields: Object.assign({}, full, { registration: 'EV12 ABC', fuelType: 'Fully electric', engineSize: '' }) }).data.car;
+  assert.equal(env.call('aiRefreshSpecs', { token: sam, carId: electric.id }).ok, true);
   assert.equal(env.call('aiRefreshSpecs', { token: sam, carId: 'nope' }).error, 'not_found');
   // nothing was changed on the car
   assert.equal(env.call('getCar', { token: sam, id: car.id }).data.car.engineCode, 'D4HB');

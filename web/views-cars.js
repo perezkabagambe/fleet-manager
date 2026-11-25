@@ -1359,15 +1359,24 @@
       function refreshSpecsBox() {
         var box = el('div', { class: 'ai-box' });
         var btn = el('button', { type: 'button', class: 'btn small secondary ai-btn', text: '✨ Refresh specs with AI' });
-        var hint = el('div', { class: 'hint', text: 'AI looks the car up (by its VIN if it has one, otherwise by its make, model and year) and suggests its fluids and bulbs. You tick which suggestions to use, and nothing changes until you tap Save changes.' });
+        var hint = el('div', { class: 'hint', text: 'AI looks the car up (by its VIN if it has one, otherwise by its details) and suggests its fluids and bulbs. You tick which suggestions to use, and nothing changes until you tap Save changes.' });
         var status = el('div', { class: 'ai-status' });
         var panel = el('div', { class: 'ai-review' });
         box.append(btn, hint, status, panel);
         box.hidden = true;
+        // The same rule as "Use AI to edit technical details", applied to the car as it is saved (which is what this looks up):
+        // a VIN, or all of these (an electric car has no engine size)
+        var lacking = String(car.vin || '').replace(/\s+/g, '').length >= 5 ? [] : [['make', 'make'], ['model', 'model'], ['year', 'year'], ['fuelType', 'fuel type'], ['engineSize', 'engine size'], ['transmission', 'transmission'], ['driveSide', 'drive side']]
+          .filter(function (n) { return !(n[0] === 'engineSize' && car.fuelType === 'Fully electric') && (car[n[0]] === null || car[n[0]] === undefined || String(car[n[0]]).trim() === ''); })
+          .map(function (n) { return n[1]; });
+        if (lacking.length) {
+          btn.disabled = true;
+          hint.textContent = 'To use this without a VIN, first add the ' + (lacking.length > 1 ? lacking.slice(0, -1).join(', ') + ' and ' + lacking[lacking.length - 1] : lacking[0]) + ', then tap Save changes.';
+        }
         FleetApi.call('aiStatus', {}).then(function (r) {
           if (!r.data.available) return;
           box.hidden = false;
-          hint.textContent += ' ' + r.data.remaining + ' of ' + r.data.limit + ' lookups left today.';
+          if (!lacking.length) hint.textContent += ' ' + r.data.remaining + ' of ' + r.data.limit + ' lookups left today.';
         }).catch(function () { /* no AI box */ });
 
         var isAi = isAiRow;
@@ -1417,7 +1426,7 @@
         }
 
         btn.addEventListener('click', function () {
-          UI.confirm('AI can get things wrong. Its answers are suggestions, not facts, and you choose which to use.\n\nTo look the car up, its registration, VIN, make, model and year are sent to Google\'s Gemini AI service, which may search the web. Google may use what is sent to improve its products. It can take up to a minute.', { okLabel: 'Ask AI' }).then(function (yes) {
+          UI.confirm('AI can get things wrong. Its answers are suggestions, not facts, and you choose which to use.\n\nTo look the car up, its registration, VIN, make, model, year and similar details are sent to Google\'s Gemini AI service, which may search the web. Google may use what is sent to improve its products. It can take up to a minute.', { okLabel: 'Ask AI' }).then(function (yes) {
             if (!yes) return;
             panel.replaceChildren();
             status.replaceChildren(UI.waiting('Asking AI to look the car up… this can take up to a minute. Please wait.'));
