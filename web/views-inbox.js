@@ -10,7 +10,7 @@
   var READ_TIMEOUT_MS = 90000; // the AI can take a while to answer
 
   var KIND_LABEL = { Purchase: 'Parts purchase', Maintenance: 'Garage invoice', Issue: 'Report or problem' };
-  var KIND_CHOICES = [['Issue', 'Issue (inspection or diagnostic report, quote, or a problem)'], ['Maintenance', 'Maintenance or garage invoice'], ['Purchase', 'Purchase receipt']];
+  var KIND_CHOICES = [['Issue', 'Issue (report, quote or problem)'], ['Maintenance', 'Maintenance or garage invoice'], ['Purchase', 'Purchase receipt']];
   var MAX_FILES = 8;
   var STATUS_LABEL = { New: 'Not read yet', Pending: 'Ready to check', Queued: 'Waiting to be read', Unreadable: 'Needs filling in by hand', Approved: 'Added', Dismissed: 'Dismissed' };
 
@@ -101,7 +101,7 @@
   function openResult(done) {
     if (done.length === 1) {
       var r = done[0];
-      if (r.status !== 'Pending') FleetApp.setFlash('info', r.note || 'It was saved in the AI Inbox.');
+      if (r.status !== 'Pending') { if (!r.note) FleetApp.setFlash('info', 'It was saved in the AI Inbox.'); } // its own page shows why
       else if (destination(r) === '/inbox/' + r.id) FleetApp.setFlash('ok', 'It was read. Check what it says, then draft the entry.');
       FleetApp.go(destination(r));
     } else {
@@ -287,6 +287,7 @@
       if (flash) msg.append(UI.notice(flash.kind === 'ok' ? 'ok' : 'info', flash.text));
       var d = r.data || {};
       var open = r.status === 'New' || r.status === 'Pending' || r.status === 'Queued' || r.status === 'Unreadable';
+      var wasRead = !!(d.confidence || d.kind || d.documentType || (d.issues || []).length || (d.items || []).length || r.vendor); // nothing to show until AI has read it
 
       // Everything that was read from the receipt, including what was not found.
       var money = function (n) { return n === null || n === undefined ? '' : fmt().money(n, r.currency || 'GBP'); };
@@ -368,10 +369,14 @@
       function drawNext() {
         var kind = kindSelect.value;
         var kids = [];
-        if (kind === 'Issue') {
+        if (!wasRead) { // not read yet (the AI was busy, or it has not been asked): read it now, or fill it in by hand
+          kids.push(button('Read it with AI now', 'btn block big', function (b) { readAs(kind, b); }));
+          kids.push(kind === 'Issue' ? button('Add the issues by hand', 'btn block secondary', function () { review(''); })
+            : button('Fill in the entry by hand', 'btn block secondary', function () { draftEntry(kind); }));
+        } else if (kind === 'Issue') {
           if (found.length) kids.push(button('Review ' + issuesText() + '\u00a0→', 'btn block big draft-btn', function () { review(''); }));
           else {
-            kids.push(button(r.status === 'New' ? 'Read it with AI' : 'Read it again as an issue', 'btn block big', function (b) { readAs('Issue', b); }));
+            kids.push(button('Read it again as an issue', 'btn block big', function (b) { readAs('Issue', b); }));
             kids.push(button('Add the issues by hand', 'btn block secondary', function () { review(''); }));
           }
         } else if (kind === 'Maintenance' && found.length) {
@@ -387,7 +392,7 @@
       drawNext();
 
       var again = null;
-      if (r.status !== 'Pending' && open) {
+      if (wasRead && r.status !== 'Pending' && open) { // when it has not been read, "Read it with AI now" above does this
         again = el('button', { type: 'button', class: 'btn small secondary', text: 'Try reading it again' });
         again.addEventListener('click', function () {
           msg.replaceChildren(UI.waiting('Reading the receipt with AI… this can take up to a minute.'));
@@ -421,16 +426,17 @@
         el('p', { class: 'muted small-text', text: (STATUS_LABEL[r.status] || r.status) + ' · ' + (r.source === 'email' ? 'Emailed' : 'Added') + (r.sender ? ' by ' + r.sender : '') + ' · ' + when(r.receivedAt) + ' · ' + r.filename + ' (' + kb(r.size) + ')' }),
         msg,
         r.note ? UI.notice(r.status === 'Pending' ? 'warn' : 'info', r.note) : null,
+        r.problem ? el('p', { class: 'muted small-text', text: 'For admins. Google said: ' + r.problem }) : null,
         (r.files || []).length > 1 ? el('div', { class: 'stack' }, r.files.map(function (f) { return viewer({ id: r.id, index: f.index, mime: f.mime, filename: f.filename }, function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); }, f.filename); }))
           : viewer(r, function (e) { msg.replaceChildren(UI.notice('error', UI.errorText(e))); }),
-        r.status === 'New' ? null : el('h2', { text: 'What AI read from it' }),
-        r.status === 'New' ? null : readoutHead,
-        r.status === 'New' ? null : el('div', { class: 'facts' }, facts),
-        r.status === 'New' || !found.length ? null : el('h3', { class: 'readout-items', text: 'Issues found (' + found.length + ')' }),
-        r.status === 'New' || !found.length ? null : el('ul', { class: 'plain-list' }, found.map(function (i) { return el('li', { text: i.title + (i.codes && i.codes.length ? ' (' + i.codes.map(function (c) { return c.code; }).join(', ') + ')' : '') }); })),
-        r.status === 'New' || isReport ? null : el('h3', { class: 'readout-items', text: 'Items' }),
-        r.status === 'New' || isReport ? null : table,
-        r.status === 'New' || isReport ? null : el('p', { class: 'muted small-text', text: itemsNote }),
+        !wasRead ? null : el('h2', { text: 'What AI read from it' }),
+        !wasRead ? null : readoutHead,
+        !wasRead ? null : el('div', { class: 'facts' }, facts),
+        !wasRead || !found.length ? null : el('h3', { class: 'readout-items', text: 'Issues found (' + found.length + ')' }),
+        !wasRead || !found.length ? null : el('ul', { class: 'plain-list' }, found.map(function (i) { return el('li', { text: i.title + (i.codes && i.codes.length ? ' (' + i.codes.map(function (c) { return c.code; }).join(', ') + ')' : '') }); })),
+        !wasRead || isReport ? null : el('h3', { class: 'readout-items', text: 'Items' }),
+        !wasRead || isReport ? null : table,
+        !wasRead || isReport ? null : el('p', { class: 'muted small-text', text: itemsNote }),
         d.kind || r.status === 'Pending' ? el('p', { class: 'section-note', text: 'The AI can get things wrong. You will check everything on the next screen before anything is saved.' }) : null,
         done,
         open ? el('div', { class: 'stack' }, [

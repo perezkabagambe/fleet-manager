@@ -120,6 +120,30 @@ test('a busy service queues the receipt; other Gemini trouble leaves it Unreadab
   assert.equal(read(id).data.receipt.status, 'Pending');
 });
 
+test('when the usual model is busy another is asked at once, and one read still counts once', () => {
+  const { env, sam, add, read } = setup();
+  env.state.gemini = (req) => (/gemini-3\.5-flash-lite/.test(req.url) ? { code: 503, body: { error: { status: 'UNAVAILABLE', message: 'This model is experiencing high demand.' } } } : answer(PARTS));
+  const r = read(add().data.receipt.id).data.receipt;
+  assert.equal(r.status, 'Pending');
+  assert.deepEqual(env.state.geminiRequests.map((q) => /models\/([^:]+):/.exec(q.url)[1]), ['gemini-3.5-flash-lite', 'gemini-2.5-flash']);
+  assert.equal(env.call('getReceiptStatus', { token: sam }).data.remaining, 29);
+});
+
+test('when both are busy it waits to be tried again, says so plainly, and an admin can see what Google said', () => {
+  const { env, admin, sam, add, read } = setup();
+  env.state.gemini = () => ({ code: 429, body: { error: { status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded.' } } });
+  const id = add().data.receipt.id;
+  const r = read(id).data.receipt;
+  assert.equal(r.status, 'Queued');
+  assert.match(r.note, /AI was busy.*about 15 minutes/);
+  const asAdmin = env.call('getInboxItem', { token: admin, id }).data.receipt;
+  assert.match(asAdmin.problem, /HTTP 429 RESOURCE_EXHAUSTED · gemini-3\.5-flash-lite: Quota exceeded\. \/ HTTP 429.*gemini-2\.5-flash/);
+  assert.equal(env.call('getInboxItem', { token: sam, id }).data.receipt.problem, undefined);
+  env.state.gemini = () => answer(PARTS);
+  read(id);
+  assert.equal(env.call('getInboxItem', { token: admin, id }).data.receipt.problem, undefined, 'cleared once it has been read');
+});
+
 test('the daily limit queues the receipt (saved, not lost) and it is read the next day', () => {
   const { env, add, read } = setup();
   env.props.RECEIPT_USER_DAILY = '1';

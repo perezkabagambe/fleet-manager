@@ -259,11 +259,14 @@ function geminiCall_(body, model) {
   return json;
 }
 
+let geminiProblem_ = ''; // what Google last said went wrong, in this run (kept with an Inbox item that could not be read)
+
 /** Remember Google's own words about the latest problem (never the key), so an admin can see the real reason on the Diagnostics page. */
 function geminiNoteProblem_(status, json, model, withSearch) {
   try {
     const err = (json && json.error) || {};
     const text = 'HTTP ' + status + (err.status ? ' ' + err.status : '') + ' · ' + model + (withSearch ? ' with Google Search' : '') + ': ' + cleanStr_(err.message || '', 300);
+    geminiProblem_ = text;
     props_().setProperty('GEMINI_LAST_ERROR', nowIso_() + ' | ' + text);
   } catch (e) { /* the note is only a convenience */ }
 }
@@ -275,13 +278,31 @@ function geminiText_(json) {
   return (cand.content.parts || []).map(function (x) { return x && x.text ? x.text : ''; }).join('');
 }
 
-/** One request to read a document: `parts` are the request's parts (text, and the document as inline_data). Returns the parsed answer or throws an error code. */
+/** The model asked when the usual one is busy or down: GEMINI_RECEIPT_FALLBACK_MODEL, else the one car lookups fall back to. */
+function receiptFallbackModel_() { return String(props_().getProperty('GEMINI_RECEIPT_FALLBACK_MODEL') || '').trim() || aiSearchFallbackModel_(); }
+
+/**
+ * One request to read a document: `parts` are the request's parts (text, and the document as inline_data). If the usual model is
+ * busy or not answering, another model is asked straight away. Returns the parsed answer or throws an error code (the first model's).
+ */
 function geminiRead_(parts) {
-  const json = geminiCall_({
+  const body = {
     systemInstruction: { parts: [{ text: receiptSystemPrompt_() }] },
     contents: [{ role: 'user', parts: parts }],
     generationConfig: { temperature: 0.1, maxOutputTokens: 16384, responseMimeType: 'application/json', responseSchema: receiptSchema_() },
-  });
+  };
+  let json;
+  try {
+    json = geminiCall_(body);
+  } catch (e) {
+    const other = receiptFallbackModel_();
+    if (!e || (e.apiError !== 'ai_busy' && e.apiError !== 'ai_unavailable') || other === geminiModel_()) throw e;
+    const first = geminiProblem_;
+    try { json = geminiCall_(body, other); } catch (e2) {
+      geminiProblem_ = [first, geminiProblem_ !== first ? geminiProblem_ : ''].filter(Boolean).join(' / ');
+      throw e; // what the usual model said decides what happens next (a busy one is tried again later)
+    }
+  }
   const text = geminiText_(json);
   if (!text) fail_('ai_bad_answer'); // blocked or empty
   const raw = aiExtractJson_(text);
@@ -394,6 +415,7 @@ function readStoredReceipt_(row, userId, extraText, notifyExcept) {
   extraText = extraText || row.email_text || '';
   let note = '';
   let data = null;
+  geminiProblem_ = '';
   let retryAfter = '';   // set when the reading should be tried again later
   let busy = false;
   if (!geminiKey_()) {
@@ -436,21 +458,23 @@ function readStoredReceipt_(row, userId, extraText, notifyExcept) {
         status: 'Pending', kind: fresh.chosen_kind || data.kind, car_id: guess, data: receiptDataJson_(data), vendor: data.vendor, date: data.date,
         total: data.total === null ? '' : String(data.total), currency: data.currency, order_ref: data.orderNumber,
         duplicate_of: dupe ? dupe.id : '', note: dupe ? 'This looks like the same order as another receipt in the Inbox.' : '',
-        retry_after: '', email_text: '',
+        retry_after: '', email_text: '', problem: '',
       });
     } else if (retryAfter || busy) {
+      patch.problem = busy ? geminiProblem_.slice(0, 600) : '';
       const attempts = Number(fresh.attempts || 0) + (busy ? 1 : 0);
       // a busy service is tried again soon; after three busy answers (or a spent allowance) the receipt waits for tomorrow
       const later = retryAfter || (attempts < 3 ? new Date(Date.now() + 15 * 60000).toISOString() : new Date(Date.now() + 6 * 3600000).toISOString());
       const long = !!retryAfter || attempts >= 3;
       Object.assign(patch, {
         status: 'Queued', attempts: String(attempts), retry_after: later, email_text: extraText.slice(0, RECEIPT_TEXT_MAX),
-        note: long ? 'The daily limit for reading receipts has been reached. This receipt is saved and will be read automatically tomorrow. You can also fill it in by hand now.'
-          : 'The reading service was busy. This receipt is saved and will be tried again shortly.',
+        note: retryAfter ? 'The daily limit for reading has been reached. It is saved and will be read automatically tomorrow. You can also fill it in by hand now.'
+          : long ? 'Google\'s AI has been busy several times. It is saved and will be tried again in a few hours. You can try again now, or fill it in by hand.'
+          : 'Google\'s AI was busy. It is saved and will be tried again automatically in about 15 minutes. You can also try again now.',
       });
       if (long && !fresh.ack_sent) { patch.ack_sent = nowIso_(); ackTo = fresh.sender_id; }
     } else {
-      Object.assign(patch, { status: 'Unreadable', note: note, retry_after: '', email_text: '' });
+      Object.assign(patch, { status: 'Unreadable', note: note, retry_after: '', email_text: '', problem: geminiProblem_.slice(0, 600) });
     }
     Db.update('Inbox', fresh._row, patch);
     const merged = Object.assign({}, fresh, patch);
@@ -537,7 +561,9 @@ function getInboxCount_(p, ctx) {
 function getInboxItem_(p, ctx) {
   const row = findReceipt_(cleanStr_(p.id, 64));
   if (!row) fail_('not_found');
-  return { receipt: receiptShape_(row, true) };
+  const shape = receiptShape_(row, true);
+  if (ctx.user.role === 'admin' && row.problem && (row.status === 'Queued' || row.status === 'Unreadable')) shape.problem = row.problem; // Google's own words, for an admin
+  return { receipt: shape };
 }
 
 /** Say which vehicle an open Inbox item is for (so the review starts with it). */

@@ -51,6 +51,7 @@ const REPORT = {
   ],
 };
 env.state.gemini = (req) => {
+  if (req.body.contents[0].parts.some((x) => x.inline_data && /AIBUSY/.test(Buffer.from(x.inline_data.data, 'base64').toString('latin1')))) return { code: 503, body: { error: { status: 'UNAVAILABLE', message: 'This model is experiencing high demand (local test answer).' } } }; // a file saying AIBUSY: the AI is busy
   if (req.body.contents[0].parts.some((x) => /it is an issue/.test(x.text || '')) || req.body.contents[0].parts.some((x) => x.inline_data && /DIAGNOSTIC/.test(Buffer.from(x.inline_data.data, 'base64').toString('latin1')))) {
     const quoted = req.body.contents[0].parts.some((x) => x.inline_data && /QUOTE/.test(Buffer.from(x.inline_data.data, 'base64').toString('latin1')));
     return { code: 200, body: { candidates: [{ content: { parts: [{ text: JSON.stringify(quoted ? Object.assign({}, REPORT, { vendor: 'City Garage', inspectionFee: 60, quotedTotal: 420 }) : REPORT) }] } }] } };

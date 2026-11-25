@@ -277,12 +277,12 @@ test('a busy Gemini is retried after 15 minutes; after three busy answers the se
   assert.equal(inbox()[0].status, 'Queued');
   assert.equal(env.outbox.filter((m) => /read tomorrow/.test(m.subject)).length, 0); // not yet: it will be tried again shortly
   env.advance(16 * 60000); run();
-  assert.equal(env.state.geminiRequests.length, 2);
+  assert.equal(env.state.geminiRequests.length, 4); // each try asks the usual model, then the other one
   env.advance(16 * 60000); run();
-  assert.equal(env.state.geminiRequests.length, 3);
+  assert.equal(env.state.geminiRequests.length, 6);
   assert.equal(env.outbox.filter((m) => /read tomorrow/.test(m.subject)).length, 1);
   env.advance(16 * 60000); run(); // now it waits hours, not minutes
-  assert.equal(env.state.geminiRequests.length, 3);
+  assert.equal(env.state.geminiRequests.length, 6);
   env.state.gemini = () => answer(PARTS);
   env.advance(7 * 3600 * 1000); run();
   assert.equal(inbox()[0].status, 'Pending');
