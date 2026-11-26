@@ -441,7 +441,10 @@
     // Reports, invoices and receipts are added through the AI Inbox: this opens it with the car already chosen
     var aiButton = el('a', { class: 'ai-add', href: '#/inbox?car=' + encodeURIComponent(car.id) }, [
       FleetApp.icon('inbox', 28),
-      el('span', { class: 'ai-add-text' }, [el('strong', { text: 'Add with AI' }), el('span', { text: 'Report, invoice or receipt · opens the AI Inbox' })]),
+      el('span', { class: 'ai-add-text' }, [
+        el('span', { class: 'ai-add-title' }, [el('strong', { text: 'Add with AI' }), el('span', { class: 'ai-add-tag', text: 'Generally faster' })]),
+        el('span', { class: 'ai-add-what', text: 'Report, invoice or receipt · opens the AI Inbox' }),
+      ]),
       el('span', { class: 'ai-add-arrow', 'aria-hidden': 'true', text: '→' }),
     ]);
     FleetApi.call('getReceiptStatus').then(function (r) { if (!r.data.available) aiButton.hidden = true; }).catch(function () { /* offline: leave it */ });

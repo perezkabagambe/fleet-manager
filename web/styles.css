@@ -796,7 +796,9 @@ details.collapsible:has(.bin-card) { border-style: dashed; background: var(--bg)
 .ai-add .ico { display: flex; flex: none; }
 .ai-add-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
 .ai-add-text strong { font-size: 1.05rem; }
-.ai-add-text span { font-size: 0.8rem; color: var(--text); }
+.ai-add-title { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 2px; }
+.ai-add-tag { font-size: 0.72rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--note); color: var(--surface); }
+.ai-add-what { font-size: 0.8rem; color: var(--text); }
 .ai-add-arrow { font-size: 1.25rem; font-weight: 700; }
 /* in the AI Inbox form: the note under Read it with AI, and emailing instead */
 .read-note { margin: 6px 0 0; }
