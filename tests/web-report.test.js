@@ -79,6 +79,18 @@ test('two issues can be combined: codes, notes, photos and amounts together', ()
   assert.ok(!(b.key in s.issues[1].linkTo));
 });
 
+test('combining two issues keeps both AI tips, once each', () => {
+  const s = state();
+  const [a, b, c] = s.issues;
+  a.tip = 'Scan in daylight.'; b.tip = 'Check the connector first.'; c.tip = 'Scan in daylight.';
+  R.combine(s, a, b);
+  assert.equal(a.tip, 'Scan in daylight. Check the connector first.');
+  b.tip = '';
+  a.tip = 'Scan in daylight.';
+  R.combine(s, a, c);
+  assert.equal(a.tip, 'Scan in daylight.');
+});
+
 test('an invoice that also lists faults proposes the maintenance entry too; photos only attach if they are pictures', () => {
   const s = R.fromReading(receipt({ kind: 'Maintenance', title: 'Full service', total: 185, work: 'Oil', vendor: 'City Garage', issues: [{ title: 'Tyre worn', photos: [1, 2] }] }, { kind: 'Maintenance', files: [{ mime: 'application/pdf' }, { mime: 'image/jpeg' }] }), {});
   assert.deepEqual([s.maintenance.title, s.maintenance.total, s.maintenance.vendor], ['Full service', '185', 'City Garage']);

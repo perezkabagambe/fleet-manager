@@ -150,7 +150,7 @@
     into.files = into.files.concat(other.files.filter(function (f) { return into.files.indexOf(f) === -1; }));
     into.keep = into.keep || other.keep;
     into.stored = into.stored && other.stored;
-    into.tip = into.tip || other.tip;
+    into.tip = [into.tip, other.tip].filter(function (t, n, all) { return t && all.indexOf(t) === n; }).join(' ');
     other.linkIds.forEach(function (id) { if (into.linkIds.indexOf(id) === -1) into.linkIds.push(id); });
     state.issues.forEach(function (i) { delete i.linkTo[other.key]; });
     state.issues.splice(state.issues.indexOf(other), 1);

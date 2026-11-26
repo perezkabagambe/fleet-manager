@@ -1189,6 +1189,7 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 .report-code { font: 0.72rem ui-monospace, Menlo, monospace; background: color-mix(in srgb, var(--muted) 14%, transparent); border-radius: 6px; padding: 2px 6px; }
 .report-state { font-size: 0.72rem; font-weight: 700; color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); border-radius: 999px; padding: 1px 8px; }
 .report-state.stored { color: var(--muted); border-color: var(--border); }
+.report-has-tip { font-size: 0.72rem; font-weight: 700; border: 1px dashed var(--note); border-radius: 999px; padding: 1px 8px; background: color-mix(in srgb, var(--note) 7%, var(--surface)); }
 .report-amounts:empty { display: none; }
 .report-body { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 .report-money .odo-row select { min-width: 0; width: 4.8em; }

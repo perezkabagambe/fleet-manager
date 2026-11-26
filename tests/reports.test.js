@@ -57,6 +57,10 @@ test('a report is read into issues, with the person\'s choice of type passed to 
   assert.match(sent.contents[0].parts[0].text, /The person says it is an issue/);
   assert.match(sent.systemInstruction.parts[0].text, /ONE issue per real problem/);
   assert.ok(sent.generationConfig.responseSchema.properties.issues);
+  // the AI is asked for a tip on every issue, as the one place it may use its own knowledge
+  assert.ok(sent.generationConfig.responseSchema.properties.issues.items.required.includes('tip'));
+  assert.match(sent.systemInstruction.parts[0].text, /The one exception is each issue's tip/);
+  assert.doesNotMatch(sent.systemInstruction.parts[0].text, /usually ""/);
 });
 
 test('several photos are one item: all are shown to the AI, numbered, and it can be read again as another type', () => {

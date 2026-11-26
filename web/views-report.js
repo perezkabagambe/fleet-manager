@@ -283,7 +283,9 @@
           el('span', { class: 'report-main' }, [
             title,
             i.system ? el('span', { class: 'muted small-text', text: i.system }) : null,
-            i.codes.length || status ? el('span', { class: 'report-chips' }, i.codes.map(function (c) { return el('span', { class: 'report-code', text: c.code }); }).concat(status ? [el('span', { class: 'report-state' + (i.stored ? ' stored' : ''), text: status })] : [])) : null,
+            i.codes.length || status || i.tip ? el('span', { class: 'report-chips' }, i.codes.map(function (c) { return el('span', { class: 'report-code', text: c.code }); }).concat(
+              status ? [el('span', { class: 'report-state' + (i.stored ? ' stored' : ''), text: status })] : [],
+              i.tip ? [el('span', { class: 'report-has-tip', text: 'AI tip' })] : [])) : null,
             amounts,
           ]),
           el('span', { class: 'report-chev', 'aria-hidden': 'true', text: i.open ? '⌄' : '›' }),
