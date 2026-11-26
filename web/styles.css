@@ -790,16 +790,45 @@ details.collapsible:has(.bin-card) { border-style: dashed; background: var(--bg)
 .entry-actions .btn { flex: 1 1 0; text-align: center; justify-content: center; }
 .btn.danger-outline { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
 
-/* the car page's way into the AI Inbox */
-.ai-add { display: flex; align-items: center; gap: 12px; margin-top: 10px; min-height: 56px; padding: 10px 12px; border: 1.5px solid var(--note); border-radius: 10px; background: color-mix(in srgb, var(--note) 7%, var(--surface)); color: var(--note); text-decoration: none; }
+/* "Add with AI": a car page's way into the AI Inbox, and the button that opens the form there */
+.ai-add, .ai-card > summary { display: flex; align-items: center; gap: 12px; padding: 12px; color: var(--note); background: color-mix(in srgb, var(--note) 8%, var(--surface)); }
+.ai-add { margin-top: 10px; border: 1.5px solid var(--note); border-radius: 14px; text-decoration: none; }
 .ai-add[hidden] { display: none; }
-.ai-add .ico { display: flex; flex: none; }
-.ai-add-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
-.ai-add-text strong { font-size: 1.05rem; }
+.ai-add .ico, .ai-card > summary .ico { display: flex; flex: none; }
+.ai-add-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; line-height: 1.35; }
 .ai-add-title { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 2px; }
+.ai-add-title strong { font-size: 1.15rem; }
 .ai-add-tag { font-size: 0.72rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--note); color: var(--surface); }
-.ai-add-what { font-size: 0.8rem; color: var(--text); }
-.ai-add-arrow { font-size: 1.25rem; font-weight: 700; }
+.ai-add-what { font-size: 0.84rem; font-weight: 400; color: var(--text); }
+.ai-add-foot { font-size: 0.82rem; font-weight: 700; margin-top: 2px; }
+
+/* the AI section is purple: its pages take the violet as their accent, with a deep purple banner */
+body.ai-section { --accent: var(--note); }
+body.ai-section .topbar { background: #3d2a82; }
+body.ai-section input[type="file"]::file-selector-button { font: inherit; font-size: 0.88rem; font-weight: 600; color: var(--note); background: var(--surface); border: 1px solid var(--note); border-radius: 8px; padding: 7px 12px; margin-right: 10px; cursor: pointer; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body.ai-section .topbar { background: #2e2163; }
+  :root:not([data-theme="light"]) body.ai-section .btn:not(.secondary):not(.danger):not(.danger-outline) { background: #7458d6; color: #fff; }
+}
+/* the card that holds the form (not clipped: the car picker opens over its edge) */
+.ai-card { border: 1.5px solid var(--note); border-radius: 14px; background: var(--surface); }
+.ai-card > summary { cursor: pointer; list-style: none; border-radius: 12.5px; }
+.ai-card > summary::-webkit-details-marker { display: none; }
+.ai-card > summary::after { content: '⌄'; flex: none; font-size: 1.4rem; line-height: 1; }
+.ai-card[open] > summary { border-radius: 12.5px 12.5px 0 0; border-bottom: 1.5px solid var(--note); }
+.ai-card[open] > summary::after { content: '⌃'; }
+.ai-card-body { padding: 14px 12px 12px; }
+.ai-card-body > p:first-child { margin-top: 0; }
+.ai-promise { margin: 10px 8px 14px; }
+.ai-lead { display: flex; align-items: center; gap: 8px; font-size: 1rem; margin: 4px 2px 8px; }
+.ai-lead[hidden] { display: none; }
+.ai-count { background: var(--note); color: var(--surface); border-radius: 999px; font-size: 0.75rem; padding: 1px 9px; }
+.ai-page .inbox-row { background: var(--surface); border-left: 4px solid var(--note); }
+.ai-page .chip.active { color: var(--note); background: color-mix(in srgb, var(--note) 12%, var(--surface)); border-color: transparent; }
+.ai-recent { margin-top: 14px; }
+.ai-recent > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--note); }
+.ai-page .report-box { background: var(--surface); border-color: var(--note); }
+
 /* in the AI Inbox form: the note under Read it with AI, and emailing instead */
 .read-note { margin: 6px 0 0; }
 .reads-left { display: block; color: var(--text); }

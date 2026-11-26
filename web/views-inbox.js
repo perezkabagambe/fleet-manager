@@ -115,6 +115,17 @@
     }
   }
 
+  // ---------- the "Add with AI" face, the same on the AI Inbox and on a car's page ----------
+  var ADD_WITH_AI = 'Use AI to rapidly process inspection reports, garage invoices or purchase receipts.';
+  /** The icon and words of an "Add with AI" button. `foot` is a last line, such as where it goes. */
+  function addWithAi(foot) {
+    return [FleetApp.icon('inbox', 30), el('span', { class: 'ai-add-text' }, [
+      el('span', { class: 'ai-add-title' }, [el('strong', { text: 'Add with AI' }), el('span', { class: 'ai-add-tag', text: 'Generally faster' })]),
+      el('span', { class: 'ai-add-what', text: ADD_WITH_AI }),
+      foot ? el('span', { class: 'ai-add-foot', text: foot }) : null,
+    ])];
+  }
+
   // ---------- emailing instead ----------
   // A car's addresses: simple (from the registration, for your own email) and public (a short reference, for anyone). Asked for once
   var addresses = {};
@@ -267,24 +278,24 @@
     var recentBox = el('div');
     var fileBox = el('div');
     var sharedBox = el('div');
-    root.replaceChildren(el('section', { class: 'card' }, [
-      el('div', { class: 'page-head' }, [el('h1', { text: 'AI Inbox' })]),
-      el('p', { class: 'section-note', text: 'Reports, invoices and receipts waiting to be checked. Nothing is added to a vehicle\'s log until someone has looked at it and saved it.' }),
-      msg, sharedBox, fileBox, listBox, recentBox,
+    var waitingHead = el('h2', { class: 'ai-lead', hidden: true });
+    root.replaceChildren(el('div', { class: 'ai-page' }, [
+      msg, sharedBox, fileBox,
+      el('p', { class: 'muted small-text center ai-promise', text: 'Nothing goes into a car\'s log until someone checks it and saves it.' }),
+      waitingHead, listBox, recentBox,
     ]));
 
     var cars = []; // one list, filled again in place, so the forms see a newer answer
     var forms = [];
     var reading = true;
-    var intro = el('p', { class: 'muted small-text' });
+    var intro = el('p', { class: 'muted small-text', hidden: true });
     FleetApp.setBanner({ title: 'AI Inbox', icon: 'inbox', action: null });
     var flash = FleetApp.takeFlash();
     if (flash) msg.append(UI.notice(flash.kind === 'ok' ? 'ok' : 'info', flash.text)); // e.g. "3 receipts added"
 
-    function explainAdding() {
-      intro.textContent = reading
-        ? 'Take a photo, or choose photos or PDFs. AI reads them and you check everything before it is saved.'
-        : 'Take a photo, or choose a photo or PDF. Automatic reading is not switched on yet, so you will fill the details in yourself.';
+    function explainAdding() { // only needed when AI cannot read: otherwise the button says it all
+      intro.hidden = reading;
+      intro.textContent = 'Take a photo, or choose a photo or PDF. Automatic reading is not switched on yet, so you will fill the details in yourself.';
     }
     function newForm(carId, preset, onSent) {
       var form = uploadForm(cars, carId, preset, onSent);
@@ -293,10 +304,9 @@
     }
     function addBlock() {
       explainAdding();
-      return el('details', { class: 'copy-section', open: !!ctx.query.car || undefined }, [
-        el('summary', { text: 'Add an inspection report, garage invoice or purchase receipt' }),
-        intro,
-        newForm(ctx.query.car, null, null),
+      return el('details', { class: 'ai-card', open: !!ctx.query.car || undefined }, [
+        el('summary', {}, addWithAi('')),
+        el('div', { class: 'ai-card-body' }, [intro, newForm(ctx.query.car, null, null)]),
       ]);
     }
     // The forms are drawn once (so a chosen file is never lost); a newer list of cars only refreshes their pickers
@@ -344,11 +354,13 @@
       explainAdding();
       if (!saved) setCount(data.open.length); // the number on the menu is only ever set from a fresh answer
       FleetApp.setBanner({ subtitle: data.open.length ? data.open.length + ' waiting to be checked' : 'Nothing waiting' });
+      waitingHead.hidden = !data.open.length;
+      waitingHead.replaceChildren(document.createTextNode('Waiting to be checked'), el('span', { class: 'ai-count', text: String(data.open.length) }));
       listBox.replaceChildren.apply(listBox, data.open.length ? data.open.map(row) : [el('p', { class: 'muted', text: 'Nothing is waiting. Add something above' + (data.reading ? '' : ', or email it once that is switched on') + '.' })]);
       var wasOpen = !!recentBox.querySelector('details[open]');
       recentBox.replaceChildren();
       if (data.recent.length) {
-        recentBox.append(el('details', { class: 'copy-section', open: wasOpen || undefined }, [el('summary', { text: 'Recently handled (' + data.recent.length + ')' }), el('div', { class: 'stack' }, data.recent.map(row))]));
+        recentBox.append(el('details', { class: 'ai-recent', open: wasOpen || undefined }, [el('summary', { text: 'Recently handled (' + data.recent.length + ')' }), el('div', { class: 'stack' }, data.recent.map(row))]));
       }
     }
     function failed(e) {
@@ -535,5 +547,5 @@
     }
   };
 
-  window.InboxUI = { panel: panel, send: send, destination: destination, openResult: openResult, refreshCount: refreshCount, getCount: function () { return count; } };
+  window.InboxUI = { addWithAi: addWithAi, panel: panel, send: send, destination: destination, openResult: openResult, refreshCount: refreshCount, getCount: function () { return count; } };
 })();

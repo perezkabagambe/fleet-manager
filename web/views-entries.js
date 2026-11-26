@@ -439,18 +439,11 @@
     }
 
     // Reports, invoices and receipts are added through the AI Inbox: this opens it with the car already chosen
-    var aiButton = el('a', { class: 'ai-add', href: '#/inbox?car=' + encodeURIComponent(car.id) }, [
-      FleetApp.icon('inbox', 28),
-      el('span', { class: 'ai-add-text' }, [
-        el('span', { class: 'ai-add-title' }, [el('strong', { text: 'Add with AI' }), el('span', { class: 'ai-add-tag', text: 'Generally faster' })]),
-        el('span', { class: 'ai-add-what', text: 'Report, invoice or receipt · opens the AI Inbox' }),
-      ]),
-      el('span', { class: 'ai-add-arrow', 'aria-hidden': 'true', text: '→' }),
-    ]);
+    var aiButton = el('a', { class: 'ai-add', href: '#/inbox?car=' + encodeURIComponent(car.id) }, InboxUI.addWithAi('Opens the AI Inbox →'));
     FleetApi.call('getReceiptStatus').then(function (r) { if (!r.data.available) aiButton.hidden = true; }).catch(function () { /* offline: leave it */ });
     return el('section', { class: 'card' }, [
       el('h2', { text: 'Maintenance & Issues Log' }),
-      el('a', { class: 'btn block big', href: '#/car/' + car.id + '/add', text: 'Add entry' }),
+      el('a', { class: 'btn block big', href: '#/car/' + car.id + '/add', text: 'Manually log an entry' }),
       aiButton,
       chips, selectTools, list,
     ]);

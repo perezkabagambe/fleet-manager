@@ -274,6 +274,11 @@
     var signedIn = FleetAuth.hasSession() && !!FleetAuth.getUser();
     var onGuestPage = GUEST_PATH.test(currentPath) || (!FleetAuth.hasSession());
     bar.hidden = !signedIn || onGuestPage;
+    // the AI Inbox and the pages under it are purple, the phone's top strip included
+    var ai = !bar.hidden && currentTab(currentPath) === 'inbox';
+    document.body.classList.toggle('ai-section', ai);
+    var strip = document.querySelector('meta[name="theme-color"]');
+    if (strip) strip.setAttribute('content', ai ? '#3d2a82' : '#0f3d5e');
     document.body.classList.toggle('has-tabs', !bar.hidden);
     document.body.classList.toggle('on-me-page', !bar.hidden && currentPath === '/profile'); // the version line, Privacy and Terms live at the bottom of Me
     if (bar.hidden) { bar.replaceChildren(); return; }

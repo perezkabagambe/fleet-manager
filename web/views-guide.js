@@ -139,7 +139,7 @@
         el('li', {}, [b('Maintenance:'), document.createTextNode(' work done (servicing, repairs), with parts and labour.')]),
         el('li', {}, [b('Purchase:'), document.createTextNode(' parts you have bought, which you later fit in a maintenance entry.')]),
       ]),
-      p([b('Create one'), document.createTextNode(' by hand with '), link('add', 'Add entry'), document.createTextNode(' ('), link('addissue', 'issue'), document.createTextNode(', '), link('addmaint', 'maintenance'), document.createTextNode(', '), link('addpurchase', 'purchase'), document.createTextNode('), or with AI by emailing or uploading a receipt (see 1).')]),
+      p([b('Create one'), document.createTextNode(' by hand with '), link('add', 'Manually log an entry'), document.createTextNode(' ('), link('addissue', 'issue'), document.createTextNode(', '), link('addmaint', 'maintenance'), document.createTextNode(', '), link('addpurchase', 'purchase'), document.createTextNode('), or with AI by emailing or uploading a receipt (see 1).')]),
       p([b('Reminders'), document.createTextNode(' are separate. '), link('reminders', 'Reminders'), document.createTextNode(' come in two types: '), b('regular maintenance'), document.createTextNode(' (an oil change, tyre check), done by logging maintenance, and '), b('compliance'), document.createTextNode(' (MOT, insurance, road tax), which you mark renewed with its new expiry date.')]),
       shot('guide-addentry', 'Choosing the kind of entry'),
       p([document.createTextNode('As the log grows, tap a coloured tile at the top of the '), link('log', 'log'), document.createTextNode(' to see just one kind. Tap '), b('Select'), document.createTextNode(' to share or delete several at once.')]),
