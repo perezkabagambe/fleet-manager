@@ -307,8 +307,6 @@ input[type="file"] { width: 100%; font: inherit; font-size: 16px; padding: 10px 
 .role-boxes { display: flex; flex-wrap: wrap; gap: 0 20px; margin-top: 4px; }
 .mine { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 
-.catalogue { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-
 .add-car { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); text-align: center; }
 .add-car p { margin: 0 0 8px; }
 
@@ -1286,3 +1284,16 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 .report-photo select { width: auto; max-width: 55%; }
 .report-page .report-issues + .btn { margin-bottom: 14px; }
 .report-later { display: block; text-align: center; padding: 12px; font-weight: 600; }
+
+/* the car page's log, specs and odometer are kept short: the lists scroll inside a box */
+.history.scrolls { max-height: 540px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 0 6px; } /* the height is then set to five rows exactly */
+.history .entry-line:not(.is-editing) { padding: 8px 0; }
+.history-more { margin: 6px 0 0; }
+.history-more[hidden] { display: none; }
+.spec-scroll { max-height: 340px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 0 8px 4px; }
+.spec-scroll .spec-group { margin: 8px 0 4px; }
+.spec-scroll .fluid { padding-top: 6px; padding-bottom: 6px; font-size: 0.92rem; line-height: 1.35; }
+.odo-now { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 12px; }
+.odo-now .big-number { font-size: 1.4rem; }
+.odo-now + .inline-form { margin-top: 6px; }
+.catalogues { gap: 6px; }

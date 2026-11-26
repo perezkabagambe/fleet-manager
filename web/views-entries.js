@@ -195,7 +195,12 @@
     return card;
   }
 
-  function historyCard(car, preloaded) {
+  // The log shows this many entries at a time; the rest are reached by scrolling inside the list.
+  var LOG_ROWS = 5;
+
+  // `place` remembers how far the list had been scrolled (place.logTop), so coming back from an entry finds it there.
+  function historyCard(car, preloaded, place) {
+    place = place || {};
     var chips = el('div', { class: 'filter-box', role: 'group', 'aria-label': 'Filter the history' });
     var list = el('div', { class: 'history' }, [fmt.loading()]);
     var filter = 'All';
@@ -410,7 +415,7 @@
             el('span', { class: 'ft-name', text: t === 'All' ? 'All' : PLURAL[t] }),
             el('b', { class: 'ft-count', text: String(t === 'All' ? data.length : (counts[t] || 0)) }),
           ]);
-          b.addEventListener('click', function () { filter = t; render(); });
+          b.addEventListener('click', function () { filter = t; place.logTop = 0; render(); });
           tiles.append(b);
         });
         // a bar under the chosen tile: it glides from where it was to where it now belongs
@@ -422,9 +427,34 @@
       }
       var shown = data.filter(function (e) { return filter === 'All' || e.type === filter; });
       if (selecting) updateSelectUi();
+      var top = place.logTop || 0;
       list.replaceChildren.apply(list, shown.length ? shown.map(row)
         : [el('p', { class: 'muted', text: data.length ? 'No ' + (filter === 'All' ? 'entries' : PLURAL[filter].toLowerCase()) + ' yet.' : 'Nothing recorded yet. Add the first entry above.' })]);
+      var more = shown.length - LOG_ROWS;
+      list.classList.toggle('scrolls', more > 0);
+      moreNote.hidden = more <= 0;
+      moreNote.textContent = more > 0 ? 'Scroll the list to see ' + more + ' more.' : '';
+      if (more <= 0) list.style.maxHeight = '';
+      backTo = top;
+      if (sizes) {
+        // measured when the rows get their size: at once if the section is open, otherwise when it is opened
+        sizes.disconnect();
+        if (more > 0) Array.prototype.slice.call(list.children, 0, LOG_ROWS).forEach(function (line) { sizes.observe(line); });
+      }
     }
+
+    // As tall as the first five rows exactly (rows differ in height, so it is measured rather than fixed)
+    var backTo = null; // where to scroll the list to once it has its height (null once done)
+    function fitList() {
+      if (!list.classList.contains('scrolls')) return;
+      var height = list.children[LOG_ROWS - 1].getBoundingClientRect().bottom - list.children[0].getBoundingClientRect().top;
+      if (height <= 0) return;
+      list.style.maxHeight = Math.ceil(height) + (list.offsetHeight - list.clientHeight) + 'px'; // plus the box's own border
+      if (backTo !== null) { list.scrollTop = backTo; backTo = null; } // also back to the top after a change of filter
+    }
+    var sizes = window.ResizeObserver ? new window.ResizeObserver(fitList) : null;
+    var moreNote = el('p', { class: 'muted small-text center history-more', hidden: true });
+    list.addEventListener('scroll', function () { if (list.clientHeight) place.logTop = list.scrollTop; });
 
     function show(entries) {
       data = entries;
@@ -445,7 +475,7 @@
       el('h2', { text: 'Maintenance & Issues Log' }),
       el('a', { class: 'btn block big', href: '#/car/' + car.id + '/add', text: 'Manually log an entry' }),
       aiButton,
-      chips, selectTools, list,
+      chips, selectTools, list, moreNote,
     ]);
   }
 

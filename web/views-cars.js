@@ -339,7 +339,7 @@
   }
 
   // which sections of a car's page are open (kept so that coming back to the page finds it as it was left)
-  Views.getOpenCards = function () { return { carId: openCards.carId, keys: Object.assign({}, openCards.keys) }; };
+  Views.getOpenCards = function () { return { carId: openCards.carId, keys: Object.assign({}, openCards.keys), logTop: openCards.logTop }; };
   Views.setOpenCards = function (o) { openCards = o; };
   /** Open the named sections the next time this car's page is drawn (and only then). */
   Views.openCarSections = function (carId, keys) { openCards = { carId: carId, keys: keys, once: true }; };
@@ -523,23 +523,27 @@
           car.notes ? el('div', { class: 'car-notes' }, [el('div', { class: 'car-notes-label', text: 'Notes' }), notesEl, notesMore]) : null,
           mineBtn ? el('div', { class: 'btn-row' }, [mineBtn]) : null,
         ]),
-        collapsible('Odometer Log', el('section', { class: 'card' }, [
-          el('h2', { text: 'Odometer Log' }),
-          el('div', { class: 'big-number', text: car.odometer === null ? 'Not set' : num(car.odometer) + ' mi' }),
-          car.odometerUpdatedAt ? el('div', { class: 'muted small-text', text: 'Updated ' + fmtDate(car.odometerUpdatedAt) }) : null,
-          odoForm,
-        ]), car.odometer === null ? 'Not set' : num(car.odometer) + ' mi'),
-        collapsible('Maintenance & Issues Log', EntryUI.historyCard(car, page && page.entries), page && page.entries ? countText(page.entries.length, 'entry', 'entries') : ''),
-        collapsible('Reminders', RemindersUI.card(car, page && page.tasks), page && page.tasks ? reminderHint(page.tasks) : ''),
+        collapsible('Maintenance & Issues Log', EntryUI.historyCard(car, page && page.entries, openCards), page && page.entries ? countText(page.entries.length, 'entry', 'entries') : ''),
         collapsible('Fluids | Bulbs | Parts', el('section', { class: 'card' }, [
           el('h2', { text: 'Fluids | Bulbs | Parts' }),
           catalogueBox,
           fluids.some(isAiRow) ? aiCheckNote() : null,
-          fluidRows.length ? el('h3', { class: 'spec-group kind-fluid', text: '💧 Fluids' }) : null,
-          fluidRows.length ? el('ul', { class: 'fluids' }, fluidRows) : (bulbRows.length ? null : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' })),
-          bulbRows.length ? el('h3', { class: 'spec-group kind-bulb', text: '💡 Bulbs' }) : null,
-          bulbRows.length ? el('ul', { class: 'fluids' }, bulbRows) : null,
+          fluidRows.length || bulbRows.length ? el('div', { class: 'spec-scroll', role: 'region', tabindex: '0', 'aria-label': 'Fluids and bulbs' }, [
+            fluidRows.length ? el('h3', { class: 'spec-group kind-fluid', text: '💧 Fluids' }) : null,
+            fluidRows.length ? el('ul', { class: 'fluids' }, fluidRows) : null,
+            bulbRows.length ? el('h3', { class: 'spec-group kind-bulb', text: '💡 Bulbs' }) : null,
+            bulbRows.length ? el('ul', { class: 'fluids' }, bulbRows) : null,
+          ]) : el('p', { class: 'muted', text: 'No fluid specs recorded yet. Tap Edit car to add them.' }),
         ]), '', el('a', { class: 'btn small secondary section-edit', href: '#/car/' + car.id + '/fluids', text: 'Edit', 'aria-label': 'Edit the fluids, bulbs and specifications' })),
+        collapsible('Odometer Log', el('section', { class: 'card' }, [
+          el('h2', { text: 'Odometer Log' }),
+          el('div', { class: 'odo-now' }, [
+            el('div', { class: 'big-number', text: car.odometer === null ? 'Not set' : num(car.odometer) + ' mi' }),
+            car.odometerUpdatedAt ? el('div', { class: 'muted small-text', text: 'Updated ' + fmtDate(car.odometerUpdatedAt) }) : null,
+          ]),
+          odoForm,
+        ]), car.odometer === null ? 'Not set' : num(car.odometer) + ' mi'),
+        collapsible('Reminders', RemindersUI.card(car, page && page.tasks), page && page.tasks ? reminderHint(page.tasks) : ''),
         collapsible('Documents', DocumentsUI.card(car, page && page.documents), page && page.documents ? countText(page.documents.length, 'document', 'documents') : ''),
         collapsible('Costs', EntryUI.costsCard(car, page && page.costs)),
         collapsible('Guest access', GuestUI.card(car), car.guestEnabled ? 'On' : 'Off'),
