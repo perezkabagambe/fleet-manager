@@ -81,13 +81,12 @@ test('several photos are one item: all are shown to the AI, numbered, and it can
   assert.equal(read(up.id, { kind: 'Nonsense' }).error, 'invalid_type');
 });
 
-test('saving the review makes one issue per problem, same date and mileage, linked to each other, with the report on every one', () => {
+test('saving the review makes one issue per problem, same date and mileage, found at the same time, with the report on every one', () => {
   const { env, sam, samId, upload, read, get, list, save, car } = setup();
   env.state.gemini = () => answer(SCAN);
   const up = upload().data.receipt;
   read(up.id);
-  const all = [0, 1, 2, 3, 4, 5];
-  const r = save({ receiptId: up.id, updateOdometer: true, issues: SCAN.issues.map((x, i) => issueIn(x.title, { notes: 'Codes: ' + x.codes.map((c) => c.code).join(', '), linkTo: all.filter((n) => n !== i) })) });
+  const r = save({ receiptId: up.id, updateOdometer: true, issues: SCAN.issues.map((x) => issueIn(x.title, { notes: 'Codes: ' + x.codes.map((c) => c.code).join(', ') })) });
   assert.equal(r.ok, true, r.error);
   assert.equal(r.data.entries.length, 6);
   const saved = list();
@@ -95,7 +94,9 @@ test('saving the review makes one issue per problem, same date and mileage, link
   assert.deepEqual([...new Set(saved.map((e) => e.date + '|' + e.mileage + '|' + e.identifiedBy + '|' + e.vendor))], ['2026-10-05|123456|' + samId + '|Sam']);
   assert.equal(new Set(saved.map((e) => e.ref)).size, 6);
   const first = get(r.data.entries[0].id);
-  assert.equal(first.linkedIssues.length, 5);
+  assert.deepEqual(first.linkedIssues, [], 'nothing says the faults are related');
+  assert.deepEqual(first.foundWith.map((g) => [g.date, g.issues.length]), [['2026-10-05', 5]]);
+  assert.ok(!first.foundWith[0].issues.some((i) => i.id === first.entry.id));
   assert.deepEqual(first.attachments.map((a) => a.filename), ['scan.pdf']);
   const refs = r.data.entries.map((e) => get(e.id).attachments[0].ref);
   assert.equal(new Set(refs).size, 6, 'each entry has its own attachment ID');
@@ -160,6 +161,33 @@ test('a possible duplicate can be added to the existing issue instead, and new i
   assert.deepEqual([d.entry.date, d.entry.mileage, d.entry.title], ['2026-10-01', 181000, 'Headlamp not moving']);
   assert.equal(d.attachments.length, 1);
   assert.deepEqual(d.linkedIssues.map((x) => x.title), ['Parking sensor']);
+});
+
+test('found at the same time is kept apart from related issues, and an older issue found again lists both reports', () => {
+  const { env, admin, sam, car, get, save } = setup();
+  const first = save({ date: '2026-10-05', issues: [issueIn('Headlamp'), issueIn('Parking sensor')] }).data.entries;
+  const [lamp, sensor] = first.map((e) => e.id);
+  assert.deepEqual(get(lamp).linkedIssues, []);
+  const second = save({ date: '2026-11-09', issues: [issueIn('Headlamp again', { appendTo: lamp }), issueIn('Brake sensor', { linkIds: [sensor] })], maintenance: { title: 'Service', total: '10', currency: 'GBP' } });
+  assert.equal(second.ok, true, second.error);
+  const brake = second.data.entries[1].id;
+  const names = (id) => get(id).foundWith.map((g) => [g.date, g.issues.map((i) => i.title)]);
+  assert.deepEqual(names(lamp), [['2026-10-05', ['Parking sensor']], ['2026-11-09', ['Brake sensor']]]);
+  assert.deepEqual(names(sensor), [['2026-10-05', ['Headlamp']]], 'a related issue from another report is not found at the same time');
+  assert.deepEqual(names(brake), [['2026-11-09', ['Headlamp']]], 'the maintenance entry is not listed');
+  assert.deepEqual(get(brake).linkedIssues.map((i) => i.title), ['Parking sensor']);
+  // editing keeps it; a deleted issue drops out of the lists and comes back when restored
+  const b = get(brake).entry;
+  assert.equal(env.call('saveEntry', { token: sam, id: brake, version: b.version, fields: { title: 'Brake pressure sensor', date: '2026-11-20' } }).ok, true);
+  assert.deepEqual(names(lamp)[1], ['2026-11-09', ['Brake pressure sensor']], 'the report keeps its own date');
+  env.call('deleteEntry', { token: admin, id: brake });
+  assert.deepEqual(names(lamp), [['2026-10-05', ['Parking sensor']]]);
+  assert.equal(env.call('restoreEntry', { token: admin, id: brake }).ok, true);
+  assert.equal(names(lamp).length, 2);
+  // a report with one issue, and an issue added by hand, have nothing found with them
+  const alone = save({ issues: [issueIn('Only one')] }).data.entries[0].id;
+  const hand = env.call('saveEntry', { token: sam, carId: car.id, type: 'Issue', fields: { title: 'By hand', date: '2026-11-09' } }).data.entry.id;
+  assert.deepEqual([get(alone).foundWith, get(hand).foundWith], [[], []]);
 });
 
 test('an invoice with faults saves the maintenance entry too; photos go to their own issue and the rest everywhere', () => {

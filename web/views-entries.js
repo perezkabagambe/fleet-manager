@@ -770,7 +770,14 @@
         }).catch(function (err) { msg.replaceChildren(UI.notice('error', UI.errorText(err))); });
       }
       if (d.linkedIssues && d.linkedIssues.length) {
-        cards.push(el('section', { class: 'card' }, [el('h2', { text: 'Linked issues (' + d.linkedIssues.length + ')' }), LinkedIssues.view(carId, d.linkedIssues)]));
+        cards.push(el('section', { class: 'card' }, [
+          el('h2', { text: 'Related issues (' + d.linkedIssues.length + ')' }),
+          e.type === 'Issue' ? el('p', { class: 'muted small-text', text: 'Added by a person who knows these faults are related.' }) : null,
+          LinkedIssues.view(carId, d.linkedIssues),
+        ]));
+      }
+      if (d.foundWith && d.foundWith.length) {
+        cards.push(LinkedIssues.found(carId, d.foundWith, (d.linkedIssues || []).map(function (i) { return i.id; }), dateText));
       }
       cards.push(el('section', { class: 'card', id: 'entry-files' }, [
         el('h2', { text: 'Photos and documents' }),

@@ -4,8 +4,9 @@
  * The person has checked what AI read (Receipts.js reads it). One save makes one Issue per problem they kept, all with the
  * same date, mileage and "who identified it", and optionally the maintenance entry when the document is also an invoice for
  * work done. A fee or quoted price for the whole report is shared: every issue it covers shows it, and a shared fee is
- * counted once. The report file is attached to every entry; photos go to the issue they show. The new issues are linked to
- * each other. Everything is checked before anything is written.
+ * counted once. The report file is attached to every entry; photos go to the issue they show. The issues of one report are
+ * marked as found at the same time (Entries.found_in); they are only linked as related where the person asked for it.
+ * Everything is checked before anything is written.
  */
 
 /** Text added to an existing issue's notes, keeping within the notes limit (the older notes are never cut). */
@@ -102,6 +103,8 @@ function saveReport_(p, ctx) {
   // ---- write ----
   const feeGroups = sharedAmountGroups_(issues, 'sharedFee', 'cost', 'currency');
   const quoteGroups = sharedAmountGroups_(issues, 'sharedQuote', 'quoteCost', 'quoteCurrency');
+  const found = issues.length > 1 ? Utilities.getUuid() + ':' + date : ''; // this report, on each issue it found
+  const foundOn = function (old) { return String(old || '').indexOf(found) === -1 ? [String(old || ''), found].filter(Boolean).join(' ') : String(old); };
   const saved = []; // { id, created, files }
   issues.forEach(function (x, i) {
     if (x.appendTo) {
@@ -113,14 +116,15 @@ function saveReport_(p, ctx) {
       const patch = { notes: appendNotes_(row.notes, heading, [cleanText_(x.fields.notes, 2000)].concat(kept).filter(Boolean).join('\n')), updated_at: nowIso_(), updated_by: ctx.user.id, version: Number(row.version || 1) + 1 };
       if (x.takes.cost) Object.assign(patch, { cost: x.fields.cost, currency: x.fields.currency, fee_group: feeGroups[i] || '' });
       if (x.takes.quoteCost) Object.assign(patch, { quote_cost: x.fields.quoteCost, quote_currency: x.fields.quoteCurrency, quote_group: quoteGroups[i] || '' });
+      if (found) patch.found_in = foundOn(row.found_in);
       Db.update('Entries', row._row, patch);
       audit_(ctx.user, 'entry_updated', 'Entry', row.id, 'Issue "' + row.title + '" on ' + car.registration + ': notes added from a report');
       saved.push({ id: row.id, created: false, files: x.files });
       return;
     }
     const made = saveEntry_({ carId: car.id, type: 'Issue', fields: x.fields }, ctx).entry;
-    if (feeGroups[i] || quoteGroups[i]) {
-      Db.update('Entries', findEntry_(made.id)._row, { fee_group: feeGroups[i] || '', quote_group: quoteGroups[i] || '' });
+    if (feeGroups[i] || quoteGroups[i] || found) {
+      Db.update('Entries', findEntry_(made.id)._row, { fee_group: feeGroups[i] || '', quote_group: quoteGroups[i] || '', found_in: found });
     }
     saved.push({ id: made.id, created: true, files: x.files });
   });

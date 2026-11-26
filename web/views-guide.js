@@ -119,6 +119,7 @@
       shot('guide-inbox', 'What AI read from a receipt'),
       p([document.createTextNode('No email handy? Tap '), b('Upload a receipt or report'), document.createTextNode(' in the same note, add it in the '), page('/inbox', 'AI Inbox'), document.createTextNode(', or share a PDF or photo to the Android app.')]),
       p([b('Inspection or diagnostic reports'), document.createTextNode(' (also quotes, a described problem or photos of it) become one issue for each problem. On an '), link('addissue', 'issue'), document.createTextNode(', tap '), b('Upload an inspection or diagnostic report'), document.createTextNode('. You check every issue on one review screen before saving. A quoted repair cost is kept on the issue but never counted as money spent.')]),
+      p([document.createTextNode('Issues from one report list each other under '), b('Found at the same time'), document.createTextNode(', which doesn\'t mean the faults are related. Where they are, use '), b('Link to a related issue'), document.createTextNode(' and they show under '), b('Related issues'), document.createTextNode('.')]),
     ], true),
     section('2. Adding a car', [
       p([document.createTextNode('Tap '), page('/car/new', 'Add a car'), document.createTextNode(' on the Fleet page, then choose:')]),

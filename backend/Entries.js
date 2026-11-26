@@ -295,6 +295,23 @@ function linkedIssuesOf_(entry, c) {
   }).sort(function (a, b) { return String(a.ref).localeCompare(String(b.ref)); });
 }
 
+/** The reports that found an issue: Entries.found_in holds a "reportId:date" for each, separated by spaces. */
+function reportsOf_(entry) { return String(entry.found_in || '').split(' ').filter(Boolean); }
+
+/**
+ * "Found at the same time": for each report that found an issue, the other issues it found. It says nothing about the faults
+ * being related (that is what the links are for, which only a person makes).
+ * [{ date, issues: [{ id, ref, title, status }] }], oldest report first; a report with no other live issue is left out.
+ */
+function foundWithOf_(issue, c) {
+  return reportsOf_(issue).map(function (report) {
+    const others = c.entries.filter(function (e) { return e.id !== issue.id && e.type === 'Issue' && reportsOf_(e).indexOf(report) !== -1; })
+      .map(function (e) { return { id: e.id, ref: e.ref || '', title: e.title, status: e.status }; })
+      .sort(function (a, b) { return String(a.ref).localeCompare(String(b.ref)); });
+    return { date: report.split(':')[1] || '', issues: others };
+  }).filter(function (g) { return g.issues.length; }).sort(function (a, b) { return a.date.localeCompare(b.date); });
+}
+
 /** The maintenance and purchase entries that link to an issue. */
 function relatedToIssue_(issue, c) {
   const byId = {};
@@ -439,6 +456,7 @@ function buildEntryDetail_(e, car, c, guestNames, attachments) {
     out.jobCost = jobCost_(e, c.usage, c.purchasesById);
   }
   if (e.type === 'Issue') {
+    out.foundWith = foundWithOf_(e, c);
     out.related = relatedToIssue_(e, c); // the maintenance and purchases that link to this issue
     out.fixedBy = out.related.filter(function (x) { return x.type === 'Maintenance'; }).map(function (x) { return { id: x.id, title: x.title, date: x.date, resolves: x.resolves }; });
   }

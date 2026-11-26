@@ -76,6 +76,7 @@
       var issuesBox = el('div', { class: 'report-issues' });
       var filesBox = el('div');
       var saveBtn = el('button', { type: 'button', class: 'btn block big', text: 'Save' });
+      var foundNote = el('p', { class: 'small-text muted center' });
 
       function openFile(n) {
         Viewer.show({ mime: files[n].mime, filename: files[n].filename, load: function () { return FleetApi.call('getReceiptFile', { id: receipt.id, index: n }, { timeoutMs: 240000 }).then(function (r) { return r.data; }); } });
@@ -260,7 +261,7 @@
         var onCar = existing.filter(function (e) { return e.type === 'Issue'; }).map(function (e) { return { id: e.id, ref: e.ref, title: e.title, status: e.status }; });
         var selected = Object.keys(i.linkTo).map(function (k) { return { id: k }; }).concat(i.linkIds.map(function (x) { return { id: x }; }));
         return LinkedIssues.editor({
-          choices: others.concat(onCar), selected: selected,
+          choices: others.concat(onCar), selected: selected, hint: 'Only add faults you know are related.',
           onChange: function (value) {
             var ids = value.map(function (v) { return v.issueId; });
             state.issues.forEach(function (o) { if (o !== i) ReportDraft.setLinked(state, i, o.key, ids.indexOf(o.key) !== -1); });
@@ -345,9 +346,11 @@
         summaryBox.replaceChildren(
           el('strong', { text: state.issues.length ? count(state.issues.length, 'issue') + ' found' : 'No issues were found. Add one by hand, or go back.' }),
           el('div', { class: 'muted small-text', text: [codes ? count(codes, 'fault code') : '', stored ? count(stored, 'issue') + ' with only stored codes (unticked)' : '', data.summary || ''].filter(Boolean).join(' · ') }),
-          el('div', { class: 'muted small-text', text: !state.carId ? '' : dups ? count(dups, 'issue') + ' may already be on this car: check the yellow ones.' : state.issues.length > 1 ? 'The issues are linked to each other.' : '' }));
+          el('div', { class: 'muted small-text', text: !state.carId ? '' : dups ? count(dups, 'issue') + ' may already be on this car: check the yellow ones.' : '' }));
         var n = ReportDraft.kept(state).length;
         var job = state.maintenance && state.maintenance.keep;
+        foundNote.hidden = n < 2;
+        foundNote.replaceChildren(count(n, 'issue') + ' will be saved. They\'ll show as ', el('strong', { text: 'found at the same time' }), '. That doesn\'t mean the faults are related.');
         saveBtn.textContent = n && job ? 'Save ' + count(n, 'issue') + ' and the maintenance' : job ? 'Save the maintenance entry' : n ? 'Save ' + count(n, 'issue') : 'Save';
       }
 
@@ -392,7 +395,7 @@
           filesBox,
         ]),
         el('div', { class: 'report-box' }, [el('h2', { text: 'Fees and quotes' }), feesBox]),
-        summaryBox, maintenanceBox, issuesBox, addBtn, saveMsg, saveBtn, later,
+        summaryBox, maintenanceBox, issuesBox, addBtn, saveMsg, foundNote, saveBtn, later,
       ]));
       drawFees(); drawAll(); drawPlate(); drawOdometer(); markMissing();
       FleetApp.setBanner({ subtitle: firstCar ? firstCar.registration + ' · ' + firstCar.make + ' ' + firstCar.model : 'Choose the car' });

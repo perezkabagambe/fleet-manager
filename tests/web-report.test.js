@@ -12,12 +12,14 @@ const receipt = (data, extra) => Object.assign({ id: 'r1', kind: 'Issue', files:
 ] }, data || {}) }, extra || {});
 const state = (data, extra) => Object.assign(R.fromReading(receipt(data, extra), { currency: 'GBP' }), { carId: 'c1', identifiedBy: 'u1', receiptId: 'r1' });
 
-test('the review starts from the reading: shared details, notes with every code, stored codes unticked, issues linked to each other', () => {
+test('the review starts from the reading: shared details, notes with every code, stored codes unticked, no issue marked as related', () => {
   const s = state();
   assert.deepEqual([s.date, s.mileage, s.issues.length, s.maintenance], ['2026-10-05', '123456', 3, null]);
   assert.equal(s.issues[0].notes, 'Fault codes:\nB1421 · Passenger solar sensor circuit (Air conditioner) [Current]\nB1424 · Driver solar sensor circuit (Air conditioner) [Current]\n\nFrom a report, reference SCAN-1, 2026-10-05.');
   assert.deepEqual(s.issues.map((i) => i.keep), [true, true, false]);
-  assert.equal(Object.keys(s.issues[0].linkTo).length, 2);
+  assert.deepEqual(s.issues.map((i) => Object.keys(i.linkTo)), [[], [], []], 'found together is not the same as related');
+  R.setLinked(s, s.issues[0], s.issues[1].key, true);
+  R.setLinked(s, s.issues[0], s.issues[2].key, true);
   const p = R.payload(s);
   assert.deepEqual(p.issues.map((i) => i.linkTo), [[1], [0]], 'links only to issues that are being saved');
   assert.deepEqual([p.receiptId, p.carId, p.mileage, p.identifiedBy, p.vendor], ['r1', 'c1', '123456', 'u1', '']);
@@ -69,6 +71,7 @@ test('two issues can be combined: codes, notes, photos and amounts together', ()
   const s = state();
   const [a, b] = s.issues;
   a.cost = '10'; b.cost = '15'; b.files = [1];
+  R.setLinked(s, s.issues[2], b.key, true);
   R.combine(s, a, b);
   assert.equal(s.issues.length, 2);
   assert.deepEqual([a.codes.map((c) => c.code), a.cost, a.files], [['B1421', 'B1424', 'B2413'], '25', [1]]);
@@ -81,5 +84,5 @@ test('an invoice that also lists faults proposes the maintenance entry too; phot
   assert.deepEqual([s.maintenance.title, s.maintenance.total, s.maintenance.vendor], ['Full service', '185', 'City Garage']);
   assert.deepEqual(s.issues[0].files, [1]);
   const added = R.addIssue(s);
-  assert.equal(added.linkTo[s.issues[0].key], true);
+  assert.deepEqual(added.linkTo, {});
 });

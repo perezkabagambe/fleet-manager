@@ -70,8 +70,6 @@
       x.files = (i.photos || []).map(function (n) { return n - 1; }).filter(isPhoto);
       return x;
     });
-    // everything found at the same inspection is linked to each other to start with
-    issues.forEach(function (a) { issues.forEach(function (b) { if (a !== b) a.linkTo[b.key] = true; }); });
     var maintenance = null;
     var isInvoice = receipt.kind === 'Maintenance' || data.kind === 'Maintenance';
     if (isInvoice && issues.length) {
@@ -124,7 +122,6 @@
     x.notes = state.source || '';
     if (state.fee) { x.cost = state.fee; x.sharedFee = true; }
     if (state.quote) { x.quoteCost = state.quote; x.sharedQuote = true; }
-    state.issues.forEach(function (o) { o.linkTo[x.key] = true; x.linkTo[o.key] = true; });
     x.open = true;
     state.issues.push(x);
     return x;

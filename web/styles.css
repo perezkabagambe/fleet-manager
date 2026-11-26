@@ -1140,7 +1140,7 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 @media (prefers-color-scheme: dark) { .search-results mark { background: #5c4a00; } }
 .search-none { padding: 24px 8px; }
 
-/* linked issues: three rows tall, scrolling for more */
+/* related issues: three rows tall, scrolling for more */
 .linked-list { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); max-height: 168px; overflow-y: auto; margin-bottom: 8px; }
 .linked-list.tall { max-height: 234px; }
 .linked-list[hidden] { display: none; }
@@ -1155,6 +1155,15 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 .linked-resolve input { width: 18px; height: 18px; }
 .linked-unlink { flex: none; min-height: 40px; }
 .linked-chev { flex: none; color: var(--muted); }
+.linked-hint { margin: -2px 0 8px; }
+/* "Found at the same time": deliberately plainer than the related issues, so it does not read as a connection */
+.card.found-card { background: transparent; border-style: dashed; box-shadow: none; }
+.found-list { max-height: 172px; overflow-y: auto; }
+.linked-row.found-row { padding: 6px 2px; border-bottom: 0; border-top: 1px solid var(--border); }
+.found-row .linked-title { font-weight: 400; }
+.found-when { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin: 10px 0 4px; }
+.found-when:first-child { margin-top: 0; }
+.related-tag { border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 0 8px; font-weight: 600; }
 
 /* the review screen for an inspection or diagnostic report */
 .report-box { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 12px; }

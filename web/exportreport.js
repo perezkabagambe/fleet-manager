@@ -210,7 +210,12 @@
       if (d && d.reminder) kv('Reminder', d.reminder.name);
     }
     if (d && d.linkedIssues && d.linkedIssues.length) {
-      kv('Linked issues', d.linkedIssues.map(function (i) { return (i.ref ? i.ref + ' ' : '') + i.title + (i.resolves ? ' (resolved by this)' : ''); }).join('; '));
+      kv('Related issues', d.linkedIssues.map(function (i) { return (i.ref ? i.ref + ' ' : '') + i.title + (i.resolves ? ' (resolved by this)' : ''); }).join('; '));
+    }
+    if (d && d.foundWith && d.foundWith.length) {
+      kv('Found at the same time', d.foundWith.map(function (g) {
+        return 'Report of ' + day(g.date) + ': ' + g.issues.map(function (i) { return (i.ref ? i.ref + ' ' : '') + i.title; }).join(', ');
+      }).join('; ') + ' (the faults are not necessarily related)');
     }
     kv('Notes', e.notes);
 
