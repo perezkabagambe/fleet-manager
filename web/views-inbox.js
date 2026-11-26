@@ -179,7 +179,8 @@
    * form asks for them. onSent() runs once they are all stored.
    */
   function uploadForm(cars, carId, preset, onSent) {
-    var carPick = UI.searchSelect(cars.map(function (c) { return { value: c.id, label: c.registration + ' · ' + c.make + ' ' + c.model }; }), { value: carId || '', placeholder: 'Choose a vehicle…', ariaLabel: 'Which vehicle is it for?', searchPlaceholder: 'Search cars…' });
+    function carOptions() { return cars.map(function (c) { return { value: c.id, label: c.registration + ' · ' + c.make + ' ' + c.model }; }); }
+    var carPick = UI.searchSelect(carOptions(), { value: carId || '', placeholder: 'Choose a vehicle…', ariaLabel: 'Which vehicle is it for?', searchPlaceholder: 'Search cars…' });
     var kindPick = el('select', { name: 'kind' }, [el('option', { value: '', text: 'Choose…' })].concat(KIND_CHOICES.map(function (k) { return el('option', { value: k[0], text: k[1] }); })));
     var file = preset ? null : el('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true, class: 'file-input', 'aria-label': 'Choose photos or PDFs' });
     var hint = el('div', { class: 'hint' });
@@ -203,13 +204,15 @@
         else if (out.done.length) status.append(el('a', { class: 'btn block secondary', href: '#' + destination(out.done[0]), text: 'Carry on with what was added' }));
       }).catch(function (e) { status.replaceChildren(UI.notice('error', UI.errorText(e))); });
     });
-    return el('div', {}, [
+    var form = el('div', {}, [
       el('div', { class: 'field' }, [el('label', { text: 'Which vehicle is it for?' }), carPick]),
       el('div', { class: 'field' }, [el('label', { text: 'What is it?' }), kindPick, hint]),
       preset ? null : el('div', { class: 'field' }, [el('label', { text: 'Photos or PDFs' }), file]),
       status, go, readNote(),
       preset ? null : emailOption(cars, carPick), // files shared from the phone are already chosen
     ]);
+    form.setCars = function () { carPick.setOptions(carOptions()); }; // `cars` was filled again in place
+    return form;
   }
 
   // ---------- how many are waiting (the number on the menu) ----------
@@ -270,20 +273,38 @@
       msg, sharedBox, fileBox, listBox, recentBox,
     ]));
 
-    var cars = [];
+    var cars = []; // one list, filled again in place, so the forms see a newer answer
+    var forms = [];
     var reading = true;
+    var intro = el('p', { class: 'muted small-text' });
     FleetApp.setBanner({ title: 'AI Inbox', icon: 'inbox', action: null });
     var flash = FleetApp.takeFlash();
     if (flash) msg.append(UI.notice(flash.kind === 'ok' ? 'ok' : 'info', flash.text)); // e.g. "3 receipts added"
 
+    function explainAdding() {
+      intro.textContent = reading
+        ? 'Take a photo, or choose photos or PDFs. AI reads them and you check everything before it is saved.'
+        : 'Take a photo, or choose a photo or PDF. Automatic reading is not switched on yet, so you will fill the details in yourself.';
+    }
+    function newForm(carId, preset, onSent) {
+      var form = uploadForm(cars, carId, preset, onSent);
+      forms.push(form);
+      return form;
+    }
     function addBlock() {
+      explainAdding();
       return el('details', { class: 'copy-section', open: !!ctx.query.car || undefined }, [
         el('summary', { text: 'Add an inspection report, garage invoice or purchase receipt' }),
-        el('p', { class: 'muted small-text', text: reading
-          ? 'Take a photo, or choose photos or PDFs. AI reads them and you check everything before it is saved.'
-          : 'Take a photo, or choose a photo or PDF. Automatic reading is not switched on yet, so you will fill the details in yourself.' }),
-        uploadForm(cars, ctx.query.car, null, null),
+        intro,
+        newForm(ctx.query.car, null, null),
       ]);
+    }
+    // The forms are drawn once (so a chosen file is never lost); a newer list of cars only refreshes their pickers
+    function showCars(data) {
+      cars.length = 0;
+      Array.prototype.push.apply(cars, data.cars || []);
+      if (!forms.length) { fileBox.replaceChildren(addBlock()); checkShared(); }
+      else forms.forEach(function (f) { f.setCars(); });
     }
 
     // Files shared to the app: ask which vehicle and what they are, then read them
@@ -299,7 +320,7 @@
         sharedBox.replaceChildren(el('div', { class: 'report-box shared-box' }, [
           el('h2', { text: items.length > 1 ? items.length + ' shared files' : 'Shared file' }),
           el('p', { class: 'muted small-text', text: items.map(function (it) { return it.file.name; }).join(', ') }),
-          uploadForm(cars, '', items.map(function (it) { return it.file; }), drop),
+          newForm('', items.map(function (it) { return it.file; }), drop),
           discard,
         ]));
       });
@@ -318,21 +339,29 @@
       ]);
     }
 
-    Promise.all([FleetApi.call('listInbox'), FleetApi.call('listCars')]).then(function (res) {
-      var data = res[0].data;
-      cars = res[1].data.cars || [];
+    function showItems(data, saved) {
       reading = data.reading;
-      setCount(data.open.length);
+      explainAdding();
+      if (!saved) setCount(data.open.length); // the number on the menu is only ever set from a fresh answer
       FleetApp.setBanner({ subtitle: data.open.length ? data.open.length + ' waiting to be checked' : 'Nothing waiting' });
-      fileBox.replaceChildren(addBlock());
-      checkShared();
       listBox.replaceChildren.apply(listBox, data.open.length ? data.open.map(row) : [el('p', { class: 'muted', text: 'Nothing is waiting. Add something above' + (data.reading ? '' : ', or email it once that is switched on') + '.' })]);
+      var wasOpen = !!recentBox.querySelector('details[open]');
+      recentBox.replaceChildren();
       if (data.recent.length) {
-        recentBox.replaceChildren(el('details', { class: 'copy-section' }, [el('summary', { text: 'Recently handled (' + data.recent.length + ')' }), el('div', { class: 'stack' }, data.recent.map(row))]));
+        recentBox.append(el('details', { class: 'copy-section', open: wasOpen || undefined }, [el('summary', { text: 'Recently handled (' + data.recent.length + ')' }), el('div', { class: 'stack' }, data.recent.map(row))]));
       }
-    }).catch(function (e) {
-      if (e.code !== 'unauthorized') msg.replaceChildren(UI.notice('error', UI.errorText(e)));
-    });
+    }
+    function failed(e) {
+      if (e.code === 'unauthorized') return;
+      if (e.hadSaved) msg.replaceChildren(UI.notice('warn', 'Showing what was saved on this phone. ' + UI.errorText(e)));
+      else msg.replaceChildren(UI.notice('error', UI.errorText(e)));
+      if (!e.hadSaved) listBox.replaceChildren();
+    }
+
+    // each part appears as soon as it is known: what the phone saved last time first, then the fresh answer
+    listBox.replaceChildren(fmt().loading());
+    FleetApi.seen('listCars', {}, showCars).catch(failed);
+    FleetApi.seen('listInbox', {}, showItems).catch(failed);
   };
 
   // ---------- one receipt ----------
