@@ -195,14 +195,6 @@
     return card;
   }
 
-  // The car's receipt addresses: simple (from the registration) and public (a short reference, for anyone). Asked for once per car, then remembered
-  var receiptEmails = {};
-  function receiptEmailFor(car) {
-    var key = car.id + '|' + car.registration;
-    if (!receiptEmails[key]) receiptEmails[key] = FleetApi.call('getReceiptAddress', { carId: car.id }).then(function (r) { return { address: r.data.address, publicAddress: r.data.privateAddress }; }).catch(function (e) { delete receiptEmails[key]; throw e; });
-    return receiptEmails[key];
-  }
-
   function historyCard(car, preloaded) {
     var chips = el('div', { class: 'filter-box', role: 'group', 'aria-label': 'Filter the history' });
     var list = el('div', { class: 'history' }, [fmt.loading()]);
@@ -446,87 +438,17 @@
       });
     }
 
-    // A short note under the button: receipts and invoices can be emailed to the car's address, or uploaded here for AI to read
-    var receiptHint = el('div', { class: 'receipt-hint section-note', hidden: true });
-    var emailPart = el('p', { hidden: true });
-    var aiPart = el('div', { hidden: true });
-    receiptHint.append(emailPart, aiPart);
-    function showHint() { receiptHint.hidden = emailPart.hidden && aiPart.hidden; }
-    receiptEmailFor(car).then(function (a) {
-      if (!a.address && !a.publicAddress) return;
-      var kids = [document.createTextNode('Email AI a garage invoice, part receipt, inspection report, or just describe or photograph a problem. Start the subject with Issue:, Invoice: or Receipt: so it knows which. ')];
-      if (a.address) {
-        kids.push(
-          document.createTextNode('Simple address (from your own email): '),
-          el('a', { class: 'receipt-hint-link', href: 'mailto:' + a.address, text: a.address }),
-          document.createTextNode('. ')
-        );
-      }
-      if (a.publicAddress) {
-        kids.push(
-          document.createTextNode('Public address (works for anyone, so share it with your garage): '),
-          el('a', { class: 'receipt-hint-link', href: 'mailto:' + a.publicAddress, text: a.publicAddress }),
-          document.createTextNode('.')
-        );
-      }
-      emailPart.replaceChildren.apply(emailPart, kids);
-      emailPart.hidden = false;
-      showHint();
-    }).catch(function () { /* no email part: the log works without it */ });
-
-    // Upload a receipt or report here: AI reads it, then the entry form or the review screen opens, to check and save
-    function drawAiPart(status, problem) {
-      var left = status.remaining;
-      var kids = [el('p', { text: 'Or upload one now: AI reads it and you review it before saving. A receipt, an invoice, a report or a photo of a problem.' })];
-      if (problem) kids.push(problem);
-      if (left > 0) {
-        var input = el('input', { type: 'file', accept: 'image/*,application/pdf', class: 'file-input', 'aria-label': 'Choose a photo or PDF of a receipt or invoice' });
-        input.addEventListener('change', function () {
-          var file = input.files && input.files[0];
-          input.value = '';
-          if (file) readReceiptFile(file, status);
-        });
-        kids.push(
-          el('p', { text: 'AI can get things wrong: check every box. ' + left + ' of ' + status.limit + ' AI reads left today.' }),
-          el('label', { class: 'btn small secondary file-btn' }, [el('span', { text: 'Upload a receipt or report' }), input])
-        );
-      } else {
-        kids.push(el('p', { text: 'No AI reads left today. They come back tomorrow.' }));
-      }
-      aiPart.replaceChildren.apply(aiPart, kids);
-    }
-    function readReceiptFile(file, status) {
-      aiPart.replaceChildren(UI.waiting('Reading it with AI… this can take up to a minute. Please keep this screen open.'));
-      Photos.prepareAttachment(file).then(function (a) {
-        if (a.mime !== 'image/jpeg' && a.mime !== 'application/pdf') throw new FleetApi.ApiError('invalid_attachment', 'Not a photo or PDF');
-        return FleetApi.call('uploadReceipt', { carId: car.id, mime: a.mime, data: a.data, filename: a.filename }, { timeoutMs: 240000 });
-      }).then(function (up) {
-        var saved = up.data.receipt;
-        return FleetApi.call('readReceipt', { id: saved.id }, { timeoutMs: 90000 }).then(function (x) { return x.data.receipt; }, function () { return saved; });
-      }).then(function (r) {
-        if (r.status === 'Pending' && window.InboxUI && InboxUI.destination(r) !== '/inbox/' + r.id) { FleetApp.go(InboxUI.destination(r)); return; } // a report: to its review
-        if (r.status === 'Pending' && (r.kind === 'Purchase' || r.kind === 'Maintenance')) {
-          FleetApp.go('/car/' + car.id + '/add/' + r.kind.toLowerCase(), { inbox: r.id });
-          return;
-        }
-        var text = r.status === 'Pending'
-          ? 'AI could not tell what that is. It is saved in the AI Inbox, where you can say what it is.'
-          : (r.note || (r.status === 'Queued' ? 'AI could not read it just now. It is saved in the AI Inbox and will be read later.' : 'AI could not read it. It is saved in the AI Inbox, where you can fill in the entry by hand.'));
-        FleetApi.call('getReceiptStatus').then(function (st) { drawAiPart(st.data, UI.notice('info', text)); }, function () { drawAiPart(status, UI.notice('info', text)); });
-      }).catch(function (e) {
-        FleetApi.call('getReceiptStatus').then(function (st) { drawAiPart(st.data, UI.notice('error', UI.errorText(e))); }, function () { drawAiPart(status, UI.notice('error', UI.errorText(e))); });
-      });
-    }
-    FleetApi.call('getReceiptStatus').then(function (r) {
-      if (!r.data.available) return;
-      drawAiPart(r.data);
-      aiPart.hidden = false;
-      showHint();
-    }).catch(function () { /* no AI part */ });
+    // Reports, invoices and receipts are added through the AI Inbox: this opens it with the car already chosen
+    var aiButton = el('a', { class: 'ai-add', href: '#/inbox?car=' + encodeURIComponent(car.id) }, [
+      FleetApp.icon('inbox', 28),
+      el('span', { class: 'ai-add-text' }, [el('strong', { text: 'Add with AI' }), el('span', { text: 'Report, invoice or receipt · opens the AI Inbox' })]),
+      el('span', { class: 'ai-add-arrow', 'aria-hidden': 'true', text: '→' }),
+    ]);
+    FleetApi.call('getReceiptStatus').then(function (r) { if (!r.data.available) aiButton.hidden = true; }).catch(function () { /* offline: leave it */ });
     return el('section', { class: 'card' }, [
       el('h2', { text: 'Maintenance & Issues Log' }),
       el('a', { class: 'btn block big', href: '#/car/' + car.id + '/add', text: 'Add entry' }),
-      receiptHint,
+      aiButton,
       chips, selectTools, list,
     ]);
   }

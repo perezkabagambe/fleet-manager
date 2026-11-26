@@ -474,3 +474,19 @@ test('an email that states its type is read as that type; with no attachment the
   assert.equal(by['About the issue we discussed'].chosenKind, '', 'a mention in passing is not a statement of the type');
   assert.match(env.state.geminiRequests[0].body.contents[0].parts[0].text, /The person says it is/);
 });
+
+test('the subject wording the app asks for is understood anywhere in the subject', () => {
+  const env = createEnv();
+  const said = (subject, body) => require('vm').runInContext('receiptSaidKind_(' + JSON.stringify(subject) + ', ' + JSON.stringify(body || '') + ')', env.ctx);
+  const cases = [
+    ['Inspection report', 'Issue'], ['Fwd: GY57 inspection report from today', 'Issue'], ['INSPECTION-REPORT attached', 'Issue'],
+    ['Garage invoice', 'Maintenance'], ['Re: your garage invoice 123', 'Maintenance'],
+    ['Purchase', 'Purchase'], ['Thank you for your purchase', 'Purchase'], ['Garage invoice for a purchase', 'Maintenance'],
+    // the older ways still work, and come first
+    ['Issue: brakes', 'Issue'], ['Invoice: June service', 'Maintenance'], ['Receipt: oil', 'Purchase'], ['Issue: noted on the garage invoice', 'Issue'],
+    // not said: AI works it out
+    ['Inspection report and garage invoice', ''], ['You purchased a filter', ''], ['Your recent purchases', ''], ['Invoice 4471 from Kampala Motors', ''], ['Report', ''], ['', ''],
+  ];
+  cases.forEach(([subject, kind]) => assert.equal(said(subject), kind, subject));
+  assert.equal(said('About your purchase', 'Type: issue\nIt rattles.'), 'Issue', 'a line in the text says it outright');
+});

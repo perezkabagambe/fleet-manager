@@ -254,8 +254,10 @@ function receiptEmailFiles_(message) {
 }
 
 /**
- * The entry type an email states in so many words: a subject starting "Issue:", "Invoice:" or "Receipt:", or a line such as
- * "Type: issue" in the text. '' when it does not say (AI then works it out from what the email and its files contain).
+ * The entry type an email states in so many words, in this order: a subject starting "Issue:", "Invoice:" or "Receipt:"; a line
+ * such as "Type: issue" in the text; or "inspection report", "garage invoice" or "purchase" anywhere in the subject (what the
+ * app asks people to put there). '' when it does not say, or the subject names both a report and a garage invoice (AI then
+ * works it out from what the email and its files contain).
  */
 function receiptSaidKind_(subject, body) {
   const word = function (w) {
@@ -269,7 +271,12 @@ function receiptSaidKind_(subject, body) {
   const inSubject = new RegExp('^\\s*(?:(?:re|fwd?)\\s*:\\s*)*' + words + '\\s*[:\\-]', 'i').exec(String(subject || ''));
   if (inSubject) return word(inSubject[1]);
   const inBody = new RegExp('(?:^|\\n)\\s*(?:entry\\s+)?type\\s*[:\\-=]\\s*' + words + '\\b', 'i').exec(String(body || '').slice(0, 4000));
-  return inBody ? word(inBody[1]) : '';
+  if (inBody) return word(inBody[1]);
+  const named = String(subject || '');
+  const report = /\binspection[\s\-]+report\b/i.test(named);
+  const garage = /\bgarage[\s\-]+invoice\b/i.test(named);
+  if (report || garage) return report && garage ? '' : report ? 'Issue' : 'Maintenance';
+  return /\bpurchase\b/i.test(named) ? 'Purchase' : '';
 }
 
 /** Decide what to do with one email: { car, user } to accept it, or { skip: 'why' }. */

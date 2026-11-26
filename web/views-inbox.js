@@ -94,9 +94,14 @@
     return chain.then(function () { refreshCount(); return { done: done, failed: failed }; });
   }
 
-  /** Where to go for an item that has just been read: a report goes straight to its review. */
+  /**
+   * Where to go for an item that has just been read: a report (or an invoice that lists faults) goes to its review screen, a
+   * receipt or invoice for a known car to its filled-in entry form, and anything else to its own page in the Inbox.
+   */
   function destination(r) {
-    return r.status === 'Pending' && (r.kind === 'Issue' || (r.kind === 'Maintenance' && r.issueCount)) ? '/inbox/' + r.id + '/review' : '/inbox/' + r.id;
+    if (r.status === 'Pending' && (r.kind === 'Issue' || (r.kind === 'Maintenance' && r.issueCount))) return '/inbox/' + r.id + '/review';
+    if (r.status === 'Pending' && r.carId && (r.kind === 'Purchase' || r.kind === 'Maintenance')) return '/car/' + r.carId + '/add/' + r.kind.toLowerCase() + '?inbox=' + r.id;
+    return '/inbox/' + r.id;
   }
   function openResult(done) {
     if (done.length === 1) {
@@ -108,6 +113,65 @@
       FleetApp.setFlash('ok', done.length + ' files added. Open each one to check it.');
       FleetApp.go('/inbox');
     }
+  }
+
+  // ---------- emailing instead ----------
+  // A car's addresses: simple (from the registration, for your own email) and public (a short reference, for anyone). Asked for once
+  var addresses = {};
+  function addressesFor(car) {
+    var key = car.id + '|' + car.registration;
+    if (!addresses[key]) addresses[key] = FleetApi.call('getReceiptAddress', { carId: car.id }).then(function (r) { return r.data; }).catch(function (e) { delete addresses[key]; throw e; });
+    return addresses[key];
+  }
+
+  function addressRow(label, who, address) {
+    if (!address) return null;
+    var at = address.indexOf('@'); // a long address breaks before the @, not in the middle of a word
+    return el('div', { class: 'email-addr' }, [
+      el('div', { class: 'email-who' }, [el('strong', { text: label }), el('span', { class: 'muted', text: who })]),
+      UI.copyValueButton(address, 'Copy the ' + label.toLowerCase()),
+      el('a', { href: 'mailto:' + address }, [document.createTextNode(address.slice(0, at)), el('wbr'), document.createTextNode(address.slice(at))]),
+    ]);
+  }
+
+  /** "Or email it to the car's address": closed until asked for; the addresses are those of the vehicle chosen in the form. */
+  function emailOption(cars, carPick) {
+    var body = el('div', { class: 'email-body' });
+    var box = el('details', { class: 'email-option' }, [el('summary', { text: 'Or email it to the car\'s address' }), body]);
+    var showing = '';
+    function say(text) { return el('li', {}, [el('strong', { text: text[0] }), document.createTextNode(text[1] || '')]); }
+    function draw() {
+      if (!box.open) return;
+      var car = cars.filter(function (c) { return c.id === carPick.value; })[0];
+      showing = car ? car.id : '';
+      if (!car) { body.replaceChildren(el('p', { text: 'Choose a vehicle above to see its email addresses.' })); return; }
+      body.replaceChildren(fmt().loading());
+      addressesFor(car).then(function (a) {
+        if (showing !== car.id) return; // another vehicle was chosen meanwhile
+        if (!a.address && !a.privateAddress) { body.replaceChildren(el('p', { text: 'Email isn\'t set up yet.' })); return; }
+        body.replaceChildren.apply(body, [
+          el('p', { text: 'In the subject, say which it is:' }),
+          el('ul', {}, [say(['Inspection report', ' (AI logs the issues)']), say(['Garage invoice']), say(['Purchase'])]),
+          addressRow('Simple address', 'Only from your own email', a.address),
+          addressRow('Public address', 'Anyone can use it: share it with your garage', a.privateAddress),
+          el('p', { class: 'muted small-text', text: 'Tap an address to start an email.' }),
+        ].filter(Boolean));
+      }).catch(function (e) { if (showing === car.id) body.replaceChildren(UI.notice('error', UI.errorText(e))); });
+    }
+    box.addEventListener('toggle', draw);
+    carPick.addEventListener('change', draw);
+    return el('div', {}, [el('p', { class: 'or-rule', text: 'or' }), box]);
+  }
+
+  /** Under "Read it with AI": what happens next, and how many reads are left when there are not many. */
+  function readNote() {
+    var left = el('strong', { class: 'reads-left', hidden: true });
+    FleetApi.call('getReceiptStatus').then(function (r) {
+      if (!r.data.available || r.data.remaining > 5) return;
+      left.textContent = r.data.remaining ? r.data.remaining + ' AI read' + (r.data.remaining === 1 ? '' : 's') + ' left today.' : 'No AI reads left today. What you add now will be read tomorrow.';
+      left.hidden = false;
+    }).catch(function () { /* the count is only a courtesy */ });
+    return el('p', { class: 'muted small-text center read-note' }, [document.createTextNode('You check everything before it\'s saved.'), left]);
   }
 
   /**
@@ -143,7 +207,8 @@
       el('div', { class: 'field' }, [el('label', { text: 'Which vehicle is it for?' }), carPick]),
       el('div', { class: 'field' }, [el('label', { text: 'What is it?' }), kindPick, hint]),
       preset ? null : el('div', { class: 'field' }, [el('label', { text: 'Photos or PDFs' }), file]),
-      status, go,
+      status, go, readNote(),
+      preset ? null : emailOption(cars, carPick), // files shared from the phone are already chosen
     ]);
   }
 

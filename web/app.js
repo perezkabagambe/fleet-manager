@@ -651,6 +651,7 @@
     go: go,
     refreshNav: refreshNav,
     setBanner: setBanner,
+    icon: icon,
     signOut: function () { signOut(); },
     previousPage: function () { return lastPage; },
     setFlash: function (kind, text) { flash = { kind: kind, text: text }; },
