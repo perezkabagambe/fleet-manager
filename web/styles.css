@@ -452,6 +452,23 @@ details.collapsible[open] > summary .collapse-hint { display: none; }
 .dialog { background: var(--surface); color: var(--text, inherit); border-radius: var(--radius); padding: 20px; width: 100%; max-width: 420px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3); }
 .dialog-text { margin: 0 0 16px; white-space: pre-line; overflow-wrap: anywhere; }
 .dialog-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+.export-dialog { max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
+.export-dialog h2 { margin: 0; }
+.export-dialog h2:focus { outline: none; }
+.export-dialog { padding-bottom: 0; }
+/* the buttons stay in sight while the list scrolls */
+.export-actions { position: sticky; bottom: 0; display: flex; gap: 10px; margin: 8px -20px 0; padding: 12px 20px 16px; background: var(--surface); border-top: 1px solid var(--border); }
+.export-actions .btn { padding-left: 14px; padding-right: 14px; }
+.export-actions .export-go { flex: 1; line-height: 1.25; }
+.export-group { border: 0; border-top: 1px solid var(--border); margin: 10px 0 0; padding: 8px 0 0; min-width: 0; }
+.export-group legend { padding: 0; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); float: left; width: 100%; }
+.export-group legend + * { clear: both; }
+.export-tick { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; margin: 0; min-height: 44px; cursor: pointer; font-weight: 400; }
+.export-tick input { width: 22px; height: 22px; margin: 0; flex: none; }
+.export-label { display: flex; flex-direction: column; font-weight: 600; line-height: 1.35; }
+.export-note { font-weight: 400; font-size: 0.82rem; color: var(--muted); }
+.export-covers { margin: 0 0 4px 32px; }
+.export-covers.partial { font-weight: 700; }
 
 /* Edit buttons on the car page sections */
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0 8px; }
@@ -1196,8 +1213,20 @@ input[name="vin"] { letter-spacing: -0.01em; padding-left: 8px; padding-right: 8
 .report-dup { margin: 4px 0 4px 32px; }
 .report-flag { display: inline-block; background: var(--warn-bg); color: var(--warn-text); border-radius: 8px; padding: 4px 8px; font-size: 0.85rem; font-weight: 600; }
 .report-flag a { color: inherit; }
-.report-tip { border: 1px dashed var(--note); border-radius: 10px; padding: 10px 12px; margin: 0 0 14px; font-size: 0.88rem; background: color-mix(in srgb, var(--note) 7%, var(--surface)); }
-.report-tip p { margin: 4px 0; }
+.ai-tip { border: 1px dashed var(--note); border-radius: 12px; padding: 4px 14px 10px; margin: 0 0 14px; font-size: 0.94rem; background: color-mix(in srgb, var(--note) 7%, var(--surface)); }
+.ai-tip p { margin: 4px 0; overflow-wrap: anywhere; }
+.ai-tip-row { padding: 9px 0 3px; border-bottom: 1px dashed color-mix(in srgb, var(--note) 40%, transparent); }
+.ai-tip-foot { display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 0.82rem; }
+.ai-tip .ai-tip-action, .ai-tip-removed .ai-tip-action { text-decoration: none; font-weight: 600; font-size: 0.9rem; padding: 6px 0 6px 10px; margin-left: auto; flex: none; }
+.ai-tip .ai-tip-caution { margin-top: 8px; font-size: 0.8rem; }
+.ai-tip-choice { display: flex; gap: 10px; margin-top: 8px; }
+.ai-tip-choice .btn { flex: 1; }
+.ai-tip-removed { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
+.ai-tip-removed .ai-tip-action { margin-left: 0; }
+.ai-tip-ask { margin-bottom: 14px; }
+.ai-tips-section { margin: 12px 0; }
+.ai-tips-section > :last-child, .ai-tips-section > :nth-last-child(2) { margin-bottom: 0; }
+.ai-tips-section:empty { display: none; }
 .report-photo { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
 .report-photo button { flex: 1; min-width: 0; text-align: left; overflow-wrap: anywhere; }
 .report-photo select { width: auto; max-width: 55%; }

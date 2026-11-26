@@ -241,3 +241,81 @@ test('adding to an existing issue never loses a fee: it takes it where it has no
   assert.equal(by('Has a fee').quoteCost, 420, 'it had no quote, so it takes this one');
   assert.deepEqual(spent(), [['GBP', 85]], 'the report fee once, and the old one');
 });
+
+test('AI tips are saved with their issues as the reading gave them; a new report\'s tip joins an older one', () => {
+  const { env, upload, read, save, get, list, sam, car } = setup();
+  env.state.gemini = () => answer(SCAN);
+  const up = upload().data.receipt;
+  read(up.id);
+  const tip = 'These can be set when scanned in the dark.';
+  const saved = save({ receiptId: up.id, issues: [
+    issueIn('Solar sensors', { tips: [tip, 'Words nobody was told by the AI'] }), issueIn('Parking sensors', { tips: [] }),
+  ] }).data.entries;
+  const first = get(saved[0].id).entry.aiTips;
+  assert.deepEqual(first.map((t) => [t.text, t.source, t.date]), [[tip, 'report', '2026-10-05']], 'only what the AI read can be kept');
+  assert.ok(first[0].id);
+  assert.deepEqual(get(saved[1].id).entry.aiTips, []);
+  assert.deepEqual(list().find((e) => e.id === saved[0].id).aiTips.length, 1, 'the log carries them too, for the phone copies');
+
+  // a later report adds to the same issue: both tips stay, and the same one is not added twice
+  const second = Object.assign({}, SCAN, { issues: [Object.assign({}, SCAN.issues[1], { tip: 'Check the sensor connectors first.' })] });
+  env.state.gemini = () => answer(second);
+  const up2 = upload().data.receipt;
+  read(up2.id);
+  assert.equal(save({ receiptId: up2.id, date: '2026-11-09', issues: [issueIn('Solar sensors', { appendTo: saved[0].id, tips: ['Check the sensor connectors first.'] })] }).ok, true);
+  assert.deepEqual(get(saved[0].id).entry.aiTips.map((t) => [t.text, t.date]), [[tip, '2026-10-05'], ['Check the sensor connectors first.', '2026-11-09']]);
+
+  // anyone can remove one; the other stays
+  const gone = env.call('removeIssueTip', { token: sam, id: saved[0].id, tipId: first[0].id });
+  assert.deepEqual(gone.data.entry.aiTips.map((t) => t.text), ['Check the sensor connectors first.']);
+  assert.equal(env.call('removeIssueTip', { token: sam, id: saved[0].id, tipId: first[0].id }).ok, true, 'removing it again changes nothing');
+  // editing the issue never touches the tips
+  const e = get(saved[0].id).entry;
+  assert.equal(env.call('saveEntry', { token: sam, id: e.id, version: e.version, fields: { title: e.title, notes: 'New notes', date: e.date, mileage: String(e.mileage), status: e.status, aiTips: [] } }).ok, true);
+  assert.equal(get(e.id).entry.aiTips.length, 1);
+  assert.ok(car);
+});
+
+test('a tip asked for on a saved issue is stored only when kept or the issue is saved, and cannot be reworded', () => {
+  const { env, sam, car, get } = setup();
+  const made = env.call('saveEntry', { token: sam, carId: car.id, type: 'Issue', fields: { title: 'Faulty ABS pump', notes: 'Light stays on. Ring 07700 900123', date: '2026-10-01', mileage: '1000', status: 'Not resolved' } }).data.entry;
+  env.state.gemini = () => answer({ tip: 'A weak battery can also set ABS faults: check it first.' });
+  const asked = env.call('aiIssueTip', { token: sam, id: made.id });
+  assert.equal(asked.data.tip, 'A weak battery can also set ABS faults: check it first.');
+  assert.deepEqual(get(made.id).entry.aiTips, [], 'asking stores nothing');
+  const sent = env.state.geminiRequests[env.state.geminiRequests.length - 1].body;
+  const words = sent.contents[0].parts[0].text;
+  assert.match(words, /Car: Example Saloon 2008/);
+  assert.match(words, /Problem: Faulty ABS pump\nNotes:\nLight stays on/);
+  assert.ok(!words.includes('07700') && !words.includes(car.registration), 'no phone number and no registration');
+  assert.deepEqual(sent.generationConfig.responseSchema.required, ['tip']);
+
+  const keep = (tip, proof) => env.call('keepIssueTip', { token: sam, id: made.id, tip, proof });
+  assert.equal(keep('Replace the pump at once.', asked.data.proof).error, 'invalid_input');
+  const other = env.call('saveEntry', { token: sam, carId: car.id, type: 'Issue', fields: { title: 'Other', date: '2026-10-01', mileage: '1000', status: 'Not resolved' } }).data.entry;
+  assert.equal(env.call('keepIssueTip', { token: sam, id: other.id, tip: asked.data.tip, proof: asked.data.proof }).error, 'invalid_input', 'a tip belongs to the issue it was asked for');
+  const kept = keep(asked.data.tip, asked.data.proof).data.entry;
+  assert.deepEqual(kept.aiTips.map((t) => [t.text, t.source]), [[asked.data.tip, 'asked']]);
+  assert.equal(keep(asked.data.tip, asked.data.proof).data.entry.aiTips.length, 1);
+
+  // saved along with the edit form, using what is in the form
+  env.state.gemini = () => answer({ tip: 'Check the wheel speed sensors too.' });
+  const again = env.call('aiIssueTip', { token: sam, id: other.id, title: 'ABS light', notes: 'Typed in the form' }).data;
+  assert.match(env.state.geminiRequests[env.state.geminiRequests.length - 1].body.contents[0].parts[0].text, /Problem: ABS light\nNotes:\nTyped in the form/);
+  const fields = { title: 'ABS light', notes: 'Typed in the form', date: '2026-10-01', mileage: '1000', status: 'Not resolved' };
+  assert.equal(env.call('saveEntry', { token: sam, id: other.id, version: 1, fields, aiTip: { tip: 'Made up', proof: again.proof } }).error, 'invalid_input');
+  assert.equal(get(other.id).entry.title, 'Other', 'nothing is saved when the tip is not genuine');
+  assert.equal(env.call('saveEntry', { token: sam, id: other.id, version: 1, fields, aiTip: { tip: again.tip, proof: again.proof } }).ok, true);
+  assert.deepEqual(get(other.id).entry.aiTips.map((t) => t.text), ['Check the wheel speed sensors too.']);
+
+  // nothing useful, a busy service and a spent allowance
+  env.state.gemini = () => answer({ tip: '' });
+  assert.deepEqual(env.call('aiIssueTip', { token: sam, id: made.id }).data, { tip: '', proof: '' });
+  env.state.gemini = () => ({ code: 503, body: { error: { status: 'UNAVAILABLE', message: 'busy' } } });
+  assert.equal(env.call('aiIssueTip', { token: sam, id: made.id }).error, 'ai_busy');
+  env.props.RECEIPT_USER_DAILY = '1';
+  assert.equal(env.call('aiIssueTip', { token: sam, id: made.id }).error, 'ai_daily_limit');
+  const job = env.call('saveEntry', { token: sam, carId: car.id, type: 'Maintenance', fields: { title: 'Service', date: '2026-10-01', mileage: '1000', costMode: 'lump' } }).data.entry;
+  assert.equal(env.call('aiIssueTip', { token: sam, id: job.id }).error, 'not_found', 'only issues get tips');
+  assert.equal(env.call('aiIssueTip', { id: made.id }).ok, false, 'and only for someone signed in');
+});

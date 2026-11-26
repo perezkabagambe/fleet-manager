@@ -108,6 +108,9 @@ function actions_() {
     addReceiptFile: { auth: 'user', lock: true, fn: addReceiptFile_ },
     setReceiptCar: { auth: 'user', lock: true, fn: setReceiptCar_ },
     saveReport: { auth: 'user', lock: true, fn: saveReport_ },
+    aiIssueTip: { auth: 'user', fn: aiIssueTip_ }, // no script lock: it waits for an outside service
+    keepIssueTip: { auth: 'user', lock: true, fn: keepIssueTip_ },
+    removeIssueTip: { auth: 'user', lock: true, fn: removeIssueTip_ },
     readReceipt: { auth: 'user', fn: readReceipt_ }, // no script lock: it waits for an outside service and must not block everyone else
     listInbox: { auth: 'user', fn: listInbox_ },
     getInboxCount: { auth: 'user', fn: getInboxCount_ },

@@ -79,16 +79,18 @@ test('two issues can be combined: codes, notes, photos and amounts together', ()
   assert.ok(!(b.key in s.issues[1].linkTo));
 });
 
-test('combining two issues keeps both AI tips, once each', () => {
+test('AI tips go with their issues: both are kept when two are combined, and what is saved is what is left on screen', () => {
   const s = state();
   const [a, b, c] = s.issues;
-  a.tip = 'Scan in daylight.'; b.tip = 'Check the connector first.'; c.tip = 'Scan in daylight.';
+  a.tips = ['Scan in daylight.']; b.tips = ['Check the connector first.']; c.tips = ['Scan in daylight.'];
   R.combine(s, a, b);
-  assert.equal(a.tip, 'Scan in daylight. Check the connector first.');
-  b.tip = '';
-  a.tip = 'Scan in daylight.';
+  assert.deepEqual(a.tips, ['Scan in daylight.', 'Check the connector first.']);
   R.combine(s, a, c);
-  assert.equal(a.tip, 'Scan in daylight.');
+  assert.deepEqual(a.tips, ['Scan in daylight.', 'Check the connector first.']);
+  a.removedTips.push(a.tips.pop()); // "Remove tip" on the review screen
+  a.keep = true;
+  assert.deepEqual(R.payload(s).issues[0].tips, ['Scan in daylight.']);
+  assert.deepEqual(R.addIssue(s).tips, []);
 });
 
 test('an invoice that also lists faults proposes the maintenance entry too; photos only attach if they are pictures', () => {

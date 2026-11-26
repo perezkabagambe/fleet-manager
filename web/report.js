@@ -35,7 +35,7 @@
   function blankIssue(currency) {
     nextKey += 1;
     return {
-      key: 'new:' + nextKey, keep: true, title: '', notes: '', system: '', codes: [], stored: false, tip: '', status: 'Not resolved',
+      key: 'new:' + nextKey, keep: true, title: '', notes: '', system: '', codes: [], stored: false, tips: [], removedTips: [], status: 'Not resolved',
       cost: '', currency: currency, quoteCost: '', quoteCurrency: currency, sharedFee: false, sharedQuote: false,
       files: [], linkTo: {}, linkIds: [], duplicate: null, duplicateChoice: 'append', open: false,
     };
@@ -61,7 +61,7 @@
       x.codes = i.codes || [];
       x.stored = !!i.stored;
       x.keep = !x.stored; // stored or old codes start unticked
-      x.tip = i.tip || '';
+      x.tips = i.tip ? [i.tip] : [];
       x.notes = composeNotes(i, source);
       x.cost = amountText(i.inspectionFee);
       x.quoteCost = amountText(i.quotedCost);
@@ -150,7 +150,7 @@
     into.files = into.files.concat(other.files.filter(function (f) { return into.files.indexOf(f) === -1; }));
     into.keep = into.keep || other.keep;
     into.stored = into.stored && other.stored;
-    into.tip = [into.tip, other.tip].filter(function (t, n, all) { return t && all.indexOf(t) === n; }).join(' ');
+    ['tips', 'removedTips'].forEach(function (k) { into[k] = into[k].concat(other[k]).filter(function (t, n, all) { return all.indexOf(t) === n; }); });
     other.linkIds.forEach(function (id) { if (into.linkIds.indexOf(id) === -1) into.linkIds.push(id); });
     state.issues.forEach(function (i) { delete i.linkTo[other.key]; });
     state.issues.splice(state.issues.indexOf(other), 1);
@@ -199,7 +199,7 @@
       issues: list.map(function (i) {
         return {
           title: i.title, notes: i.notes, status: i.status, cost: i.cost, currency: i.currency, quoteCost: i.quoteCost, quoteCurrency: i.quoteCurrency,
-          sharedFee: i.sharedFee, sharedQuote: i.sharedQuote, files: i.files.slice(), appendTo: i.duplicate && i.duplicateChoice === 'append' ? i.duplicate.id : '',
+          tips: i.tips.slice(), sharedFee: i.sharedFee, sharedQuote: i.sharedQuote, files: i.files.slice(), appendTo: i.duplicate && i.duplicateChoice === 'append' ? i.duplicate.id : '',
           linkTo: Object.keys(i.linkTo).filter(function (k) { return at[k] !== undefined; }).map(function (k) { return at[k]; }), linkIds: i.linkIds.slice(),
         };
       }),

@@ -164,14 +164,14 @@ function sample() {
 }
 
 test('the report opens with the short explanation, then every section in full', () => {
-  const bytes = ExportReport.build(sample());
+  const bytes = ExportReport.build(Object.assign(sample(), { include: { buyCost: true } }));
   checkStructure(bytes);
   const pages = pdfText(bytes);
   const all = pages.join(' ');
   // the explanation is at the top of the first page, in the agreed words
   const first = pages[0];
-  assert.ok(first.indexOf('Vehicle data export') < first.indexOf('This is an export of all your vehicle'));
-  assert.ok(first.includes('This is an export of all your vehicle\'s data from Fleet Manager by Potentia Motus.'));
+  assert.ok(first.indexOf('Vehicle data export') < first.indexOf('This is an export of your vehicle'));
+  assert.ok(first.includes('This is an export of your vehicle\'s data from Fleet Manager by Potentia Motus.'));
   assert.ok(first.includes('Every document, photo or PDF listed here has been saved in its own folder, named after its unique reference in this document.'));
   assert.ok(first.includes('For example, the file A-0002 is in the folder A-0002.'));
   assert.ok(ExportReport.INTRO.length < 330, 'and it is short');
@@ -191,6 +191,80 @@ test('the report opens with the short explanation, then every section in full', 
   for (const bit of ['Engine oil', '0W-20', 'Dipped beam', 'D4S', 'MOT (compliance)', 'Repeats every 12 months', 'Spent in GBP: £159.00', 'Labour £90.00']) assert.ok(all.includes(bit), bit);
   const raw = Buffer.from(bytes).toString('latin1');
   assert.equal((raw.match(/\/Filter \/DCTDecode/g) || []).length, 2, 'the car photo and the one entry picture');
+});
+
+/** The whole PDF as one string, for a sample with these ticks changed from how the export options open. */
+function exported(include, change) {
+  const s = Object.assign(sample(), { include });
+  if (change) change(s);
+  const bytes = ExportReport.build(s);
+  checkStructure(bytes);
+  return pdfText(bytes).join(' ');
+}
+const has = (all, bits) => bits.forEach((bit) => assert.ok(all.includes(bit), 'missing: ' + bit));
+const hasNot = (all, bits) => bits.forEach((bit) => assert.ok(!all.includes(bit), 'should be left out: ' + bit));
+const withTip = (s) => { s.details.e2.entry.aiTips = [{ id: 't1', text: 'Clean the pads before replacing them.', source: 'report', date: '2026-09-20' }]; };
+
+test('the export options open with everything ticked but AI tips and what the car cost to buy', () => {
+  assert.deepEqual(Object.keys(ExportReport.DEFAULTS).filter((k) => !ExportReport.DEFAULTS[k]).sort(), ['aiTips', 'buyCost']);
+  assert.equal(Object.keys(ExportReport.DEFAULTS).length, 12);
+  const all = exported(undefined, withTip);
+  has(all, ['Vehicle details', 'Spent in GBP: £159.00', '£90.00 (Joe)']);
+  hasNot(all, ['US$4,500.50', 'Acquisition cost', 'Clean the pads', 'These totals cover only']);
+});
+
+test('AI tips and the cost of buying the car are printed only when ticked', () => {
+  has(exported({ aiTips: true, buyCost: true }, withTip), ['AI tip Clean the pads before replacing them. (AI\'s own advice, not from a report or garage. It can be wrong.)', 'Acquisition cost US$4,500.50']);
+  hasNot(exported({ aiTips: true, issues: false }, withTip), ['Clean the pads']);
+  const alone = exported({ vehicle: false, buyCost: true });
+  has(alone, ['What the car cost to buy', 'US$4,500.50']);
+  hasNot(alone, ['Vehicle details', 'JTMHV05J604123456', 'Car details last changed']);
+});
+
+test('each section and entry type can be left out, along with lines that point at what is left out', () => {
+  const noSections = exported({ odometer: false, reminders: false, fluids: false, carFiles: false });
+  hasNot(noSections, ['Odometer Log', 'Repeats every', 'Reminder Brake check', 'Fluids, Bulbs', 'Engine oil', 'A-0004', 'logbook.pdf']);
+  has(noSections, ['M-0007', 'A-0001 invoice.pdf']);
+  const noIssues = exported({ issues: false });
+  hasNot(noIssues, ['I-0003', 'Related issues', 'Found at the same time']);
+  has(noIssues, ['M-0007', 'P-0002', '2 entries, newest first.']);
+  hasNot(exported({ maintenance: false }), ['M-0007', 'Fixed by', 'Used in']);
+  hasNot(exported({ purchases: false }), ['P-0002']);
+  hasNot(exported({ issues: false, maintenance: false, purchases: false }), ['Maintenance & Issues Log']);
+});
+
+test('running totals add up only what is in the export, and say so', () => {
+  const noPurchases = exported({ purchases: false });
+  has(noPurchases, ['Spent in GBP: £95.00', 'These totals cover only Issues, Maintenance and reminder renewals. Not included: Purchased items.']);
+  hasNot(noPurchases, ['Spent in GBP: £159.00', 'Parts £64.00', 'parts £64.00']);
+  has(exported({ maintenance: false }), ['Spent in GBP: £64.00', 'Not included: Maintenance.']);
+  const none = exported({ issues: false, maintenance: false, purchases: false, reminders: false });
+  has(none, ['No costs recorded for what is in this export.', 'There are no totals']);
+  assert.deepEqual(ExportReport.totalsCover({}), { all: true, none: false, covers: 'Issues, Maintenance, Purchased items and reminder renewals', leftOut: '' });
+  const f = ExportReport.filterCosts({ currencies: [{ currency: 'GBP', total: 35.3, categories: { compliance: 35.3 }, years: [{ year: '2026', total: 35.3, categories: { compliance: 35.3 } }] }] }, { reminders: false });
+  assert.deepEqual(f, { currencies: [] });
+});
+
+test('with running costs unticked no amount is printed anywhere, but the work itself still is', () => {
+  const s = () => { const x = sample(); x.details.e2.entry.cost = 60; x.details.e2.entry.quoteCost = 420; return x; };
+  const all = pdfText(ExportReport.build(Object.assign(s(), { include: { costs: false } }))).join(' ');
+  assert.ok(!/[£$]\s?\d|US\$|UGX\s?\d/.test(all), 'no money: ' + (all.match(/.{30}[£$]\s?\d.{10}/) || [''])[0]);
+  hasNot(all, ['Spent in', 'Invoice total', 'Total job cost', 'Unit cost', 'Shipping', 'Inspection fee', 'Quoted repair', 'Each cost is counted']);
+  has(all, ['Labour (Joe), 1.5 h', 'Other work disposal', 'Pads (front) [04465-60320] x 1', 'Fitted (used 1, 0 left)']);
+  const items = exported({ costs: false }, (x) => { x.details.e3 = { entry: x.entries[2], attachments: [], items: [{ id: 'i1', name: 'Brake pads', quantity: 2, unitCost: 30, lineTotal: 60, used: 1, remaining: 1 }], stock: { used: 1, remaining: 1, status: 'Partly used', total: 60 } }; });
+  has(items, ['Brake pads · quantity 2 · used 1, 1 left']);
+});
+
+test('without any files the PDF doesn\'t talk about folders, and the download is a PDF', () => {
+  const all = exported({ carFiles: false, entryFiles: false });
+  hasNot(all, ['saved in its own folder', 'Files (3)', 'A-0001', 'A-0004']);
+  has(all, [ExportReport.ABOUT]);
+  assert.equal(ExportReport.effective({ carFiles: false, entryFiles: false }).files, false);
+  assert.equal(ExportReport.effective({ carFiles: false, issues: false, maintenance: false, purchases: false }).files, false, 'entry files need entries');
+  const nothing = {};
+  Object.keys(ExportReport.DEFAULTS).forEach((k) => { nothing[k] = false; });
+  assert.equal(ExportReport.effective(nothing).content, false);
+  assert.equal(ExportReport.effective(Object.assign(nothing, { aiTips: true, entryFiles: true })).content, false);
 });
 
 test('the export never includes who created the car or an entry', () => {

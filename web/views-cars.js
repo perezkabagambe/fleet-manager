@@ -503,8 +503,8 @@
       var fluidRows = fluids.filter(function (f) { return !isBulbRow(f); }).map(function (f) { return specRow(f, f.fluid, 'fluid'); });
       var bulbRows = fluids.filter(isBulbRow).map(function (f) { return specRow(f, f.fluid, 'bulb'); });
 
-      // Export everything about this car (every section, all photos and files) as one zip.
-      var exportBtn = el('button', { type: 'button', class: 'btn block secondary', text: 'Export all vehicle data' });
+      // Export this car's data: the person ticks what to include.
+      var exportBtn = el('button', { type: 'button', class: 'btn block secondary', text: 'Export vehicle data' });
       exportBtn.addEventListener('click', function () { ExportAll.run(car); });
 
       // the banner names the car and carries its share symbol
@@ -552,7 +552,7 @@
         FleetAuth.isAdmin() ? collapsible('Recycle bin', EntryUI.binCard(car)) : null, // the last section, for admins only
         el('div', { class: 'export-row' }, [
           exportBtn,
-          el('p', { class: 'section-note', text: 'Downloads one zip: a PDF of everything on this page, plus a folder for every photo, file and document, named by its unique ID.' }),
+          el('p', { class: 'section-note', text: 'Choose what to include. You get a PDF, plus a folder for each photo, file and document you include, named by its unique ID.' }),
         ]),
         car.createdByName ? el('p', { class: 'muted small-text center created-note', text: 'Created by ' + car.createdByName + (car.createdAt ? ' on ' + fmtDate(car.createdAt) : '') }) : null,
         el('p', { class: 'muted small-text center', text: 'Car details last changed ' + fmtDate(car.updatedAt) }),

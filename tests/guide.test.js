@@ -29,7 +29,7 @@ test('every demo link in the guide has a destination, and every destination is u
   const carPage = read('web/views-cars.js');
   [...guide.matchAll(/(?:open: \['([^']+)'\]|scroll: '([^']+)')/g)].forEach((m) => {
     const name = m[1] || m[2];
-    assert.ok(name === 'Export all vehicle data' || carPage.includes("'" + name + "'"), 'the car page has no section called ' + name);
+    assert.ok(name === 'Export vehicle data' || carPage.includes("'" + name + "'"), 'the car page has no section called ' + name);
   });
 });
 

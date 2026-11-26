@@ -295,6 +295,11 @@ function geminiRead_(parts) {
     contents: [{ role: 'user', parts: parts }],
     generationConfig: { temperature: 0.1, maxOutputTokens: 16384, responseMimeType: 'application/json', responseSchema: receiptSchema_() },
   };
+  return geminiJson_(body);
+}
+
+/** One request whose answer is JSON, with the same second try on another model. Returns the parsed answer or throws an error code (the first model's). */
+function geminiJson_(body) {
   let json;
   try {
     json = geminiCall_(body);

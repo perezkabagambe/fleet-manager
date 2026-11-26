@@ -283,9 +283,9 @@
           el('span', { class: 'report-main' }, [
             title,
             i.system ? el('span', { class: 'muted small-text', text: i.system }) : null,
-            i.codes.length || status || i.tip ? el('span', { class: 'report-chips' }, i.codes.map(function (c) { return el('span', { class: 'report-code', text: c.code }); }).concat(
+            i.codes.length || status || i.tips.length ? el('span', { class: 'report-chips' }, i.codes.map(function (c) { return el('span', { class: 'report-code', text: c.code }); }).concat(
               status ? [el('span', { class: 'report-state' + (i.stored ? ' stored' : ''), text: status })] : [],
-              i.tip ? [el('span', { class: 'report-has-tip', text: 'AI tip' })] : [])) : null,
+              i.tips.length ? [el('span', { class: 'report-has-tip', text: i.tips.length > 1 ? i.tips.length + ' AI tips' : 'AI tip' })] : [])) : null,
             amounts,
           ]),
           el('span', { class: 'report-chev', 'aria-hidden': 'true', text: i.open ? '⌄' : '›' }),
@@ -299,16 +299,7 @@
           notes.addEventListener('input', function () { i.notes = notes.value; });
           var fee = amountField('Inspection fee', i.cost, i.currency, function (v) { ReportDraft.setIssueAmount(i, 'fee', v); fee.hint.textContent = 'Counted in costs'; amounts.textContent = amountsLine(i); }, function (v) { i.currency = v; i.sharedFee = false; amounts.textContent = amountsLine(i); }, ReportDraft.isShared(state, i, 'sharedFee') ? 'Shared. Counted once.' : 'Counted in costs');
           var quote = amountField('Quoted repair cost', i.quoteCost, i.quoteCurrency, function (v) { ReportDraft.setIssueAmount(i, 'quote', v); quote.hint.textContent = 'Never counted'; amounts.textContent = amountsLine(i); }, function (v) { i.quoteCurrency = v; i.sharedQuote = false; amounts.textContent = amountsLine(i); }, ReportDraft.isShared(state, i, 'sharedQuote') ? 'Shared quote. Never counted.' : 'Never counted');
-          var tip = null;
-          if (i.tip) {
-            var use = el('button', { type: 'button', class: 'linklike', text: 'Add to notes' });
-            use.addEventListener('click', function () {
-              var line = 'AI tip (not from the report): ' + i.tip;
-              if (i.notes.indexOf(line) === -1) i.notes = (i.notes ? i.notes + '\n\n' : '') + line;
-              drawIssues();
-            });
-            tip = el('div', { class: 'report-tip' }, [el('strong', { text: 'AI tip, not from the report' }), el('p', { text: i.tip }), el('p', { class: 'muted small-text', text: 'AI can be wrong. Check it before acting on it.' }), use]);
-          }
+          var tip = AiTips.review(i, drawIssues);
           var others = state.issues.filter(function (o) { return o !== i; });
           var combine = others.length ? choose([['', 'Combine with another issue…']].concat(others.map(function (o) { return [o.key, o.title || 'Untitled issue']; })), '', function (v) {
             var other = state.issues.filter(function (o) { return o.key === v; })[0];

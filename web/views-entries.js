@@ -628,12 +628,18 @@
         });
       }
       var statusArea = el('div', { class: 'entry-status' });
+      var tipsHere = null; // an issue's AI tips (set below)
       if (e.type === 'Issue') {
         var sel = el('select', { 'aria-label': 'Issue status' }, ISSUE_STATUSES.map(function (s) { return el('option', { value: s, text: s, selected: s === e.status }); }));
         sel.addEventListener('change', function () {
           msg.replaceChildren();
           sel.disabled = true;
-          FleetApi.call('setIssueStatus', { id: e.id, status: sel.value }).then(function () { e.status = sel.value; })
+          FleetApi.call('setIssueStatus', { id: e.id, status: sel.value }).then(function (r) {
+            e.status = sel.value;
+            e.version = r.data.entry.version;
+            if (tipsHere) return tipsHere.keepWaiting(); // saving the issue keeps a tip that is still waiting for an answer
+            return null;
+          })
             .catch(function (err) { sel.value = e.status; msg.replaceChildren(UI.notice('error', UI.errorText(err))); })
             .finally(function () { sel.disabled = false; });
         });
@@ -738,6 +744,8 @@
       }
 
       if (e.notes) cards.push(el('section', { class: 'card' }, [el('h2', { text: 'Notes' }), el('p', { class: 'notes', text: e.notes })]));
+      // an issue's AI tips have their own box, under its notes
+      if (e.type === 'Issue') { tipsHere = AiTips.onPage(e, dateText); cards.push(tipsHere.node); }
 
       // attachments
       var attBox = el('div', { class: 'stack' });
@@ -1252,7 +1260,9 @@
         selected: existingData ? (existingData.linkedIssues || []) : [],
         resolvable: isJob,
       });
-      var form = el('form', { novalidate: true }, top.concat(body, [linkEditor.node, notesField, attachSection, btn]));
+      // a saved issue with no tip can ask for one while it is edited: it is saved with the changes unless discarded
+      var formTips = type === 'Issue' && existing ? AiTips.inForm(existing, function () { return { title: f.title.value, notes: f.notes.value }; }) : null;
+      var form = el('form', { novalidate: true }, top.concat(body, [linkEditor.node, notesField, formTips && formTips.node, attachSection, btn].filter(Boolean)));
 
       // a new issue can come from an inspection or diagnostic report instead: AI reads it and every problem goes to the review screen
       var reportBox = null;
@@ -1343,10 +1353,12 @@
           payload.items = purchaseItems.map(function (r) { return { id: r.id, name: r.name, partNumber: r.partNumber, quantity: r.quantity, unitCost: r.unitCost }; });
         }
         payload.links = linkEditor.value();
+        if (formTips && formTips.value()) payload.aiTip = formTips.value();
         if (f.mileage && !odoRow.hidden && odoCheck.checked) payload.updateOdometer = true;
         if (taskSelect && taskSelect.value && !taskSelect.disabled) payload.taskId = taskSelect.value;
         return FleetApi.call('saveEntry', payload).then(function (r) {
           var entry = r.data.entry;
+          if (payload.aiTip) formTips.saved();
           reminderNote = r.data.reminder ? 'Reminder "' + r.data.reminder.name + '" is now ' + r.data.reminder.text + '.' : '';
           state.entryId = entry.id;
           state.version = entry.version;

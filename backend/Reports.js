@@ -52,6 +52,8 @@ function saveReport_(p, ctx) {
   if (!wanted.length && !maintenance) fail_('nothing_to_save');
 
   const files = receipt ? receiptFiles_(receipt) : [];
+  const readTips = {}; // the tips in this report's reading: the only ones this save can keep, so they are never reworded
+  if (receipt) (receiptData_(receipt).issues || []).forEach(function (i) { if (i && i.tip) readTips[i.tip] = true; });
   const c = entryContext_(car.id);
   const openIssue = function (id) {
     const hit = c.entries.filter(function (e) { return e.id === id && e.type === 'Issue'; })[0];
@@ -70,6 +72,7 @@ function saveReport_(p, ctx) {
         identifiedBy: p.identifiedBy || '', vendor: p.identifiedBy ? '' : p.vendor,
       },
       appendTo: cleanStr_(w.appendTo, 64),
+      tips: (Array.isArray(w.tips) ? w.tips : []).slice(0, MAX_ISSUE_TIPS).map(String).filter(function (t) { return Object.prototype.hasOwnProperty.call(readTips, t); }),
       sharedFee: w.sharedFee === true, sharedQuote: w.sharedQuote === true,
       files: (Array.isArray(w.files) ? w.files : []).map(Number).filter(function (n) { return n >= 0 && n < files.length && n === Math.floor(n); }),
       linkNew: (Array.isArray(w.linkTo) ? w.linkTo : []).map(Number).filter(function (n) { return n >= 0 && n < wanted.length && n === Math.floor(n); }),
@@ -117,14 +120,15 @@ function saveReport_(p, ctx) {
       if (x.takes.cost) Object.assign(patch, { cost: x.fields.cost, currency: x.fields.currency, fee_group: feeGroups[i] || '' });
       if (x.takes.quoteCost) Object.assign(patch, { quote_cost: x.fields.quoteCost, quote_currency: x.fields.quoteCurrency, quote_group: quoteGroups[i] || '' });
       if (found) patch.found_in = foundOn(row.found_in);
+      if (x.tips.length) patch.ai_tips = tipsWith_(row, x.tips, 'report', date); // any tip it already has stays
       Db.update('Entries', row._row, patch);
       audit_(ctx.user, 'entry_updated', 'Entry', row.id, 'Issue "' + row.title + '" on ' + car.registration + ': notes added from a report');
       saved.push({ id: row.id, created: false, files: x.files });
       return;
     }
     const made = saveEntry_({ carId: car.id, type: 'Issue', fields: x.fields }, ctx).entry;
-    if (feeGroups[i] || quoteGroups[i] || found) {
-      Db.update('Entries', findEntry_(made.id)._row, { fee_group: feeGroups[i] || '', quote_group: quoteGroups[i] || '', found_in: found });
+    if (feeGroups[i] || quoteGroups[i] || found || x.tips.length) {
+      Db.update('Entries', findEntry_(made.id)._row, { fee_group: feeGroups[i] || '', quote_group: quoteGroups[i] || '', found_in: found, ai_tips: tipsWith_({}, x.tips, 'report', date) });
     }
     saved.push({ id: made.id, created: true, files: x.files });
   });

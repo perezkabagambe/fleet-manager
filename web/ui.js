@@ -132,6 +132,7 @@
     mileage_required: 'Enter the mileage: every issue from a report needs it.',
     nothing_to_save: 'Keep at least one entry before saving.',
     ai_busy: 'The AI service is busy right now. Please try again in a minute.',
+    ai_daily_limit: 'Today\'s limit for AI requests has been reached. It comes back tomorrow.',
     ai_unavailable: 'The AI did not answer in time, or could not be reached. Nothing was used up. Please try again.',
     ai_limit_user: 'You have used all of your AI lookups for today. They come back tomorrow.',
     ai_limit_app: 'The app has reached its daily limit of AI lookups. They come back tomorrow.',

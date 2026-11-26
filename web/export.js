@@ -1,5 +1,5 @@
-// "Export all vehicle data": downloads one zip with a PDF of everything about a car (every section expanded) and, for
-// every attachment and car document, a folder named after its unique ID (such as A-0002) holding the original file.
+// "Export vehicle data": the person ticks what to include. The download is a PDF of the ticked sections (expanded in full)
+// and, when any files are ticked, one zip holding it with a folder for each file, named after its unique ID (such as A-0002).
 // Everything is put together on this phone; nothing is sent anywhere except the usual requests to read the data.
 (function () {
   'use strict';
@@ -49,7 +49,7 @@
 
   /** Download a file the person can keep. Returns the temporary address, so it can be offered again. */
   function saveFile(bytes, name) {
-    var url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }));
+    var url = URL.createObjectURL(new Blob([bytes], { type: /\.pdf$/.test(name) ? 'application/pdf' : 'application/zip' }));
     var a = document.createElement('a');
     a.href = url;
     a.download = name;
@@ -59,13 +59,85 @@
     return url;
   }
 
-  /**
-   * Run the export for one car. `car` is the car as shown on its page. Resolves when the person closes the screen.
-   */
+  // the tick boxes, in their groups: [key in ExportReport.DEFAULTS, label, short note]
+  var GROUPS = [
+    ['Vehicle', [['vehicle', 'Vehicle details'], ['buyCost', 'What the car cost to buy', 'The car\'s acquisition cost.'], ['odometer', 'Odometer log'], ['reminders', 'Reminders'],
+      ['fluids', 'Fluids, bulbs and specifications'], ['carFiles', 'Car attachments', 'The car\'s Documents section: its list and files.']]],
+    ['Log', [['issues', 'Issue entries'], ['maintenance', 'Maintenance entries'], ['purchases', 'Purchased items'], ['entryFiles', 'Entry attachments', 'Photos and files on the log entries.'],
+      ['aiTips', 'AI tips', 'AI\'s own advice on issues. It can be wrong.']]],
+    ['Costs', [['costs', 'Running costs', ' ']]],
+  ];
+
+  /** Ask what to include. Starts the same way every time. Resolves with the ticks, or null if cancelled. */
+  function choose(car) {
+    var el = UI.el;
+    return new Promise(function (resolve) {
+      var previous = document.activeElement;
+      var include = ExportReport.ticks();
+      var notes = {};
+      var groups = GROUPS.map(function (g) {
+        return el('fieldset', { class: 'export-group' }, [el('legend', { text: g[0] })].concat(g[1].map(function (t) {
+          var box = el('input', { type: 'checkbox', name: t[0] });
+          box.checked = include[t[0]];
+          box.addEventListener('change', function () { include[t[0]] = box.checked; draw(); });
+          var note = t[2] ? el('span', { class: 'export-note', text: t[2] }) : null;
+          notes[t[0]] = note;
+          return el('label', { class: 'export-tick' }, [box, el('span', { class: 'export-label' }, [el('span', { text: t[1] }), note])]);
+        })));
+      });
+      var covers = el('p', { class: 'section-note export-covers', 'aria-live': 'polite' });
+      var stillShown = el('p', { class: 'muted small-text', text: 'Prices in notes and attached files will still show.' });
+      var go = el('button', { type: 'button', class: 'btn export-go' });
+      var cancel = el('button', { type: 'button', class: 'btn secondary', text: 'Cancel' });
+      var heading = el('h2', { text: 'Choose what to export', tabindex: '-1' });
+      var overlay = el('div', { class: 'dialog-overlay' }, [el('div', { class: 'dialog export-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Choose what to export' },
+        [heading, el('p', { class: 'muted small-text', text: car.registration })].concat(groups, [el('div', { class: 'export-actions' }, [cancel, go])]))]);
+
+      function draw() {
+        var has = ExportReport.effective(include);
+        var cover = ExportReport.totalsCover(include);
+        notes.costs.textContent = include.costs ? 'Cost totals, and amounts on entries.' : 'No running-cost amounts will be shown, including quotes.';
+        covers.hidden = !include.costs;
+        covers.classList.toggle('partial', !cover.all);
+        covers.textContent = cover.all ? 'Totals cover ' + cover.covers + '.'
+          : cover.none ? 'There will be no totals: no entry types or reminders are ticked.'
+            : 'Totals will cover only ' + cover.covers + '. Not included: ' + cover.leftOut + '.';
+        stillShown.hidden = include.costs;
+        go.textContent = has.files ? 'Export (PDF and files)' : 'Export (PDF only)';
+        go.disabled = !has.content;
+      }
+      function close(answer) {
+        document.removeEventListener('keydown', onKey, true);
+        window.removeEventListener('hashchange', away);
+        overlay.remove();
+        if (previous && previous.focus) { try { previous.focus(); } catch (e) { /* ignore */ } }
+        resolve(answer);
+      }
+      function away() { close(null); } // the phone's Back button
+      function onKey(ev) { if (ev.key === 'Escape') { ev.preventDefault(); close(null); } }
+      go.addEventListener('click', function () { close(include); });
+      cancel.addEventListener('click', function () { close(null); });
+      overlay.addEventListener('click', function (ev) { if (ev.target === overlay) close(null); });
+      document.addEventListener('keydown', onKey, true);
+      window.addEventListener('hashchange', away);
+      // the costs note sits under its tick box, with what the totals will cover beneath it
+      groups[groups.length - 1].append(covers, stillShown);
+      draw();
+      document.body.append(overlay);
+      heading.focus();
+    });
+  }
+
+  /** Ask what to include, then export it. `car` is the car as shown on its page. Resolves when the person closes the last screen. */
   function run(car) {
-    var ui = FleetSync.overlay('Exporting all data for ' + car.registration, {
-      intro: 'Collecting the vehicle\'s data, photos and files into one zip download. Please keep this screen open until it finishes.',
-      footnote: 'The zip holds a PDF of everything, plus a folder for each photo, file and document, named by its unique ID.',
+    return choose(car).then(function (include) { return include ? make(car, include) : null; });
+  }
+
+  function make(car, include) {
+    var has = ExportReport.effective(include);
+    var ui = FleetSync.overlay('Exporting data for ' + car.registration, {
+      intro: (has.files ? 'Collecting what you ticked, with its files, into one zip download.' : 'Making a PDF of what you ticked.') + ' Please keep this screen open until it finishes.',
+      footnote: has.files ? 'The zip holds the PDF, plus a folder for each file included, named by its unique ID.' : 'No files are included, so the download is just the PDF.',
     });
     var state = { bundle: null, carPhoto: null, files: {}, thumbs: {}, failed: {} };
 
@@ -78,7 +150,7 @@
       return retry(function () { return FleetApi.call('getCarBundle', { carId: car.id }, { timeoutMs: 60000 }); }, 2).then(function (r) {
         state.bundle = r.data;
         var c = r.data.page.car;
-        if (!c.photoId && !c.photoThumbId) return null;
+        if (!include.vehicle || (!c.photoId && !c.photoThumbId)) return null;
         step(0.08, 'Getting the car\'s photo…');
         return Photos.get(c, c.photoId ? 'full' : 'thumb').then(function (url) { state.carPhoto = dataUrlBytes(url); }).catch(function () { /* the PDF is made without it */ });
       });
@@ -88,10 +160,19 @@
     function jobs() {
       var list = [];
       var page = state.bundle.page;
-      Object.keys(state.bundle.details).forEach(function (eid) {
-        (state.bundle.details[eid].attachments || []).forEach(function (a) { list.push({ id: a.id, ref: a.ref || a.id, kind: 'attachment', mime: a.mime, thumb: a.mime === 'image/jpeg' && a.thumb }); });
-      });
-      (page.documents || []).forEach(function (d) { list.push({ id: d.id, ref: d.ref || d.id, kind: 'document', mime: d.mime }); });
+      var seen = {}; // one report file can be on several entries
+      if (has.entryFiles) {
+        Object.keys(state.bundle.details).forEach(function (eid) {
+          var detail = state.bundle.details[eid];
+          if (!ExportReport.wantsType(include, detail.entry.type)) return;
+          (detail.attachments || []).forEach(function (a) {
+            if (seen[a.id]) return;
+            seen[a.id] = true;
+            list.push({ id: a.id, ref: a.ref || a.id, kind: 'attachment', mime: a.mime, thumb: a.mime === 'image/jpeg' && a.thumb });
+          });
+        });
+      }
+      if (include.carFiles) (page.documents || []).forEach(function (d) { list.push({ id: d.id, ref: d.ref || d.id, kind: 'document', mime: d.mime }); });
       return list;
     }
 
@@ -127,8 +208,9 @@
       var pdf = ExportReport.build({
         car: page.car, people: page.people, fluids: page.fluids, entries: page.entries, details: state.bundle.details, tasks: page.tasks,
         costs: page.costs, documents: page.documents, carPhoto: state.carPhoto, thumbs: jpegs, missing: state.failed,
-        exportedBy: me ? me.name : '', exportedAt: new Date(),
+        exportedBy: me ? me.name : '', exportedAt: new Date(), include: include,
       });
+      if (!has.files) return { bytes: pdf, count: 0 };
       step(0.94, 'Packing the zip…');
       var zip = ZipKit.create(new Date());
       zip.add('Vehicle data - ' + ZipKit.safeName(page.car.registration) + '.pdf', pdf);
@@ -142,11 +224,11 @@
     return new Promise(function (resolve) {
       var url = null;
       function finish(result) {
-        var name = ZipKit.safeName(car.registration).replace(/\s+/g, '-') + '-vehicle-data-' + today() + '.zip';
+        var name = ZipKit.safeName(car.registration).replace(/\s+/g, '-') + '-vehicle-data-' + today() + (has.files ? '.zip' : '.pdf');
         url = saveFile(result.bytes, name);
         var mb = (result.bytes.length / 1048576).toFixed(1);
         var missing = Object.keys(state.failed).length;
-        ui.done('Done: ' + name + ' (' + mb + ' MB, ' + result.count + ' file' + (result.count === 1 ? '' : 's') + (missing ? ', ' + missing + ' could not be included' : '') + '). Your download should have started.', [
+        ui.done('Done: ' + name + ' (' + mb + ' MB' + (has.files ? ', ' + result.count + ' file' + (result.count === 1 ? '' : 's') : '') + (missing ? ', ' + missing + ' could not be included' : '') + '). Your download should have started.', [
           { label: 'Download again', primary: true, onClick: function () { saveFile(result.bytes, name); } },
           { label: 'Close', onClick: function () { ui.close(); setTimeout(function () { if (url) URL.revokeObjectURL(url); }, 60000); resolve(); } },
         ]);

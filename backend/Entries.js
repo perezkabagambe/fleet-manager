@@ -208,6 +208,7 @@ function summarizeEntry_(e, guestNames, groups) {
     labourHours: numOrNull_(e.labour_hours), otherCost: numOrNull_(e.other_cost), otherCurrency: e.other_currency || e.currency || 'GBP', otherNote: e.other_note,
     cost: numOrNull_(e.cost), feeShared: !!(groups && e.fee_group && groups.fee[e.fee_group] > 1),
     quoteCost: numOrNull_(e.quote_cost), quoteCurrency: e.quote_currency || e.currency || 'GBP', quoteShared: !!(groups && e.quote_group && groups.quote[e.quote_group] > 1),
+    aiTips: tipsOf_(e),
     partNumber: e.part_number, quantity: numOrNull_(e.quantity), unitCost: numOrNull_(e.unit_cost),
     shippingCost: numOrNull_(e.shipping_cost), productUrl: e.product_url,
     taskId: e.task_id || '',
@@ -668,6 +669,8 @@ function saveEntry_(p, ctx) {
   if (!isJob && p.parts && p.parts.length) fail_('invalid_input');
 
   const wantedLinks = parseLinks_(p, type, existing, c); // null: this request does not change the links
+  // a tip asked for while editing is kept with the issue unless the person discarded it
+  if (p.aiTip && existing && type === 'Issue') input.ai_tips = tipsWith_(existing, [provenTip_(existing.id, p.aiTip)], 'asked', todayIso_());
   const plan = isJob ? planParts_(p.parts || [], car, input.date, input.currency, existing ? existing.id : '', c) : null;
 
   // A maintenance entry can be logged against a reminder.

@@ -30,6 +30,7 @@ const SHELL = [
   'views-cars.js',
   'views-people.js',
   'linked-issues.js',
+  'ai-tips.js',
   'views-entries.js',
   'views-reminders.js',
   'views-documents.js',
